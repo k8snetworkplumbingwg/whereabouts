@@ -1,0 +1,12 @@
+hash: 7c48cbd07bdcb7a288711366b4998a634fba45792da0ecb11a162db3a98ec2ff
+updated: 2019-04-09T07:44:43.087657463-04:00
+imports:
+- name: github.com/containernetworking/cni
+  version: fbb95fff8a5239a4295c991efa8a397d43118f7e
+  subpackages:
+  - pkg/skel
+  - pkg/types
+  - pkg/types/020
+  - pkg/types/current
+  - pkg/version
+testImports: []

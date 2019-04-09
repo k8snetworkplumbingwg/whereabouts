@@ -1,0 +1,10 @@
+package: github.com/dougbtv/whereabouts
+import:
+- package: github.com/containernetworking/cni
+  version: ^0.7.0-rc2
+  subpackages:
+  - pkg/skel
+  - pkg/types
+  - pkg/types/020
+  - pkg/types/current
+  - pkg/version
