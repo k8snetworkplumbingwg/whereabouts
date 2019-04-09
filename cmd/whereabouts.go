@@ -4,45 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/containernetworking/cni/pkg/skel"
-	"github.com/containernetworking/cni/pkg/types"
+	cnitypes "github.com/containernetworking/cni/pkg/types"
 	"github.com/containernetworking/cni/pkg/types/020"
 	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/containernetworking/cni/pkg/version"
+	"github.com/dougbtv/whereabouts/types"
 	"net"
 	"strings"
 )
-
-// Net is The top-level network config - IPAM plugins are passed the full configuration
-// of the calling plugin, not just the IPAM section.
-type Net struct {
-	Name       string      `json:"name"`
-	CNIVersion string      `json:"cniVersion"`
-	IPAM       *IPAMConfig `json:"ipam"`
-}
-
-// IPAMConfig describes the expected json configuration for this plugin
-type IPAMConfig struct {
-	Name      string
-	Type      string         `json:"type"`
-	Routes    []*types.Route `json:"routes"`
-	Addresses []Address      `json:"addresses,omitempty"`
-	DNS       types.DNS      `json:"dns"`
-}
-
-// IPAMEnvArgs are the environment vars we expect
-type IPAMEnvArgs struct {
-	types.CommonArgs
-	IP      types.UnmarshallableString `json:"ip,omitempty"`
-	GATEWAY types.UnmarshallableString `json:"gateway,omitempty"`
-}
-
-// Address is our standard address.
-type Address struct {
-	AddressStr string `json:"address"`
-	Gateway    net.IP `json:"gateway,omitempty"`
-	Address    net.IPNet
-	Version    string
-}
 
 func main() {
 	// TODO: implement plugin version
@@ -69,8 +38,8 @@ func canonicalizeIP(ip *net.IP) error {
 // LoadIPAMConfig creates IPAMConfig using json encoded configuration provided
 // as `bytes`. At the moment values provided in envArgs are ignored so there
 // is no possibility to overload the json configuration using envArgs
-func LoadIPAMConfig(bytes []byte, envArgs string) (*IPAMConfig, string, error) {
-	n := Net{}
+func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, error) {
+	n := types.Net{}
 	if err := json.Unmarshal(bytes, &n); err != nil {
 		return nil, "", err
 	}
@@ -105,8 +74,8 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*IPAMConfig, string, error) {
 	}
 
 	if envArgs != "" {
-		e := IPAMEnvArgs{}
-		err := types.LoadArgs(envArgs, &e)
+		e := types.IPAMEnvArgs{}
+		err := cnitypes.LoadArgs(envArgs, &e)
 		if err != nil {
 			return nil, "", err
 		}
@@ -120,7 +89,7 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*IPAMConfig, string, error) {
 					return nil, "", fmt.Errorf("invalid CIDR %s: %s", ipstr, err)
 				}
 
-				addr := Address{Address: net.IPNet{IP: ip, Mask: subnet.Mask}}
+				addr := types.Address{Address: net.IPNet{IP: ip, Mask: subnet.Mask}}
 				if addr.Address.IP.To4() != nil {
 					addr.Version = "4"
 					numV4++
@@ -179,7 +148,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 			Gateway: v.Gateway})
 	}
 
-	return types.PrintResult(result, confVersion)
+	return cnitypes.PrintResult(result, confVersion)
 }
 
 func cmdDel(args *skel.CmdArgs) error {

@@ -1,0 +1,46 @@
+{  
+   "cniVersion":"0.3.1",
+   "name":"mynet",
+   "type":"ipvlan",
+   "master":"foo0",
+   "ipam":{  
+      "type":"whereabouts",
+      "range": "192.168.1.0/24",
+      "etcd_host": "192.168.122.1",
+      "routes":[  
+         {  
+            "dst":"0.0.0.0/0"
+         },
+         {  
+            "dst":"192.168.0.0/16",
+            "gw":"10.10.5.1"
+         },
+         {  
+            "dst":"3ffe:ffff:0:01ff::1/64"
+         }
+      ],
+      "dns":{  
+         "nameservers":[  
+            "8.8.8.8"
+         ],
+         "domain":"example.com",
+         "search":[  
+            "example.com"
+         ]
+      }
+   }
+}
+
+
+{
+"addresses":[
+         {  
+            "address":"10.10.0.1/24",
+            "gateway":"10.10.0.254"
+         },
+         {  
+            "address":"3ffe:ffff:0:01ff::1/64",
+            "gateway":"3ffe:ffff:0::1"
+         }
+      ],
+}

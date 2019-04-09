@@ -11,6 +11,7 @@ A CNI IPAM plugin that assigns IP addresses cluster-wide
 Run the build command from the `./hack` directory:
 
 ```
+./hack/build-go.sh
 ```
 
 ## Development notes
