@@ -1,5 +1,5 @@
 hash: 7c48cbd07bdcb7a288711366b4998a634fba45792da0ecb11a162db3a98ec2ff
-updated: 2019-04-09T07:44:43.087657463-04:00
+updated: 2019-04-09T08:05:33.498573656-04:00
 imports:
 - name: github.com/containernetworking/cni
   version: fbb95fff8a5239a4295c991efa8a397d43118f7e
@@ -9,4 +9,47 @@ imports:
   - pkg/types/020
   - pkg/types/current
   - pkg/version
-testImports: []
+testImports:
+- name: github.com/containernetworking/plugins
+  version: 2b8b1ac0af4568e928d96ccc5f47b075416eeabd
+  subpackages:
+  - pkg/ns
+  - pkg/testutils
+- name: github.com/onsi/ginkgo
+  version: 7f8ab55aaf3b86885aa55b762e803744d1674700
+  subpackages:
+  - config
+  - extensions/table
+  - internal/codelocation
+  - internal/containernode
+  - internal/failer
+  - internal/leafnodes
+  - internal/remote
+  - internal/spec
+  - internal/specrunner
+  - internal/suite
+  - internal/testingtproxy
+  - internal/writer
+  - reporters
+  - reporters/stenographer
+  - types
+- name: github.com/onsi/gomega
+  version: 2152b45fa28a361beba9aab0885972323a444e28
+  subpackages:
+  - format
+  - gbytes
+  - gexec
+  - internal/assertion
+  - internal/asyncassertion
+  - internal/oraclematcher
+  - internal/testingtsupport
+  - matchers
+  - matchers/support/goraph/bipartitegraph
+  - matchers/support/goraph/edge
+  - matchers/support/goraph/node
+  - matchers/support/goraph/util
+  - types
+- name: golang.org/x/sys
+  version: 076b546753157f758b316e59bcb51e6807c04057
+  subpackages:
+  - unix
