@@ -36,10 +36,11 @@ func cmdAdd(args *skel.CmdArgs) error {
 
 	// If there were more than one storage engine, we'd switch out here.
 	if ipamConf.EtcdHost != "" {
-		newip, err := allocate.AssignIP()
+		newip, err := allocate.AssignIP(ipamConf.Range)
 		if err != nil {
 			return fmt.Errorf("Error assigning IP: %s", err)
 		}
+
 		result.IPs = append(result.IPs, &current.IPConfig{
 			Version: "4",
 			Address: newip,
