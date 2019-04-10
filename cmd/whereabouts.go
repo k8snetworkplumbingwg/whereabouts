@@ -6,9 +6,9 @@ import (
 	cnitypes "github.com/containernetworking/cni/pkg/types"
 	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/containernetworking/cni/pkg/version"
+	"github.com/dougbtv/whereabouts/pkg/allocate"
 	"github.com/dougbtv/whereabouts/pkg/config"
 	"github.com/dougbtv/whereabouts/pkg/logging"
-	"github.com/dougbtv/whereabouts/pkg/storage"
 )
 
 func main() {
@@ -36,7 +36,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 
 	// If there were more than one storage engine, we'd switch out here.
 	if ipamConf.EtcdHost != "" {
-		newip, err := storage.AssignIP()
+		newip, err := allocate.AssignIP()
 		if err != nil {
 			return fmt.Errorf("Error assigning IP: %s", err)
 		}
