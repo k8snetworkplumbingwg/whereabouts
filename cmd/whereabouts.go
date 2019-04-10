@@ -6,9 +6,9 @@ import (
 	cnitypes "github.com/containernetworking/cni/pkg/types"
 	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/containernetworking/cni/pkg/version"
-	"github.com/dougbtv/whereabouts/config"
-	"github.com/dougbtv/whereabouts/logging"
-	"github.com/dougbtv/whereabouts/storage"
+	"github.com/dougbtv/whereabouts/pkg/config"
+	"github.com/dougbtv/whereabouts/pkg/logging"
+	"github.com/dougbtv/whereabouts/pkg/storage"
 )
 
 func main() {

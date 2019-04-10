@@ -5,8 +5,8 @@ import (
   "fmt"
   cnitypes "github.com/containernetworking/cni/pkg/types"
   "github.com/containernetworking/cni/pkg/types/020"
-  "github.com/dougbtv/whereabouts/logging"
-  "github.com/dougbtv/whereabouts/types"
+  "github.com/dougbtv/whereabouts/pkg/logging"
+  "github.com/dougbtv/whereabouts/pkg/types"
   "net"
   "strings"
 )
