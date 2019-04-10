@@ -21,7 +21,60 @@ func TestWhereabouts(t *testing.T) {
 }
 
 var _ = Describe("Whereabouts operations", func() {
-	It("allocates and releases addresses with ADD/DEL", func() {
+	It("allocates and releases addresses without addresses on ADD/DEL", func() {
+		const ifname string = "eth0"
+		const nspath string = "/some/where"
+
+		conf := `{
+      "cniVersion": "0.3.1",
+      "name": "mynet",
+      "type": "ipvlan",
+      "master": "foo0",
+      "ipam": {
+        "type": "static",
+        "etcd_host": "192.168.2.100",
+        "range": "192.168.1.0/24",
+        "gateway": "192.168.1.1",
+        "routes": [
+          { "dst": "0.0.0.0/0" }
+        ]
+      }
+    }`
+
+		args := &skel.CmdArgs{
+			ContainerID: "dummy",
+			Netns:       nspath,
+			IfName:      ifname,
+			StdinData:   []byte(conf),
+		}
+
+		// Allocate the IP
+		r, raw, err := testutils.CmdAddWithArgs(args, func() error {
+			return cmdAdd(args)
+		})
+		Expect(err).NotTo(HaveOccurred())
+		fmt.Printf("!bang raw: %s\n", raw)
+		Expect(strings.Index(string(raw), "\"version\":")).Should(BeNumerically(">", 0))
+
+		result, err := current.GetResult(r)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Gomega is cranky about slices with different caps
+		Expect(*result.IPs[0]).To(Equal(
+			current.IPConfig{
+				Version: "4",
+				Address: mustCIDR("192.168.2.200/32"),
+				Gateway: net.ParseIP("192.168.1.1"),
+			}))
+
+		// Release the IP
+		err = testutils.CmdDelWithArgs(args, func() error {
+			return cmdDel(args)
+		})
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("allocates and releases addresses with all static parameters", func() {
 		const ifname string = "eth0"
 		const nspath string = "/some/where"
 
@@ -75,21 +128,30 @@ var _ = Describe("Whereabouts operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		// Gomega is cranky about slices with different caps
+
+		// This one is the bogus stubbed in IP address.
 		Expect(*result.IPs[0]).To(Equal(
+			current.IPConfig{
+				Version: "4",
+				Address: mustCIDR("192.168.2.200/32"),
+				Gateway: net.ParseIP("192.168.1.1"),
+			}))
+
+		Expect(*result.IPs[1]).To(Equal(
 			current.IPConfig{
 				Version: "4",
 				Address: mustCIDR("10.10.0.1/24"),
 				Gateway: net.ParseIP("10.10.0.254"),
 			}))
 
-		Expect(*result.IPs[1]).To(Equal(
+		Expect(*result.IPs[2]).To(Equal(
 			current.IPConfig{
 				Version: "6",
 				Address: mustCIDR("3ffe:ffff:0:01ff::1/64"),
 				Gateway: net.ParseIP("3ffe:ffff:0::1"),
 			},
 		))
-		Expect(len(result.IPs)).To(Equal(2))
+		Expect(len(result.IPs)).To(Equal(3))
 
 		Expect(result.Routes).To(Equal([]*types.Route{
 			{Dst: mustCIDR("0.0.0.0/0")},

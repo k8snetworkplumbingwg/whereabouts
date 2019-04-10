@@ -8,6 +8,7 @@ import (
 	"github.com/containernetworking/cni/pkg/types/020"
 	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/containernetworking/cni/pkg/version"
+	"github.com/dougbtv/whereabouts/storage"
 	"github.com/dougbtv/whereabouts/types"
 	"net"
 	"strings"
@@ -60,6 +61,7 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 		if gwip == nil {
 			return nil, "", fmt.Errorf("Couldn't parse gateway IP: %s", n.IPAM.GatewayStr)
 		}
+		n.IPAM.Gateway = gwip
 	}
 
 	// Validate all ranges
@@ -152,9 +154,29 @@ func cmdAdd(args *skel.CmdArgs) error {
 		return err
 	}
 
+	// Initialize our result, and assign DNS & routing.
 	result := &current.Result{}
 	result.DNS = ipamConf.DNS
 	result.Routes = ipamConf.Routes
+
+	// If there were more than one storage engine, we'd switch out here.
+	if ipamConf.EtcdHost != "" {
+		newip, err := storage.AssignIP()
+		if err != nil {
+			return fmt.Errorf("Error assigning IP: %s", err)
+		}
+		result.IPs = append(result.IPs, &current.IPConfig{
+			Version: "4",
+			Address: newip,
+			Gateway: ipamConf.Gateway})
+
+	} else {
+		return fmt.Errorf("You have not specified a storage engine (looks like you're missing the `etcd_host` parameter in your config)")
+	}
+
+	// Assign the
+
+	// Assign all the static IP elements.
 	for _, v := range ipamConf.Addresses {
 		result.IPs = append(result.IPs, &current.IPConfig{
 			Version: v.Version,

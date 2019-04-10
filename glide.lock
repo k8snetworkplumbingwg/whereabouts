@@ -1,5 +1,5 @@
 hash: 7c48cbd07bdcb7a288711366b4998a634fba45792da0ecb11a162db3a98ec2ff
-updated: 2019-04-09T08:05:33.498573656-04:00
+updated: 2019-04-10T10:51:28.553054241-04:00
 imports:
 - name: github.com/containernetworking/cni
   version: fbb95fff8a5239a4295c991efa8a397d43118f7e
@@ -9,6 +9,8 @@ imports:
   - pkg/types/020
   - pkg/types/current
   - pkg/version
+- name: github.com/pkg/errors
+  version: ba968bfe8b2f7e042a574c888954fccecfa385b4
 testImports:
 - name: github.com/containernetworking/plugins
   version: 2b8b1ac0af4568e928d96ccc5f47b075416eeabd
