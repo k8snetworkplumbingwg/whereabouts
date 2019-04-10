@@ -23,6 +23,8 @@ type IPAMConfig struct {
 	Range      string            `json:"range"`
 	GatewayStr string            `json:"gateway"`
 	EtcdHost   string            `json:"etcd_host"`
+	LogFile    string            `json:"log_file"`
+	LogLevel   string            `json:"log_level"`
 	Gateway    net.IP
 }
 

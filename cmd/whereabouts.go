@@ -7,6 +7,7 @@ import (
 	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/containernetworking/cni/pkg/version"
 	"github.com/dougbtv/whereabouts/config"
+	"github.com/dougbtv/whereabouts/logging"
 	"github.com/dougbtv/whereabouts/storage"
 )
 
@@ -23,8 +24,10 @@ func cmdGet(args *skel.CmdArgs) error {
 func cmdAdd(args *skel.CmdArgs) error {
 	ipamConf, confVersion, err := config.LoadIPAMConfig(args.StdinData, args.Args)
 	if err != nil {
+		logging.Errorf("IPAM configuration load failed: %s", err)
 		return err
 	}
+	logging.Debugf("IPAM configuration successfully read: %+v", ipamConf)
 
 	// Initialize our result, and assign DNS & routing.
 	result := &current.Result{}

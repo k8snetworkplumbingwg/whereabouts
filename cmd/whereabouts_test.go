@@ -31,7 +31,9 @@ var _ = Describe("Whereabouts operations", func() {
       "type": "ipvlan",
       "master": "foo0",
       "ipam": {
-        "type": "static",
+        "type": "whereabouts",
+        "log_file" : "/tmp/whereabouts.log",
+				"log_level" : "debug",
         "etcd_host": "192.168.2.100",
         "range": "192.168.1.0/24",
         "gateway": "192.168.1.1",
@@ -84,7 +86,7 @@ var _ = Describe("Whereabouts operations", func() {
       "type": "ipvlan",
       "master": "foo0",
       "ipam": {
-        "type": "static",
+        "type": "whereabouts",
         "etcd_host": "192.168.2.100",
         "range": "192.168.1.0/24",
         "gateway": "192.168.1.1",
@@ -164,6 +166,36 @@ var _ = Describe("Whereabouts operations", func() {
 			return cmdDel(args)
 		})
 		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("fails when there's bad JSON", func() {
+		const ifname string = "eth0"
+		const nspath string = "/some/where"
+
+		conf := `{
+      "cniVersion": "0.3.1",
+      "name": "mynet",
+      "type": "ipvlan",
+      "master": "foo0",
+      "ipam": {
+        asdf
+      }
+    }`
+
+		args := &skel.CmdArgs{
+			ContainerID: "dummy",
+			Netns:       nspath,
+			IfName:      ifname,
+			StdinData:   []byte(conf),
+		}
+
+		// Allocate the IP
+		_, _, err := testutils.CmdAddWithArgs(args, func() error {
+			return cmdAdd(args)
+		})
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(HavePrefix("invalid character"))
+
 	})
 
 	// It("doesn't error when passed an unknown ID on DEL", func() {

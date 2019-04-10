@@ -5,6 +5,7 @@ import (
   "fmt"
   cnitypes "github.com/containernetworking/cni/pkg/types"
   "github.com/containernetworking/cni/pkg/types/020"
+  "github.com/dougbtv/whereabouts/logging"
   "github.com/dougbtv/whereabouts/types"
   "net"
   "strings"
@@ -33,6 +34,14 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 
   if n.IPAM == nil {
     return nil, "", fmt.Errorf("IPAM config missing 'ipam' key")
+  }
+
+  // Logging
+  if n.IPAM.LogFile != "" {
+    logging.SetLogFile(n.IPAM.LogFile)
+  }
+  if n.IPAM.LogLevel != "" {
+    logging.SetLogLevel(n.IPAM.LogLevel)
   }
 
   _, _, err := net.ParseCIDR(n.IPAM.Range)
