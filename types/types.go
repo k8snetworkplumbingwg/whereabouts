@@ -15,12 +15,15 @@ type Net struct {
 
 // IPAMConfig describes the expected json configuration for this plugin
 type IPAMConfig struct {
-	Name      string
-	Type      string            `json:"type"`
-	Routes    []*cnitypes.Route `json:"routes"`
-	Addresses []Address         `json:"addresses,omitempty"`
-
-	DNS cnitypes.DNS `json:"dns"`
+	Name       string
+	Type       string            `json:"type"`
+	Routes     []*cnitypes.Route `json:"routes"`
+	Addresses  []Address         `json:"addresses,omitempty"`
+	DNS        cnitypes.DNS      `json:"dns"`
+	Range      string            `json:"range"`
+	GatewayStr string            `json:"gateway"`
+	EtcdHost   string            `json:"etcd_host"`
+	Gateway    net.IP
 }
 
 // IPAMEnvArgs are the environment vars we expect

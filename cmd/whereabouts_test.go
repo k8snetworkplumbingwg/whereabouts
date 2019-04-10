@@ -32,6 +32,9 @@ var _ = Describe("Whereabouts operations", func() {
       "master": "foo0",
       "ipam": {
         "type": "static",
+        "etcd_host": "192.168.2.100",
+        "range": "192.168.1.0/24",
+        "gateway": "192.168.1.1",
         "addresses": [ {
             "address": "10.10.0.1/24",
             "gateway": "10.10.0.254"

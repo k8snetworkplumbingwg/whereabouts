@@ -48,6 +48,20 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 		return nil, "", fmt.Errorf("IPAM config missing 'ipam' key")
 	}
 
+	_, _, err := net.ParseCIDR(n.IPAM.Range)
+	if err != nil {
+		return nil, "", fmt.Errorf("invalid CIDR %s: %s", n.IPAM.Range, err)
+	}
+
+	// fmt.Printf("Range IP: %s / Subnet: %s", ip, subnet)
+
+	if n.IPAM.GatewayStr != "" {
+		gwip := net.ParseIP(n.IPAM.GatewayStr)
+		if gwip == nil {
+			return nil, "", fmt.Errorf("Couldn't parse gateway IP: %s", n.IPAM.GatewayStr)
+		}
+	}
+
 	// Validate all ranges
 	numV4 := 0
 	numV6 := 0
