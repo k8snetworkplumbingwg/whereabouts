@@ -21,11 +21,11 @@ func AssignIP(iprange string) (net.IPNet, error) {
     return net.IPNet{}, err
   }
 
-  logging.Debugf("Input IP range: %v / first IP: %v / last IP: %v", iprange, firstip, lastip)
+  logging.Debugf("Input IP range: %v | first IP: %v | last IP: %v", iprange, firstip, lastip)
 
   useaddr := net.IPNet{IP: firstip, Mask: ipnet.Mask}
 
-  return useaddr, err
+  return useaddr, nil
 }
 
 // GetIPRange returns the first and last IP in a range
