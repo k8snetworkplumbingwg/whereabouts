@@ -32,13 +32,14 @@ func AssignIP(iprange string) (net.IPNet, error) {
 func GetIPRange(ip net.IP, ipnet net.IPNet) (net.IP, net.IP, error) {
 
   // Good hints here: http://networkbit.ch/golang-ip-address-manipulation/
+  // Nice info on bitwise operations: https://yourbasic.org/golang/bitwise-operator-cheat-sheet/
   // Get info about the mask.
   mask := ipnet.Mask
   ones, bits := mask.Size()
   masklen := bits - ones
 
   // Error when the mask isn't large enough.
-  if masklen < 3 {
+  if ones < 3 {
     return nil, nil, fmt.Errorf("Net mask is too short, must be 3 or more: %v", masklen)
   }
 

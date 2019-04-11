@@ -29,5 +29,18 @@ var _ = Describe("Allocation operations", func() {
     Expect(fmt.Sprint(lastip)).To(Equal("192.168.2.255"))
 
   })
+  It("fails when the mask is too short", func() {
+
+    const ifname string = "eth0"
+    const nspath string = "/some/where"
+
+    badip, badipnet, err := net.ParseCIDR("10.0.0.100/2")
+    Expect(err).NotTo(HaveOccurred())
+
+    _, _, err = GetIPRange(badip, *badipnet)
+    Expect(err).To(HaveOccurred())
+    Expect(err.Error()).To(HavePrefix("Net mask is too short"))
+
+  })
 
 })

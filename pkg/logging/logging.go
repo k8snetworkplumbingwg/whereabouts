@@ -151,5 +151,5 @@ func SetLogFile(filename string) {
 func init() {
 	loggingStderr = true
 	loggingFp = nil
-	loggingLevel = PanicLevel
+	loggingLevel = ErrorLevel
 }
