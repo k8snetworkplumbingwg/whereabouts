@@ -42,3 +42,10 @@ type Address struct {
 	Address    net.IPNet
 	Version    string
 }
+
+const (
+	// Allocate operation identifier
+	Allocate = 0
+	// Deallocate operation identifier
+	Deallocate = 1
+)

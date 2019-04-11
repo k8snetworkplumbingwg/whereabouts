@@ -34,7 +34,7 @@ var _ = Describe("Whereabouts operations", func() {
         "type": "whereabouts",
         "log_file" : "/tmp/whereabouts.log",
 				"log_level" : "debug",
-        "etcd_host": "192.168.2.100",
+        "etcd_host": "127.0.0.1:2379",
         "range": "192.168.1.0/24",
         "gateway": "192.168.1.1",
         "routes": [
@@ -87,7 +87,7 @@ var _ = Describe("Whereabouts operations", func() {
       "master": "foo0",
       "ipam": {
         "type": "whereabouts",
-        "etcd_host": "192.168.2.100",
+        "etcd_host": "127.0.0.1:2379",
         "range": "192.168.1.44/28",
         "gateway": "192.168.1.1",
         "addresses": [ {

@@ -6,9 +6,11 @@ import (
 	cnitypes "github.com/containernetworking/cni/pkg/types"
 	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/containernetworking/cni/pkg/version"
-	"github.com/dougbtv/whereabouts/pkg/allocate"
+	// "github.com/dougbtv/whereabouts/pkg/allocate"
 	"github.com/dougbtv/whereabouts/pkg/config"
 	"github.com/dougbtv/whereabouts/pkg/logging"
+	"github.com/dougbtv/whereabouts/pkg/storage"
+	"github.com/dougbtv/whereabouts/pkg/types"
 )
 
 func main() {
@@ -28,6 +30,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 		return err
 	}
 	logging.Debugf("IPAM configuration successfully read: %+v", ipamConf)
+	logging.Debugf("ContainerID: %v", args.ContainerID)
 
 	// Initialize our result, and assign DNS & routing.
 	result := &current.Result{}
@@ -36,7 +39,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 
 	// If there were more than one storage engine, we'd switch out here.
 	if ipamConf.EtcdHost != "" {
-		newip, err := allocate.AssignIP(ipamConf.Range)
+		newip, err := storage.IPManagement(types.Allocate, *ipamConf, args.ContainerID)
 		if err != nil {
 			return fmt.Errorf("Error assigning IP: %s", err)
 		}
@@ -49,8 +52,6 @@ func cmdAdd(args *skel.CmdArgs) error {
 	} else {
 		return fmt.Errorf("You have not specified a storage engine (looks like you're missing the `etcd_host` parameter in your config)")
 	}
-
-	// Assign the
 
 	// Assign all the static IP elements.
 	for _, v := range ipamConf.Addresses {
