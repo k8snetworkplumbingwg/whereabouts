@@ -77,7 +77,7 @@ imports:
   - lex/httplex
   - trace
 - name: golang.org/x/sys
-  version: 076b546753157f758b316e59bcb51e6807c04057
+  version: 1c9583448a9c3aa0f9a6a5241bf73c0bd8aafded
   subpackages:
   - unix
 - name: golang.org/x/text
