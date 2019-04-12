@@ -1,6 +1,8 @@
 # whereabouts
 
-A CNI IPAM plugin that assigns IP addresses cluster-wide
+![whereabouts-logo](doc/logo.png)
+
+Whereabouts - An IP Address Management (IPAM) CNI plugin that assigns IP addresses cluster-wide.
 
 ## Usage
 
