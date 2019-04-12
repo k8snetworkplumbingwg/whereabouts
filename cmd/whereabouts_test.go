@@ -76,7 +76,7 @@ var _ = Describe("Whereabouts operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("allocates and releases addresses with all static parameters", func() {
+	It("can still assign static parameters", func() {
 		const ifname string = "eth0"
 		const nspath string = "/some/where"
 

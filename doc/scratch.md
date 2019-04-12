@@ -1,4 +1,6 @@
 
+Run etcd.
+
 ```
 docker stop etcd
 docker rm etcd
@@ -14,3 +16,11 @@ docker run -dt \
 --initial-cluster node1=http://127.0.0.1:2380
 ```
 
+Manipulate etcd.
+
+
+```
+docker exec -it etcd /bin/sh
+export ETCDCTL_API=3
+# etcdctl del /192.168.1.0/24
+```
