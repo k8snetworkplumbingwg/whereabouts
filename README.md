@@ -6,6 +6,26 @@ A CNI IPAM plugin that assigns IP addresses cluster-wide
 
 [... more to come ...]
 
+## Example Config
+
+```
+{
+      "cniVersion": "0.3.0",
+      "name": "whereaboutsexample",
+      "type": "macvlan",
+      "master": "eth0",
+      "mode": "bridge",
+      "ipam": {
+        "type": "whereabouts",
+        "range": "192.168.2.225/28",
+        "etcd_host": "127.0.0.1:2379",
+        "log_file" : "/tmp/whereabouts.log",
+        "log_level" : "debug",
+        "gateway": "192.168.2.1"
+      }
+}
+```
+
 ## Building
 
 Run the build command from the `./hack` directory:

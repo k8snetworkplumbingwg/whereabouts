@@ -40,3 +40,13 @@ glide install --strip-vcs --strip-vendor
 
 Had to override the glide.lock hash for `golang.org/x/sys` with `1c9583448a9c3aa0f9a6a5241bf73c0bd8aafded` found it in [this github comment](https://github.com/grpc/grpc-go/issues/2181#issuecomment-414324934)
 
+## Running with CNI's `docker-run.sh`
+
+
+Put plugins in `/opt/cni/bin` and configs in `/etc/cni/net.d` -- README config should be fine.
+
+```
+export CNI_PATH=/opt/cni/bin/
+export NETCONFPATH=/etc/cni/net.d
+CNI_PATH=$CNI_PATH ./docker-run.sh --rm busybox:latest ifconfig
+```

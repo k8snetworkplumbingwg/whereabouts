@@ -15,5 +15,8 @@ docker run -dt \
 --initial-advertise-peer-urls http://127.0.0.1:2380 --listen-peer-urls http://127.0.0.1:2380 \
 --advertise-client-urls http://127.0.0.1:2379 \
 --initial-cluster node1=http://127.0.0.1:2380
+echo "Linting go code..."
+golint ./cmd ./pkg
+echo "Lint exit code: $?"
 echo "Running go tests..."
 go test -v ./...
