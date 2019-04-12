@@ -76,6 +76,8 @@ The optional parameters are for logging, they are:
 * `log_file`: A file path to a logfile to log to.
 * `log_level`: Set the logging verbosity, from most to least: `debug`,`error`,`panic`
 
+Additionally -- you can set the route, gateway and DNS using anything from the configurations for the [static IPAM plugin](https://github.com/containernetworking/plugins/tree/master/plugins/ipam/static) (as well as additional static IP addresses). 
+
 ## Building
 
 Run the build command from the `./hack` directory:
@@ -87,6 +89,8 @@ Run the build command from the `./hack` directory:
 ## Acknowledgements
 
 Thanks big time to [Tomofumi Hayashi](https://github.com/s1061123), I utilized his [static CNI IPAM plugin](https://github.com/containernetworking/plugins/tree/master/plugins/ipam/static) as a basis for this project to give me a head start!
+
+The typeface used in the logo is [AZONIX](https://www.dafont.com/azonix.font), by [MixoFX](https://twitter.com/MixoFX).
 
 ## Known limitations
 
