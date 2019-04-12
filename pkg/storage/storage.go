@@ -24,7 +24,7 @@ var (
 // IPManagement manages ip allocation and deallocation from a storage perspective
 func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string) (net.IPNet, error) {
 
-	logging.Errorf("ETCD mode: %v / host: %v / containerID: %v", mode, ipamConf.EtcdHost, containerID)
+	logging.Debugf("IPManagement -- mode: %v / host: %v / containerID: %v", mode, ipamConf.EtcdHost, containerID)
 	ctx, _ := context.WithTimeout(context.Background(), RequestTimeout)
 	cli, _ := clientv3.New(clientv3.Config{
 		DialTimeout: DialTimeout,
@@ -50,25 +50,38 @@ func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string) (net.
 	// Create our mutex
 	m1 := concurrency.NewMutex(session, whereaboutsPrefix)
 
+	// ------------------------
 	// acquire our lock
 	if err := m1.Lock(ctx); err != nil {
 		return net.IPNet{}, err
 	}
 
-	logging.Errorf("acquired lock for our session...")
-	newip, err := allocate.AssignIP(ipamConf.Range)
+	// ------------------------
+	logging.Debugf("acquired lock for our session...")
 
-	err = GetSingleValueDemo(ctx, kv)
+	reservelist, err := GetReserveList(ctx, ipamConf.Range, kv)
 	if err != nil {
-		logging.Errorf("ETCD error: %v", err)
+		logging.Errorf("GetReserveList error: %v", err)
 		return net.IPNet{}, err
 	}
 
+	// Get an IP assigned
+	newip, updatedreservelist, err := allocate.AssignIP(ipamConf.Range, reservelist, containerID)
+	// logging.Debugf("Updated reservelist: %v", updatedreservelist)
+
+	// Write the updated reserve list
+	err = PutReserveList(ctx, ipamConf.Range, updatedreservelist, kv)
+	if err != nil {
+		logging.Errorf("PutReserveList error: %v", err)
+		return net.IPNet{}, err
+	}
+
+	// ------------------------
 	// Unlock our session...
 	if err := m1.Unlock(ctx); err != nil {
 		return net.IPNet{}, err
 	}
-	logging.Errorf("released lock for our session")
+	logging.Debugf("released lock for our session")
 
 	return newip, nil
 
@@ -93,13 +106,13 @@ func ModifiedMutexLock(ctx context.Context, cli *clientv3.Client) error {
 		return err
 	}
 
-	logging.Errorf("acquired lock for our session...")
+	logging.Debugf("acquired lock for our session...")
 
 	// Unlock our session...
 	if err := m1.Unlock(ctx); err != nil {
 		return err
 	}
-	logging.Errorf("released lock for our session")
+	logging.Debugf("released lock for our session")
 
 	return nil
 }
@@ -113,9 +126,45 @@ func CheckConnectivity(ctx context.Context, kv clientv3.KV) error {
 	return nil
 }
 
+// PutReserveList writes a new reserved list after assigning an IP
+func PutReserveList(ctx context.Context, iprange string, reservelist string, kv clientv3.KV) error {
+	_, err := kv.Put(ctx, "/"+iprange, reservelist)
+	if err != nil {
+		return fmt.Errorf("ETCD put error: %v", err)
+	}
+
+	logging.Debugf("Updated reserve list for %v", "/"+iprange)
+	return nil
+}
+
+// GetReserveList gets a reserved list of IPs for a range.
+func GetReserveList(ctx context.Context, iprange string, kv clientv3.KV) (string, error) {
+	logging.Debugf("Getting reserve list range: %v", iprange)
+	reservelist, err := kv.Get(ctx, "/"+iprange)
+	if err != nil {
+		return "", fmt.Errorf("GetReserveList get error: %v", err)
+	}
+
+	returnstring := ""
+	found := false
+	for range reservelist.Kvs {
+		found = true
+		// fmt.Printf("%s : %s\n", ev.Key, ev.Value)
+	}
+
+	if found {
+		returnstring = string(reservelist.Kvs[0].Value)
+	}
+
+	logging.Debugf("Reserve list value: %+v", reservelist)
+	// logging.Debugf("returnstring: %v", returnstring)
+
+	return returnstring, nil
+}
+
 // GetSingleValueDemo is just for a test.
 func GetSingleValueDemo(ctx context.Context, kv clientv3.KV) error {
-	logging.Errorf("*** GetSingleValueDemo()")
+	logging.Debugf("*** GetSingleValueDemo()")
 	// Delete all keys
 	kv.Delete(ctx, "key", clientv3.WithPrefix())
 
@@ -127,24 +176,24 @@ func GetSingleValueDemo(ctx context.Context, kv clientv3.KV) error {
 
 	rev := pr.Header.Revision
 
-	logging.Errorf("Revision: %v", rev)
+	logging.Debugf("Revision: %v", rev)
 
 	gr, err := kv.Get(ctx, "key")
 	if err != nil {
 		return fmt.Errorf("ETCD get error: %v", err)
 	}
 
-	logging.Errorf("Value: %v / Revision: %v", string(gr.Kvs[0].Value), gr.Header.Revision)
+	logging.Debugf("Value: %v / Revision: %v", string(gr.Kvs[0].Value), gr.Header.Revision)
 
 	// Modify the value of an existing key (create new revision)
 	kv.Put(ctx, "key", "555")
 
 	gr, _ = kv.Get(ctx, "key")
-	logging.Errorf("Value: %v / Revision: %v", string(gr.Kvs[0].Value), gr.Header.Revision)
+	logging.Debugf("Value: %v / Revision: %v", string(gr.Kvs[0].Value), gr.Header.Revision)
 
 	// Get the value of the previous revision
 	gr, _ = kv.Get(ctx, "key", clientv3.WithRev(rev))
-	logging.Errorf("Value: %v / Revision: %v", string(gr.Kvs[0].Value), gr.Header.Revision)
+	logging.Debugf("Value: %v / Revision: %v", string(gr.Kvs[0].Value), gr.Header.Revision)
 
 	return nil
 }

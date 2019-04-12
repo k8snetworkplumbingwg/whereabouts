@@ -7,25 +7,90 @@ import (
   "github.com/dougbtv/whereabouts/pkg/logging"
   "net"
   "strconv"
+  "strings"
 )
 
-// AssignIP assigns an IP by database
-func AssignIP(iprange string) (net.IPNet, error) {
+// AssignIP assigns an IP using a range and a reserve list.
+func AssignIP(iprange string, reservelist string, containerID string) (net.IPNet, string, error) {
 
   // Setup the basics here.
   ip, ipnet, err := net.ParseCIDR(iprange)
 
-  firstip, lastip, err := GetIPRange(ip, *ipnet)
+  newip, updatedreservelist, err := IterateForAssignment(ip, *ipnet, SplitReserveList(reservelist), containerID)
   if err != nil {
-    logging.Errorf("GetIPRange request failed with: %v", err)
-    return net.IPNet{}, err
+    logging.Errorf("IterateForAssignment request failed with: %v", err)
+    return net.IPNet{}, "", err
   }
 
-  logging.Debugf("Input IP range: %v | first IP: %v | last IP: %v", iprange, firstip, lastip)
+  logging.Debugf("newip: %v, updatedreservelist: %+v", newip, updatedreservelist)
 
-  useaddr := net.IPNet{IP: firstip, Mask: ipnet.Mask}
+  return net.IPNet{IP: newip, Mask: ipnet.Mask}, JoinReserveList(updatedreservelist), nil
+}
 
-  return useaddr, nil
+// IterateForAssignment iterates given an IP/IPNet and a list of reserved IPs
+func IterateForAssignment(ip net.IP, ipnet net.IPNet, reservelist []string, containerID string) (net.IP, []string, error) {
+
+  firstip, lastip, err := GetIPRange(ip, ipnet)
+  logging.Debugf("IterateForAssignment input >> ip: %v | ipnet: %v | first IP: %v | last IP: %v", ip, ipnet, firstip, lastip)
+  if err != nil {
+    logging.Errorf("GetIPRange request failed with: %v", err)
+    return net.IP{}, reservelist, err
+  }
+
+  // Iterate every IP address in the range
+  var assignedip net.IP
+  performedassignment := false
+  for i := ip2Long(firstip); i < ip2Long(lastip); i++ {
+    // For each address see if it has been allocated
+    isallocated := false
+    for _, v := range reservelist {
+      // Skip to the next IP if it's already allocated
+      // We look for the space at the end so 192.168.1.1 doesn't match 192.168.1.100
+      if strings.Contains(v, fmt.Sprint(longToIP4(i))+" ") {
+        isallocated = true
+        break
+      }
+    }
+
+    // Continue if this IP is allocated.
+    if isallocated {
+      continue
+    }
+
+    // We can try to work with the current IP
+    // However, let's skip 0-based addresses
+    // So go ahead and continue if the 4th byte equals 0
+    ipbytes := longToIP4(i).To4()
+    if ipbytes[3] == 0 {
+      continue
+    }
+
+    // Ok, this one looks like we can assign it!
+    performedassignment = true
+    assignedip = longToIP4(i)
+    stringip := fmt.Sprint(assignedip)
+    logging.Debugf("Reserving IP: |%v|", stringip+" "+containerID)
+    reservelist = append(reservelist, stringip+" "+containerID)
+    break
+
+  }
+
+  if !performedassignment {
+    return net.IP{}, reservelist, fmt.Errorf("Could not allocate IP in range: ip: %v / range: %v", ip, ipnet)
+  }
+
+  return assignedip, reservelist, nil
+
+}
+
+// SplitReserveList splits line breaks in a string into a list
+func SplitReserveList(reservelist string) []string {
+  return strings.Split(reservelist, "\n")
+}
+
+// JoinReserveList joins a reservelist back together with line breaks
+func JoinReserveList(reservelist []string) string {
+  return strings.Join(reservelist, "\n")
 }
 
 // GetIPRange returns the first and last IP in a range
