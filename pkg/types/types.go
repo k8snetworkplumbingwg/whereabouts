@@ -48,4 +48,6 @@ const (
 	Allocate = 0
 	// Deallocate operation identifier
 	Deallocate = 1
+	// SkipOperation is used for a kind of noop when an error is encountered
+	SkipOperation = 1000000
 )

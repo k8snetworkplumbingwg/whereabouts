@@ -49,6 +49,11 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
     return nil, "", fmt.Errorf("invalid CIDR %s: %s", n.IPAM.Range, err)
   }
 
+  if n.IPAM.EtcdHost == "" {
+    nostoragemessage := "You have not specified a storage engine (looks like you're missing the `etcd_host` parameter in your config)"
+    return nil, "", fmt.Errorf(nostoragemessage)
+  }
+
   // fmt.Printf("Range IP: %s / Subnet: %s", ip, subnet)
 
   if n.IPAM.GatewayStr != "" {

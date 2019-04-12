@@ -19,7 +19,6 @@ docker run -dt \
 
 Manipulate etcd.
 
-
 ```
 docker exec -it etcd /bin/sh
 export ETCDCTL_API=3

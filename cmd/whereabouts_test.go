@@ -21,7 +21,7 @@ func TestWhereabouts(t *testing.T) {
 }
 
 var _ = Describe("Whereabouts operations", func() {
-	It("allocates and releases addresses without addresses on ADD/DEL", func() {
+	It("allocates and releases addresses on ADD/DEL", func() {
 		const ifname string = "eth0"
 		const nspath string = "/some/where"
 
@@ -74,6 +74,30 @@ var _ = Describe("Whereabouts operations", func() {
 			return cmdDel(args)
 		})
 		Expect(err).NotTo(HaveOccurred())
+
+		// Now, create the same thing again, and expect the same IP
+		// That way we know it dealloced the IP and assigned it again.
+		r, raw, err = testutils.CmdAddWithArgs(args, func() error {
+			return cmdAdd(args)
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		result, err = current.GetResult(r)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(*result.IPs[0]).To(Equal(
+			current.IPConfig{
+				Version: "4",
+				Address: mustCIDR("192.168.1.1/24"),
+				Gateway: net.ParseIP("192.168.10.1"),
+			}))
+
+		// And we'll release the IP again.
+		err = testutils.CmdDelWithArgs(args, func() error {
+			return cmdDel(args)
+		})
+		Expect(err).NotTo(HaveOccurred())
+
 	})
 
 	It("can still assign static parameters", func() {
@@ -165,6 +189,7 @@ var _ = Describe("Whereabouts operations", func() {
 			return cmdDel(args)
 		})
 		Expect(err).NotTo(HaveOccurred())
+
 	})
 
 	It("fails when there's bad JSON", func() {

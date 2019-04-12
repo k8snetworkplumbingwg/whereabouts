@@ -29,7 +29,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 		logging.Errorf("IPAM configuration load failed: %s", err)
 		return err
 	}
-	logging.Debugf("IPAM configuration successfully read: %+v", ipamConf)
+	logging.Debugf("ADD - IPAM configuration successfully read: %+v", ipamConf)
 	logging.Debugf("ContainerID: %v", args.ContainerID)
 
 	// Initialize our result, and assign DNS & routing.
@@ -37,21 +37,17 @@ func cmdAdd(args *skel.CmdArgs) error {
 	result.DNS = ipamConf.DNS
 	result.Routes = ipamConf.Routes
 
-	// If there were more than one storage engine, we'd switch out here.
-	if ipamConf.EtcdHost != "" {
-		newip, err := storage.IPManagement(types.Allocate, *ipamConf, args.ContainerID)
-		if err != nil {
-			return fmt.Errorf("Error assigning IP: %s", err)
-		}
-
-		result.IPs = append(result.IPs, &current.IPConfig{
-			Version: "4",
-			Address: newip,
-			Gateway: ipamConf.Gateway})
-
-	} else {
-		return fmt.Errorf("You have not specified a storage engine (looks like you're missing the `etcd_host` parameter in your config)")
+	// If there were more than one storage engine, we could switch out here (or add a storage handler?)
+	newip, err := storage.IPManagement(types.Allocate, *ipamConf, args.ContainerID)
+	if err != nil {
+		logging.Errorf("Error assigning IP: %s", err)
+		return fmt.Errorf("Error assigning IP: %s", err)
 	}
+
+	result.IPs = append(result.IPs, &current.IPConfig{
+		Version: "4",
+		Address: newip,
+		Gateway: ipamConf.Gateway})
 
 	// Assign all the static IP elements.
 	for _, v := range ipamConf.Addresses {
@@ -65,6 +61,20 @@ func cmdAdd(args *skel.CmdArgs) error {
 }
 
 func cmdDel(args *skel.CmdArgs) error {
-	// TODO
+	ipamConf, _, err := config.LoadIPAMConfig(args.StdinData, args.Args)
+	if err != nil {
+		logging.Errorf("IPAM configuration load failed: %s", err)
+		return err
+	}
+	logging.Debugf("DEL - IPAM configuration successfully read: %+v", ipamConf)
+	logging.Debugf("ContainerID: %v", args.ContainerID)
+
+	// If there were more than one storage engine, we could switch out here (or add a storage handler?)
+	_, err = storage.IPManagement(types.Deallocate, *ipamConf, args.ContainerID)
+	if err != nil {
+		logging.Errorf("Error deallocating IP: %s", err)
+		return fmt.Errorf("Error deallocating IP: %s", err)
+	}
+
 	return nil
 }

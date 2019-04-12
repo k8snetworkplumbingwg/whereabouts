@@ -22,9 +22,50 @@ func AssignIP(iprange string, reservelist string, containerID string) (net.IPNet
     return net.IPNet{}, "", err
   }
 
-  logging.Debugf("newip: %v, updatedreservelist: %+v", newip, updatedreservelist)
+  // logging.Debugf("newip: %v, updatedreservelist: %+v", newip, updatedreservelist)
 
   return net.IPNet{IP: newip, Mask: ipnet.Mask}, JoinReserveList(updatedreservelist), nil
+}
+
+// DeallocateIP assigns an IP using a range and a reserve list.
+func DeallocateIP(iprange string, reservelist string, containerID string) (string, error) {
+
+  updatedreservelist, err := IterateForDeallocation(SplitReserveList(reservelist), containerID)
+  if err != nil {
+    logging.Errorf("IterateForDeallocation request failed with: %v", err)
+    return "", err
+  }
+
+  // logging.Debugf("deallocate updatedreservelist: %+v", newip, updatedreservelist)
+
+  return JoinReserveList(updatedreservelist), nil
+}
+
+// IterateForDeallocation iterates given an IP/IPNet and a list of reserved IPs
+func IterateForDeallocation(reservelist []string, containerID string) ([]string, error) {
+
+  // Cycle through and find the index that corresponds to our containerID
+  foundidx := -1
+  for idx, v := range reservelist {
+    if strings.Contains(v, " "+containerID) {
+      foundidx = idx
+      break
+    }
+  }
+
+  // Check if it's a valid index
+  if foundidx < 0 {
+    return reservelist, fmt.Errorf("Did not find reserved IP for container %v", containerID)
+  }
+
+  updatedreservelist := removeIdxFromSlice(reservelist, foundidx)
+  return updatedreservelist, nil
+
+}
+
+func removeIdxFromSlice(s []string, i int) []string {
+  s[i] = s[len(s)-1]
+  return s[:len(s)-1]
 }
 
 // IterateForAssignment iterates given an IP/IPNet and a list of reserved IPs

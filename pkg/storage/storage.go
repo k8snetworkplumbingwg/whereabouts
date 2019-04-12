@@ -50,40 +50,64 @@ func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string) (net.
 	// Create our mutex
 	m1 := concurrency.NewMutex(session, whereaboutsPrefix)
 
-	// ------------------------
-	// acquire our lock
+	// ------------------------ acquire our lock
 	if err := m1.Lock(ctx); err != nil {
 		return net.IPNet{}, err
 	}
 
-	// ------------------------
+	// ------------------------ perform everything that's exclusive.
 	logging.Debugf("acquired lock for our session...")
 
 	reservelist, err := GetReserveList(ctx, ipamConf.Range, kv)
 	if err != nil {
 		logging.Errorf("GetReserveList error: %v", err)
-		return net.IPNet{}, err
+		mode = types.SkipOperation
 	}
 
-	// Get an IP assigned
-	newip, updatedreservelist, err := allocate.AssignIP(ipamConf.Range, reservelist, containerID)
 	// logging.Debugf("Updated reservelist: %v", updatedreservelist)
+	var newip net.IPNet
+	var updatedreservelist string
 
-	// Write the updated reserve list
-	err = PutReserveList(ctx, ipamConf.Range, updatedreservelist, kv)
-	if err != nil {
-		logging.Errorf("PutReserveList error: %v", err)
-		return net.IPNet{}, err
+	switch mode {
+	case types.Allocate:
+		// Get an IP assigned
+		newip, updatedreservelist, err = allocate.AssignIP(ipamConf.Range, reservelist, containerID)
+		if err != nil {
+			logging.Errorf("Error assigning IP: %v", err)
+		}
+	case types.Deallocate:
+		updatedreservelist, err = allocate.DeallocateIP(ipamConf.Range, reservelist, containerID)
+		if err != nil {
+			logging.Errorf("Error deallocating IP: %v", err)
+		}
+	case types.SkipOperation:
+		// No operation.
+	default:
+		err = fmt.Errorf("Got an unknown mode passed to IPManagement: %v", mode)
+		logging.Errorf("IPManagement mode error: %v", err)
+		mode = types.SkipOperation
 	}
 
-	// ------------------------
-	// Unlock our session...
+	// Always update the reserve list unless we hit an error previously.
+	if mode != types.SkipOperation {
+
+		// Write the updated reserve list
+		err = PutReserveList(ctx, ipamConf.Range, updatedreservelist, kv)
+		if err != nil {
+			logging.Errorf("PutReserveList error: %v", err)
+			return net.IPNet{}, err
+		}
+
+	}
+
+	// ------------------------ Unlock our session...
 	if err := m1.Unlock(ctx); err != nil {
 		return net.IPNet{}, err
 	}
 	logging.Debugf("released lock for our session")
 
-	return newip, nil
+	// Don't throw errors until here!!
+	return newip, err
 
 }
 
@@ -156,7 +180,7 @@ func GetReserveList(ctx context.Context, iprange string, kv clientv3.KV) (string
 		returnstring = string(reservelist.Kvs[0].Value)
 	}
 
-	logging.Debugf("Reserve list value: %+v", reservelist)
+	// logging.Debugf("Reserve list value: %+v", reservelist)
 	// logging.Debugf("returnstring: %v", returnstring)
 
 	return returnstring, nil
