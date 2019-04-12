@@ -21,6 +21,14 @@ There's two steps to installing Whereabouts
 
 ### Installing etcd.
 
+We recommend that you if you're trying it out in a lab, that you use the [etcd-operator](https://github.com/coreos/etcd-operator), the [installation guide](https://github.com/coreos/etcd-operator/blob/master/doc/user/install_guide.md) is just a few steps. 
+
+Once you've got etcd running -- all you'll need to provide Whereabouts is the endpoint(s) for it. In the etcd-operator style installation, you'd find those with:
+
+```
+kubectl get svc | grep "etcd-cluster-client"
+```
+
 ### Installing Whereabouts.
 
 You can install this plugin with a Daemonset, using:
@@ -33,6 +41,8 @@ kubectl apply -f ./doc/daemonset-install.yaml
 You can compile from this repo (with `./hack/build-go.sh`) and copy the resulting binary onto each node in the `/opt/cni/bin` directory (by default).
 
 ## Example Config
+
+Included here is an entire CNI configuration. Whereabouts only cares about the `ipam` section of the CNI config. In particular this uses `macvlan` plugin.
 
 ```
 {
@@ -51,6 +61,19 @@ You can compile from this repo (with `./hack/build-go.sh`) and copy the resultin
       }
 }
 ```
+
+Three parameters are required:
+
+* `type`: This should be set to `whereabouts`.
+* `range`: This specifies the range in which IP addresses will be allocated.
+* `etcd_host`: This is a connection string for your etcd hosts. It can take a single address or a list, or any other valid etcd connection string.
+
+If you need a tool to figure out the range of a given CIDR address, try this online tool, [subnet-calculator.com](http://www.subnet-calculator.com/).
+
+The optional parameters are for logging, they are:
+
+* `log_file`: A file path to a logfile to log to.
+* `log_level`: Set the logging verbosity, from most to least: `debug`,`error`,`panic`
 
 ## Building
 
