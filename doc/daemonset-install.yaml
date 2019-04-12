@@ -24,7 +24,10 @@ spec:
       containers:
       - name: whereabouts
         image: dougbtv/whereabouts:latest
-        command: ["/bin/sh -c 'cp -f /whereabouts /host/opt/cni/bin/; sleep 1000000000000'"]
+        command: ["/bin/sh"]
+        args:
+          - "-c"
+          - "cp -f /whereabouts /host/opt/cni/bin/; sleep 1000000000000"
         resources:
           requests:
             cpu: "100m"
