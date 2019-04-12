@@ -14,10 +14,11 @@ To store IP address allocation, Whereabouts uses [etcd](https://github.com/etcd-
 
 ## Installation
 
-There's two steps to installing Whereabouts
+There's three steps to installing Whereabouts
 
-* Installing etcd, for a 
-* Installing Whereabouts itself (it's just a binary on disk)
+* Installing etcd, for storage for our allocated IP addresses.
+* Installing Whereabouts itself (it's just a binary on disk).
+* Creating IPAM CNI configurations.
 
 ### Installing etcd.
 
