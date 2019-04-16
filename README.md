@@ -18,7 +18,7 @@ The original inspiration for Whereabouts comes from when users have tried to use
 
 Whereabouts is designed with Kubernetes in mind, but, isn't limited to use in just Kubernetes.
 
-To track which IP addresses are in use between nodes, Whereabouts uses [etcd](https://github.com/etcd-io/etcd) as a backend.
+To track which IP addresses are in use between nodes, Whereabouts uses [etcd](https://github.com/etcd-io/etcd) as a backend. The eventual goal is to make Whereabouts more flexible to use other storage backends in addition to etcd (such as Kubernetes Custom Resources, or other key/value stores), we welcome any contributions towards this goal.
 
 Please note that Whereabouts is very new. Any issues and PRs are welcome, some of the known limitations are found at the bottom of the README.
 
