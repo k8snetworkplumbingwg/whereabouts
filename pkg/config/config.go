@@ -71,7 +71,7 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
   for i := range n.IPAM.Addresses {
     ip, addr, err := net.ParseCIDR(n.IPAM.Addresses[i].AddressStr)
     if err != nil {
-      return nil, "", fmt.Errorf("invalid CIDR %s: %s", n.IPAM.Addresses[i].AddressStr, err)
+      return nil, "", fmt.Errorf("invalid CIDR in addresses %s: %s", n.IPAM.Addresses[i].AddressStr, err)
     }
     n.IPAM.Addresses[i].Address = *addr
     n.IPAM.Addresses[i].Address.IP = ip
@@ -86,6 +86,13 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
     } else {
       n.IPAM.Addresses[i].Version = "6"
       numV6++
+    }
+  }
+
+  for i := range n.IPAM.OmitRanges {
+    _, _, err := net.ParseCIDR(n.IPAM.OmitRanges[i])
+    if err != nil {
+      return nil, "", fmt.Errorf("invalid CIDR in exclude list %s: %s", n.IPAM.OmitRanges[i], err)
     }
   }
 

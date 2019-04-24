@@ -19,6 +19,7 @@ type IPAMConfig struct {
 	Type       string            `json:"type"`
 	Routes     []*cnitypes.Route `json:"routes"`
 	Addresses  []Address         `json:"addresses,omitempty"`
+	OmitRanges []string          `json:"exclude,omitempty"`
 	DNS        cnitypes.DNS      `json:"dns"`
 	Range      string            `json:"range"`
 	GatewayStr string            `json:"gateway"`

@@ -5,18 +5,19 @@ import (
   "encoding/binary"
   "fmt"
   "github.com/dougbtv/whereabouts/pkg/logging"
+  "github.com/dougbtv/whereabouts/pkg/types"
   "net"
   "strconv"
   "strings"
 )
 
 // AssignIP assigns an IP using a range and a reserve list.
-func AssignIP(iprange string, reservelist string, containerID string) (net.IPNet, string, error) {
+func AssignIP(ipamConf types.IPAMConfig, reservelist string, containerID string) (net.IPNet, string, error) {
 
   // Setup the basics here.
-  ip, ipnet, err := net.ParseCIDR(iprange)
+  ip, ipnet, err := net.ParseCIDR(ipamConf.Range)
 
-  newip, updatedreservelist, err := IterateForAssignment(ip, *ipnet, SplitReserveList(reservelist), containerID)
+  newip, updatedreservelist, err := IterateForAssignment(ip, *ipnet, SplitReserveList(reservelist), ipamConf.OmitRanges, containerID)
   if err != nil {
     logging.Errorf("IterateForAssignment request failed with: %v", err)
     return net.IPNet{}, "", err
@@ -41,7 +42,7 @@ func DeallocateIP(iprange string, reservelist string, containerID string) (strin
   return JoinReserveList(updatedreservelist), nil
 }
 
-// IterateForDeallocation iterates given an IP/IPNet and a list of reserved IPs
+// IterateForDeallocation iterates overs currently reserved IPs and the deallocates given the container id.
 func IterateForDeallocation(reservelist []string, containerID string) ([]string, error) {
 
   // Cycle through and find the index that corresponds to our containerID
@@ -69,7 +70,7 @@ func removeIdxFromSlice(s []string, i int) []string {
 }
 
 // IterateForAssignment iterates given an IP/IPNet and a list of reserved IPs
-func IterateForAssignment(ip net.IP, ipnet net.IPNet, reservelist []string, containerID string) (net.IP, []string, error) {
+func IterateForAssignment(ip net.IP, ipnet net.IPNet, reservelist []string, excludeRanges []string, containerID string) (net.IP, []string, error) {
 
   firstip, lastip, err := GetIPRange(ip, ipnet)
   logging.Debugf("IterateForAssignment input >> ip: %v | ipnet: %v | first IP: %v | last IP: %v", ip, ipnet, firstip, lastip)
@@ -81,6 +82,7 @@ func IterateForAssignment(ip net.IP, ipnet net.IPNet, reservelist []string, cont
   // Iterate every IP address in the range
   var assignedip net.IP
   performedassignment := false
+MAINITERATION:
   for i := ip2Long(firstip); i < ip2Long(lastip); i++ {
     // For each address see if it has been allocated
     isallocated := false
@@ -104,6 +106,14 @@ func IterateForAssignment(ip net.IP, ipnet net.IPNet, reservelist []string, cont
     ipbytes := longToIP4(i).To4()
     if ipbytes[3] == 0 {
       continue
+    }
+
+    // Lastly, we need to check if this IP is within the range of excluded subnets
+    for _, v := range excludeRanges {
+      _, subnet, _ := net.ParseCIDR(v)
+      if subnet.Contains(longToIP4(i).To4()) {
+        continue MAINITERATION
+      }
     }
 
     // Ok, this one looks like we can assign it!
