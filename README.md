@@ -1,4 +1,5 @@
 # whereabouts
+![Travis CI status](https://travis-ci.org/dougbtv/whereabouts.svg?branch=master)
 
 ![whereabouts-logo](doc/logo.png)
 
