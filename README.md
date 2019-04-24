@@ -1,5 +1,5 @@
 # whereabouts
-![Travis CI status](https://travis-ci.org/dougbtv/whereabouts.svg?branch=master)
+![Travis CI status](https://travis-ci.org/dougbtv/whereabouts.svg?branch=master) ![Go report card](https://goreportcard.com/badge/github.com/dougbtv/whereabouts)
 
 ![whereabouts-logo](doc/logo.png)
 
