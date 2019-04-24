@@ -71,7 +71,7 @@ func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string) (net.
 	switch mode {
 	case types.Allocate:
 		// Get an IP assigned
-		newip, updatedreservelist, err = allocate.AssignIP(ipamConf.Range, reservelist, containerID)
+		newip, updatedreservelist, err = allocate.AssignIP(ipamConf, reservelist, containerID)
 		if err != nil {
 			logging.Errorf("Error assigning IP: %v", err)
 		}

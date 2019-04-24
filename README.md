@@ -12,6 +12,8 @@ CNI (Container Network Interface) plugins typically have a configuration element
 
 Whereabouts takes an address range, like `192.168.2.0/24` in CIDR notation, and will assign IP addresses within that range. In this case, it will assign IP addresses from `192.168.2.1` to `192.168.2.255`. When an IP address is assigned to a pod, Whereabouts tracks that IP address and range in an etcd key/value store for the lifetime of that pod. When the pod is removed, Whereabouts then frees the address and makes it available to assign on subsequent requests. Whereabouts always assigns the lowest value address that's available in the range.
 
+You can also specify ranges to exclude from assignment, so if for example you'd like to assign IP addresses within the range `192.168.2.0/24`, you can exclude IP addresses within it by adding them to an exclude list. For example, if you decide to exclude the range `192.168.2.0/28`, the first IP address assigned in the range will be `192.168.2.16`.
+
 In respect to the old equipment out there that doesn't think that IP addresses that end in `.0` are valid -- Whereabouts will not assign addresses that end in `.0`.
 
 The original inspiration for Whereabouts comes from when users have tried to use the samples from [Multus CNI](https://github.com/intel/multus-cni) (a CNI plugin that attaches multiple network interfaces to your pods), which includes examples that use the `host-local` plugin, and they find that it's... Almost the right thing. Sometimes people even assume it'll work across nodes -- and then wind up with IP address collisions.
@@ -66,14 +68,20 @@ Included here is an entire CNI configuration. Whereabouts only cares about the `
       "mode": "bridge",
       "ipam": {
         "type": "whereabouts",
-        "range": "192.168.2.225/28",
         "etcd_host": "127.0.0.1:2379",
+        "range": "192.168.2.225/28",
+        "exclude": [
+           "192.168.2.229/30",
+           "192.168.2.236/32"
+        ],
         "log_file" : "/tmp/whereabouts.log",
         "log_level" : "debug",
         "gateway": "192.168.2.1"
       }
 }
 ```
+
+### Core Parameters
 
 Three parameters are required:
 
@@ -85,12 +93,23 @@ In this case the `range` is set to `192.168.2.225/28`, this will allocate IP add
 
 If you need a tool to figure out the range of a given CIDR address, try this online tool, [subnet-calculator.com](http://www.subnet-calculator.com/).
 
-The optional parameters are for logging, they are:
+One parameter is optional:
+
+* `exclude`: This is a list of CIDRs to be excluded from being allocated. 
+
+In the example, we exclude IP addresses in the range `192.168.2.229/30` from being allocated (in this case it's 3 addresses, `.229, .230, .231`), as well as `192.168.2.236/32` (just a single address).
+
+*Note*: It's up to you to properly set exclusion ranges that are within your subnet, there's no double checking for you (other than that the CIDR notation parses).
+
+Additionally -- you can set the route, gateway and DNS using anything from the configurations for the [static IPAM plugin](https://github.com/containernetworking/plugins/tree/master/plugins/ipam/static) (as well as additional static IP addresses). 
+
+### Logging Parameters
+
+There are two optional parameters for logging, they are:
 
 * `log_file`: A file path to a logfile to log to.
 * `log_level`: Set the logging verbosity, from most to least: `debug`,`error`,`panic`
 
-Additionally -- you can set the route, gateway and DNS using anything from the configurations for the [static IPAM plugin](https://github.com/containernetworking/plugins/tree/master/plugins/ipam/static) (as well as additional static IP addresses). 
 
 ## Building
 

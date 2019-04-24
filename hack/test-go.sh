@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # single test: go test -v ./pkg/storage/
 # without cache: go test -count=1 -v ./pkg/storage/
+set -e -x
 echo "Stopping and removing etcd server..."
-docker stop etcd
-docker rm etcd
+docker stop etcd || true
+docker rm etcd || true
 echo "Start etcd server..."
 docker run -dt \
 -p 2379:2379 \
@@ -17,6 +18,5 @@ docker run -dt \
 --initial-cluster node1=http://127.0.0.1:2380
 echo "Linting go code..."
 golint ./cmd ./pkg
-echo "Lint exit code: $?"
 echo "Running go tests..."
 go test -v ./...
