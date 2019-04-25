@@ -77,7 +77,7 @@ var _ = Describe("Whereabouts operations", func() {
 
 		// Now, create the same thing again, and expect the same IP
 		// That way we know it dealloced the IP and assigned it again.
-		r, raw, err = testutils.CmdAddWithArgs(args, func() error {
+		r, _, err = testutils.CmdAddWithArgs(args, func() error {
 			return cmdAdd(args)
 		})
 		Expect(err).NotTo(HaveOccurred())

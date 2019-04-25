@@ -25,7 +25,8 @@ var (
 func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string) (net.IPNet, error) {
 
 	logging.Debugf("IPManagement -- mode: %v / host: %v / containerID: %v", mode, ipamConf.EtcdHost, containerID)
-	ctx, _ := context.WithTimeout(context.Background(), RequestTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
+	defer cancel()
 	cli, _ := clientv3.New(clientv3.Config{
 		DialTimeout: DialTimeout,
 		Endpoints:   []string{ipamConf.EtcdHost},
