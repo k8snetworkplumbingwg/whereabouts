@@ -15,7 +15,7 @@ import (
 func AssignIP(ipamConf types.IPAMConfig, reservelist string, containerID string) (net.IPNet, string, error) {
 
 	// Setup the basics here.
-	ip, ipnet, err := net.ParseCIDR(ipamConf.Range)
+	ip, ipnet, _ := net.ParseCIDR(ipamConf.Range)
 
 	newip, updatedreservelist, err := IterateForAssignment(ip, *ipnet, SplitReserveList(reservelist), ipamConf.OmitRanges, containerID)
 	if err != nil {
