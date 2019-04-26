@@ -45,6 +45,8 @@ kubectl get svc | grep "etcd-cluster-client"
 
 This will give you the service name and the port to use, in this case you'll specify it in the configuration in a `service-name:port` format, the default port for etcd clients is `2379`.
 
+*Note*: It's important to remember that CNI plugins (typically) run directly on the host and not inside pods. This means that if you use the DNS name (which might look something like `example-etcd-cluster-client.default.svc.cluster.local`) for the service (recommended) make sure that you can resolve those hostnames directly from your hosts. You may find some tips regarding that [here](https://blog.heptio.com/configuring-your-linux-host-to-resolve-a-local-kubernetes-clusters-service-urls-a8c7bdb212a7).
+
 ### Installing Whereabouts.
 
 You can install this plugin with a Daemonset, using:
