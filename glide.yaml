@@ -8,3 +8,5 @@ import:
   - pkg/types/020
   - pkg/types/current
   - pkg/version
+- package: lukechampine.com/uint128
+  version: v1.0.0
