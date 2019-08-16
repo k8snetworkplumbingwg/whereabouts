@@ -29,7 +29,7 @@ func canonicalizeIP(ip *net.IP) error {
 func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, error) {
 	n := types.Net{}
 	if err := json.Unmarshal(bytes, &n); err != nil {
-		return nil, "", err
+		return nil, "", fmt.Errorf("LoadIPAMConfig - JSON Parsing Error: %s / bytes: %s", err, bytes)
 	}
 
 	if n.IPAM == nil {

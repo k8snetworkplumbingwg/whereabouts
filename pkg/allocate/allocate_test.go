@@ -14,10 +14,7 @@ func TestAllocate(t *testing.T) {
 }
 
 var _ = Describe("Allocation operations", func() {
-	It("creates a range properly", func() {
-
-		const ifname string = "eth0"
-		const nspath string = "/some/where"
+	It("creates an IPv4 range properly", func() {
 
 		ip, ipnet, err := net.ParseCIDR("192.168.2.200/24")
 		Expect(err).NotTo(HaveOccurred())
@@ -29,10 +26,20 @@ var _ = Describe("Allocation operations", func() {
 		Expect(fmt.Sprint(lastip)).To(Equal("192.168.2.255"))
 
 	})
-	It("fails when the mask is too short", func() {
+	// Handy IPv6 CIDR calculator: https://www.ultratools.com/tools/ipv6CIDRToRangeResult?ipAddress=2001%3A%3A0%2F28
+	It("creates an IPv6 range properly", func() {
 
-		const ifname string = "eth0"
-		const nspath string = "/some/where"
+		ip, ipnet, err := net.ParseCIDR("2001::0/116")
+		Expect(err).NotTo(HaveOccurred())
+
+		firstip, lastip, err := GetIPRange(ip, *ipnet)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(fmt.Sprint(firstip)).To(Equal("2001::"))
+		Expect(fmt.Sprint(lastip)).To(Equal("2001::fff"))
+
+	})
+	It("fails when the mask is too short", func() {
 
 		badip, badipnet, err := net.ParseCIDR("10.0.0.100/2")
 		Expect(err).NotTo(HaveOccurred())

@@ -7,6 +7,8 @@ An IP Address Management (IPAM) CNI plugin that assigns IP addresses cluster-wid
 
 If you need a way to assign IP addresses dynamically across your cluster -- Whereabouts is the tool for you. If you've found that you like how the [host-local](https://github.com/containernetworking/plugins/tree/master/plugins/ipam/host-local) CNI plugin works, but, you need something that works across all the nodes in your cluster (`host-local` only knows how to assign IPs to pods on the same node) -- Whereabouts is just what you're looking for.
 
+Whereabouts can be used for both IPv4 & IPv6 addressing.
+
 ## Introduction
 
 CNI (Container Network Interface) plugins typically have a configuration element named `ipam`. CNI IPAM plugins can assign IP addresses, and Whereabouts assigns IP addresses within a range -- without having to use a DHCP server. 
@@ -62,6 +64,8 @@ You can compile from this repo (with `./hack/build-go.sh`) and copy the resultin
 
 Included here is an entire CNI configuration. Whereabouts only cares about the `ipam` section of the CNI config. In particular this example uses the `macvlan` CNI plugin. (If you decide to copy this block and try it too, make sure that the `master` setting is set to a network interface name that exists on your nodes). Typically, you'll already have a CNI configuration for an existing CNI plugin in your cluster, and you'll just copy the `ipam` section and modify the values there.
 
+*NOTE*: You'll almost certainly want to change `etcd_host`.
+
 ```
 {
       "cniVersion": "0.3.0",
@@ -71,7 +75,7 @@ Included here is an entire CNI configuration. Whereabouts only cares about the `
       "mode": "bridge",
       "ipam": {
         "type": "whereabouts",
-        "etcd_host": "127.0.0.1:2379",
+        "etcd_host": "example-etcd-cluster-client.cluster.local:2379",
         "range": "192.168.2.225/28",
         "exclude": [
            "192.168.2.229/30",
@@ -83,6 +87,29 @@ Included here is an entire CNI configuration. Whereabouts only cares about the `
       }
 }
 ```
+
+### Example IPv6 Config
+
+The same applies for the usage of IPv6:
+
+```
+{
+      "cniVersion": "0.3.0",
+      "name": "whereaboutsexample",
+      "type": "macvlan",
+      "master": "eth0",
+      "mode": "bridge",
+      "ipam": {
+        "type": "whereabouts",
+        "log_file" : "/tmp/whereabouts.log",
+                "log_level" : "debug",
+        "etcd_host": "example-etcd-cluster-client.cluster.local:2379",
+        "range": "2001::0/116",
+        "gateway": "2001::f:1"
+      }
+}
+```
+
 
 ### Core Parameters
 
@@ -130,7 +157,6 @@ The typeface used in the logo is [AZONIX](https://www.dafont.com/azonix.font), b
 
 ## Known limitations
 
-* This only works for IPv4 addresses.
 * It has read/write locking to prevent race conditions, but, it's not optimized. It's write locked for all ranges.
 * If you specify overlapping ranges -- you're almost certain to have collisions, so if you specify one config with `192.168.0.0/16` and another with `192.168.0.0/24`, you'll have collisions.
     - This could be fixed with an admission controller.
