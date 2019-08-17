@@ -1,18 +1,14 @@
-hash: 7c48cbd07bdcb7a288711366b4998a634fba45792da0ecb11a162db3a98ec2ff
-updated: 2019-04-11T11:33:46.829733627-04:00
+hash: 87462f258a231697189d0cb68dd7b07587f4983ad464e415f46afc6f29b09575
+updated: 2019-08-02T15:01:07.346482208-04:00
 imports:
 - name: github.com/containernetworking/cni
-  version: fbb95fff8a5239a4295c991efa8a397d43118f7e
+  version: 4cfb7b568922a3c79a23e438dc52fe537fc9687e
   subpackages:
   - pkg/skel
   - pkg/types
   - pkg/types/020
   - pkg/types/current
   - pkg/version
-- name: github.com/coreos/etcd
-  version: c7c689452735a955d32126e3af8f3b18cbd9cf83
-  subpackages:
-  - clientv3
 - name: github.com/coreos/go-systemd
   version: 95778dfbb74eb7e4dbaf43bf7d71809650ef8076
   subpackages:
@@ -43,9 +39,11 @@ imports:
   version: c7c689452735a955d32126e3af8f3b18cbd9cf83
   subpackages:
   - auth/authpb
+  - clientv3
   - clientv3/balancer
   - clientv3/balancer/picker
   - clientv3/balancer/resolver/endpoint
+  - clientv3/concurrency
   - etcdserver/api/v3rpc/rpctypes
   - etcdserver/etcdserverpb
   - mvcc/mvccpb
@@ -55,7 +53,7 @@ imports:
   - raft
   - raft/raftpb
 - name: go.uber.org/atomic
-  version: 1ea20fb1cbb1cc08cbd0d913a96dead89aa18289
+  version: df976f2515e274675050de7b3f42545de80594fd
 - name: go.uber.org/multierr
   version: 3c4937480c32f4c13a875a1829af76c98ca3d40a
 - name: go.uber.org/zap
@@ -126,6 +124,8 @@ imports:
   - stats
   - status
   - tap
+- name: lukechampine.com/uint128
+  version: 7623833cf3d79ac330bdb2dd172c186e8ee2e67d
 testImports:
 - name: github.com/containernetworking/plugins
   version: 2b8b1ac0af4568e928d96ccc5f47b075416eeabd

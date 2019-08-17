@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	// "fmt"
 	"net"
 	"strings"
 
@@ -93,6 +93,64 @@ var _ = Describe("Whereabouts operations", func() {
 			}))
 
 		// And we'll release the IP again.
+		err = testutils.CmdDelWithArgs(args, func() error {
+			return cmdDel(args)
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+	})
+
+	It("allocates IPv6 addresses", func() {
+		const ifname string = "eth0"
+		const nspath string = "/some/where"
+
+		conf := `{
+      "cniVersion": "0.3.1",
+      "name": "mynet",
+      "type": "ipvlan",
+      "master": "foo0",
+      "ipam": {
+        "type": "whereabouts",
+        "log_file" : "/tmp/whereabouts.log",
+				"log_level" : "debug",
+        "etcd_host": "127.0.0.1:2379",
+        "range": "2001::0/116",
+        "gateway": "2001::f:1",
+        "routes": [
+          { "dst": "0.0.0.0/0" }
+        ]
+      }
+    }`
+
+		args := &skel.CmdArgs{
+			ContainerID: "ipv6dummy",
+			Netns:       nspath,
+			IfName:      ifname,
+			StdinData:   []byte(conf),
+		}
+
+		// Allocate the IP
+		r, raw, err := testutils.CmdAddWithArgs(args, func() error {
+			return cmdAdd(args)
+		})
+
+		// fmt.Printf("raw: %s\n", raw)
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(strings.Index(string(raw), "\"version\":")).Should(BeNumerically(">", 0))
+
+		result, err := current.GetResult(r)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Gomega is cranky about slices with different caps
+		Expect(*result.IPs[0]).To(Equal(
+			current.IPConfig{
+				Version: "6",
+				Address: mustCIDR("2001::1/116"),
+				Gateway: net.ParseIP("2001::f:1"),
+			}))
+
+		// Release the IP
 		err = testutils.CmdDelWithArgs(args, func() error {
 			return cmdDel(args)
 		})
@@ -205,7 +263,7 @@ var _ = Describe("Whereabouts operations", func() {
 		r, raw, err := testutils.CmdAddWithArgs(args, func() error {
 			return cmdAdd(args)
 		})
-		fmt.Printf("!bang raw: %s\n", raw)
+		// fmt.Printf("!bang raw: %s\n", raw)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(strings.Index(string(raw), "\"version\":")).Should(BeNumerically(">", 0))
 
@@ -278,7 +336,7 @@ var _ = Describe("Whereabouts operations", func() {
 			return cmdAdd(args)
 		})
 		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(HavePrefix("invalid character"))
+		Expect(err.Error()).To(HavePrefix("LoadIPAMConfig - JSON Parsing Error"))
 
 	})
 

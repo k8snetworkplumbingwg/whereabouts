@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/dougbtv/whereabouts/pkg/logging"
 	"github.com/dougbtv/whereabouts/pkg/types"
+	"math/big"
 	"net"
 	"strconv"
 	"strings"
@@ -83,13 +84,14 @@ func IterateForAssignment(ip net.IP, ipnet net.IPNet, reservelist []string, excl
 	var assignedip net.IP
 	performedassignment := false
 MAINITERATION:
-	for i := ip2Long(firstip); i < ip2Long(lastip); i++ {
+	for i := ip2Long(firstip); ip2Long(lastip).Cmp(i) == 1; i.Add(i, big.NewInt(1)) {
+
 		// For each address see if it has been allocated
 		isallocated := false
 		for _, v := range reservelist {
 			// Skip to the next IP if it's already allocated
 			// We look for the space at the end so 192.168.1.1 doesn't match 192.168.1.100
-			if strings.Contains(v, fmt.Sprint(longToIP4(i))+" ") {
+			if strings.Contains(v, fmt.Sprint(longToIP(*i))+" ") {
 				isallocated = true
 				break
 			}
@@ -102,23 +104,29 @@ MAINITERATION:
 
 		// We can try to work with the current IP
 		// However, let's skip 0-based addresses
-		// So go ahead and continue if the 4th byte equals 0
-		ipbytes := longToIP4(i).To4()
-		if ipbytes[3] == 0 {
-			continue
+		// So go ahead and continue if the 4th/16th byte equals 0
+		ipbytes := i.Bytes()
+		if isIntIPv4(i) {
+			if ipbytes[5] == 0 {
+				continue
+			}
+		} else {
+			if ipbytes[15] == 0 {
+				continue
+			}
 		}
 
 		// Lastly, we need to check if this IP is within the range of excluded subnets
 		for _, v := range excludeRanges {
 			_, subnet, _ := net.ParseCIDR(v)
-			if subnet.Contains(longToIP4(i).To4()) {
+			if subnet.Contains(longToIP(*i).To4()) {
 				continue MAINITERATION
 			}
 		}
 
 		// Ok, this one looks like we can assign it!
 		performedassignment = true
-		assignedip = longToIP4(i)
+		assignedip = longToIP(*i)
 		stringip := fmt.Sprint(assignedip)
 		logging.Debugf("Reserving IP: |%v|", stringip+" "+containerID)
 		reservelist = append(reservelist, stringip+" "+containerID)
@@ -153,6 +161,7 @@ func GetIPRange(ip net.IP, ipnet net.IPNet) (net.IP, net.IP, error) {
 	mask := ipnet.Mask
 	ones, bits := mask.Size()
 	masklen := bits - ones
+	// logging.Debugf("Mask: %v / Ones: %v / Bits: %v / masklen: %v", mask, ones, bits, masklen)
 
 	// Error when the mask isn't large enough.
 	if ones < 3 {
@@ -162,30 +171,46 @@ func GetIPRange(ip net.IP, ipnet net.IPNet) (net.IP, net.IP, error) {
 	// Get a long from the current IP address
 	longip := ip2Long(ip)
 
-	// logging.Debugf("binary rep of IP: %v", strconv.FormatInt(int64(longip), 2))
+	// logging.Debugf("binary rep of IP: %b", longip)
 
 	// Shift out to get the lowest IP value.
-	lowestiplong := longip >> uint(masklen)
-	lowestiplong = lowestiplong << uint(masklen)
-	// logging.Debugf("lowest value:     %v", strconv.FormatInt(int64(lowestiplong), 2))
+	var lowestiplong big.Int
+	lowestiplong.Rsh(longip, uint(masklen))
+	lowestiplong.Lsh(&lowestiplong, uint(masklen))
+	// logging.Debugf("lowest value:     %b", &lowestiplong)
 
 	// Get the mask as a long, shift it out
-	masklong := ^uint32(0) >> uint(ones)
-	// logging.Debugf("mask:             %v", strconv.FormatInt(int64(masklong), 2))
+	var masklong big.Int
+	// We need to generate the largest number...
+	// Let's try to figure out if it's IPv4 or v6
+	var maxval big.Int
+	if len(lowestiplong.Bytes()) == 16 {
+		// It's v6
+		// Maximum IPv6 value: 0xffffffffffffffffffffffffffffffff
+		maxval.SetString("0xffffffffffffffffffffffffffffffff", 0)
+	} else {
+		// It's v4
+		// Maximum IPv4 value: 4294967295
+		maxval.SetUint64(4294967295)
+	}
+
+	masklong.Rsh(&maxval, uint(ones))
+	// logging.Debugf("max val:          %b", &maxval)
+	// logging.Debugf("mask:             %b", &masklong)
 
 	// Now figure out the highest value...
 	// We can OR that value...
-	highestiplong := lowestiplong | masklong
-	// logging.Debugf("highest value:    %v", strconv.FormatInt(int64(highestiplong), 2))
+	var highestiplong big.Int
+	highestiplong.Or(&lowestiplong, &masklong)
+	// logging.Debugf("highest value:    %b", &highestiplong)
 
 	// Now let's send it back to IPs, we can get first and last in the range...
-	firstip := longToIP4(lowestiplong)
-	lastip := longToIP4(highestiplong)
+	firstip := longToIP(lowestiplong)
+	lastip := longToIP(highestiplong)
 
 	// Some debugging information...
 	// logging.Debugf("first ip: %v", firstip)
 	// logging.Debugf("last ip:  %v", lastip)
-
 	// logging.Debugf("mask len: %v", len(mask))
 	// logging.Debugf("mask raw: %v", mask)
 	// logging.Debugf("mask size: 1's: %v / bits: %v / len: %v", ones, bits, masklen)
@@ -195,13 +220,51 @@ func GetIPRange(ip net.IP, ipnet net.IPNet) (net.IP, net.IP, error) {
 }
 
 // from: https://www.socketloop.com/tutorials/golang-convert-ip-address-string-to-long-unsigned-32-bit-integer
-func ip2Long(ip net.IP) uint32 {
-	var long uint32
+func _ip2Long(ip net.IP) big.Int {
+	var long big.Int
 	binary.Read(bytes.NewBuffer(ip.To4()), binary.BigEndian, &long)
 	return long
 }
 
-func longToIP4(inIPInt uint32) net.IP {
+// IsIPv4 checks if an IP is v4.
+func IsIPv4(checkip net.IP) bool {
+	return isIntIPv4(ip2Long(checkip))
+}
+
+func isIntIPv4(checkipint *big.Int) bool {
+	return !(len(checkipint.Bytes()) == 16)
+}
+
+func longToIP(inipint big.Int) net.IP {
+
+	var outip net.IP
+
+	// Create an IPv6 (to make it 16 bytes)
+	outip = net.ParseIP("0::")
+	intbytes := inipint.Bytes()
+
+	// logging.Debugf("length intbytes: %v", len(intbytes))
+	// This is an IPv6 address.
+
+	if len(intbytes) == 16 {
+		for i := 0; i < len(intbytes); i++ {
+			// logging.Debugf("i: %v", i)
+			outip[i] = intbytes[i]
+			// logging.Debugf("longtoip-byte[%v]: %x ", i, intbytes[i])
+		}
+
+	} else {
+		// It's an IPv4 address.
+		for i := 0; i < len(intbytes); i++ {
+			// logging.Debugf("i: %v", i)
+			outip[i+10] = intbytes[i]
+			// logging.Debugf("longtoip-byte[%v]: %x ", i, intbytes[i])
+		}
+	}
+	return outip
+}
+
+func _longToIP(inIPInt uint32) net.IP {
 	// we process it as an int64
 	ipInt := int64(inIPInt)
 	// need to do two bit shifting and "0xff" masking
@@ -210,4 +273,42 @@ func longToIP4(inIPInt uint32) net.IP {
 	b2 := strconv.FormatInt((ipInt>>8)&0xff, 10)
 	b3 := strconv.FormatInt((ipInt & 0xff), 10)
 	return net.ParseIP(b0 + "." + b1 + "." + b2 + "." + b3)
+}
+
+func tryIt(inputiprange string) error {
+	logging.Debugf("Input range: %s", inputiprange)
+	theip, ipnet, err := net.ParseCIDR(inputiprange)
+	if err != nil {
+		logging.Errorf("Couldn't parse IP: %s", inputiprange)
+		return fmt.Errorf("Couldn't parse IP: %s", inputiprange)
+	}
+
+	logging.Debugf("The IP: %s", theip)
+	logging.Debugf("The IPnet: %+v", ipnet)
+	// logging.Debugf("The IPnet IP: %+v", ipnet.IP)
+	// logging.Debugf("The IPnet IPMask: %+v", ipnet.IPMask)
+	theonesix := theip // .To16()
+	// Can I change a byte? YES!
+	theonesix[15] = 255
+	logging.Debugf("theonesix: %+v", theonesix)
+	for i := 0; i < len(theonesix); i++ {
+		logging.Debugf("byte[%v]: %x ", i, theonesix[i])
+	}
+	// theonesix++
+	// logging.Debugf("theonesixPLUSONE: %+v", theonesix)
+	// Can I access the bytes in the int? YES
+	asint := ip2Long(theonesix)
+	logging.Debugf("asint: %v", asint)
+	intbytes := asint.Bytes()
+	for i := 0; i < len(intbytes); i++ {
+		logging.Debugf("asint[%v]: %x ", i, intbytes[i])
+	}
+
+	return nil
+}
+
+func ip2Long(IPv6Addr net.IP) *big.Int {
+	IPv6Int := big.NewInt(0)
+	IPv6Int.SetBytes(IPv6Addr)
+	return IPv6Int
 }
