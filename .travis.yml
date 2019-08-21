@@ -22,9 +22,10 @@ before_script:
   - test -z $(gofmt -l pkg/. cmd/.)
 
 script:
-  - $GOPATH/bin/goveralls -service=travis-ci
   - ./hack/test-go.sh
   - ./hack/build-go.sh
+  - ./hack/restart-etcd.sh
+  - $GOPATH/bin/goveralls -service=travis-ci
   - docker build -t dougbtv/whereabouts .
 
 deploy:
