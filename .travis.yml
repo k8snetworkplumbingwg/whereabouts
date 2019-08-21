@@ -18,7 +18,7 @@ install:
 
 before_script:
   - golint pkg/... cmd/...
-  - go tool vet */*.go
+  - go vet */*.go
   - test -z $(gofmt -l pkg/. cmd/.)
 
 script:
