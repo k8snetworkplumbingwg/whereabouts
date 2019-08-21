@@ -3,7 +3,7 @@ dist: trusty
 sudo: false
 
 go:
-  - tip
+  - 1.11.x
 
 env:
   global:
@@ -18,7 +18,7 @@ install:
 
 before_script:
   - golint pkg/... cmd/...
-  - go vet */*.go
+  - go tool vet */*.go
   - test -z $(gofmt -l pkg/. cmd/.)
 
 script:
