@@ -117,7 +117,6 @@ Three parameters are required:
 
 * `type`: This should be set to `whereabouts`.
 * `range`: This specifies the range in which IP addresses will be allocated.
-* `etcd_host`: This is a connection string for your etcd hosts. It can take a single address or a list, or any other valid etcd connection string.
 
 In this case the `range` is set to `192.168.2.225/28`, this will allocate IP addresses in the range
 
@@ -132,6 +131,18 @@ In the example, we exclude IP addresses in the range `192.168.2.229/30` from bei
 *Note*: It's up to you to properly set exclusion ranges that are within your subnet, there's no double checking for you (other than that the CIDR notation parses).
 
 Additionally -- you can set the route, gateway and DNS using anything from the configurations for the [static IPAM plugin](https://github.com/containernetworking/plugins/tree/master/plugins/ipam/static) (as well as additional static IP addresses). 
+
+### etcd Parameters
+
+**Required:**
+* `etcd_host`: This is a connection string for your etcd hosts. It can take a single address or a list, or any other valid etcd connection string.
+
+**Optional:**
+* `etcd_username`: Basic Auth username to use when accessing the etcd API.
+* `etcd_password`: Basic Auth password to use when accessing the etcd API.
+* `etcd_key_file`: Path to the file containing the etcd private key matching the CNI plugin’s client certificate.
+* `etcd_cert_file`: Path to the file containing the etcd client certificate issued to the CNI plugin.
+* `etcd_ca_cert_file`: Path to the file containing the root certificate of the certificate authority (CA) that issued the etcd server certificate.
 
 ### Logging Parameters
 
