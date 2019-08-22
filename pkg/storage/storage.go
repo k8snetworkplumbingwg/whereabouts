@@ -12,8 +12,6 @@ import (
 	"github.com/dougbtv/whereabouts/pkg/types"
 )
 
-const whereaboutsPrefix = "/whereabouts"
-
 var (
 	// RequestTimeout defines how long the context timesout in
 	RequestTimeout = 10 * time.Second
