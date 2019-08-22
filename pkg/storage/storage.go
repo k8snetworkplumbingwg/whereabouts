@@ -27,18 +27,19 @@ var (
 func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string) (net.IPNet, error) {
 
 	logging.Debugf("IPManagement -- mode: %v / host: %v / containerID: %v", mode, ipamConf.EtcdHost, containerID)
-	tlsInfo := transport.TLSInfo{
-		CertFile:      ipamConf.EtcdCertFile,
-		KeyFile:       ipamConf.EtcdKeyFile,
-		TrustedCAFile: ipamConf.EtcdCACertFile,
-	}
+
 	cfg := clientv3.Config{
 		DialTimeout: DialTimeout,
 		Endpoints:   []string{ipamConf.EtcdHost},
 		Username:    ipamConf.EtcdUsername,
 		Password:    ipamConf.EtcdPassword,
 	}
-	if ipamConf.EtcdCertFile != "" && ipamConf.EtcdKeyFile != "" {
+	if cert, key := ipamConf.EtcdCertFile, ipamConf.EtcdKeyFile; cert != "" && key != "" {
+		tlsInfo := transport.TLSInfo{
+			CertFile:      cert,
+			KeyFile:       key,
+			TrustedCAFile: ipamConf.EtcdCACertFile,
+		}
 		tlsConfig, err := tlsInfo.ClientConfig()
 		if err != nil {
 			return net.IPNet{}, err
