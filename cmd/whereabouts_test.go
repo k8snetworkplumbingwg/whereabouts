@@ -6,8 +6,11 @@ import (
 	"net"
 	"strings"
 	"testing"
+<<<<<<< HEAD
 
 	"testing"
+=======
+>>>>>>> Reorganized tests and imports
 
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
