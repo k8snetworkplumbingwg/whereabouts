@@ -32,16 +32,18 @@ func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string) (net.
 		KeyFile:       ipamConf.EtcdKeyFile,
 		TrustedCAFile: ipamConf.EtcdCACertFile,
 	}
-	tlsConfig, err := tlsInfo.ClientConfig()
-	if err != nil {
-		return net.IPNet{}, err
-	}
 	cfg := clientv3.Config{
 		DialTimeout: DialTimeout,
 		Endpoints:   []string{ipamConf.EtcdHost},
 		Username:    ipamConf.EtcdUsername,
 		Password:    ipamConf.EtcdPassword,
-		TLS:         tlsConfig,
+	}
+	if ipamConf.EtcdCertFile != "" && ipamConf.EtcdKeyFile != "" {
+		tlsConfig, err := tlsInfo.ClientConfig()
+		if err != nil {
+			return net.IPNet{}, err
+		}
+		cfg.TLS = tlsConfig
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
 	defer cancel()
@@ -50,7 +52,7 @@ func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string) (net.
 	kv := clientv3.NewKV(cli)
 
 	// Check our connectivity first
-	err = CheckConnectivity(ctx, kv)
+	err := CheckConnectivity(ctx, kv)
 	if err != nil {
 		logging.Errorf("ETCD CheckConnectivity error: %v", err)
 		return net.IPNet{}, err
