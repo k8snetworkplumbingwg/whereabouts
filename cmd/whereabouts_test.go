@@ -356,6 +356,8 @@ var _ = Describe("Whereabouts operations", func() {
 			"etcd_host": "127.0.0.1:2379",
 			"etcd_username": "fakeuser",
 			"etcd_password": "fakepassword",
+			"etcd_key_file": "/tmp/fake/path/to/key",
+			"etcd_cert_file": "/tmp/fake/path/to/cert",
 			"range": "192.168.1.0/24",
 			"gateway": "192.168.10.1",
 			"routes": [
@@ -376,7 +378,6 @@ var _ = Describe("Whereabouts operations", func() {
 			return cmdAdd(args)
 		})
 		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(HavePrefix("ETCD CheckConnectivity error"))
 	})
 
 })
