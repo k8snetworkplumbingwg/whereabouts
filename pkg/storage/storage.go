@@ -3,13 +3,15 @@ package storage
 import (
 	"context"
 	"fmt"
+	"net"
+	"time"
+
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/clientv3/concurrency"
+	"github.com/coreos/etcd/pkg/transport"
 	"github.com/dougbtv/whereabouts/pkg/allocate"
 	"github.com/dougbtv/whereabouts/pkg/logging"
 	"github.com/dougbtv/whereabouts/pkg/types"
-	"net"
-	"time"
 )
 
 const whereaboutsPrefix = "/whereabouts"
@@ -25,12 +27,28 @@ var (
 func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string) (net.IPNet, error) {
 
 	logging.Debugf("IPManagement -- mode: %v / host: %v / containerID: %v", mode, ipamConf.EtcdHost, containerID)
-	ctx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
-	defer cancel()
-	cli, _ := clientv3.New(clientv3.Config{
+
+	cfg := clientv3.Config{
 		DialTimeout: DialTimeout,
 		Endpoints:   []string{ipamConf.EtcdHost},
-	})
+		Username:    ipamConf.EtcdUsername,
+		Password:    ipamConf.EtcdPassword,
+	}
+	if cert, key := ipamConf.EtcdCertFile, ipamConf.EtcdKeyFile; cert != "" && key != "" {
+		tlsInfo := transport.TLSInfo{
+			CertFile:      cert,
+			KeyFile:       key,
+			TrustedCAFile: ipamConf.EtcdCACertFile,
+		}
+		tlsConfig, err := tlsInfo.ClientConfig()
+		if err != nil {
+			return net.IPNet{}, err
+		}
+		cfg.TLS = tlsConfig
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
+	defer cancel()
+	cli, _ := clientv3.New(cfg)
 	defer cli.Close()
 	kv := clientv3.NewKV(cli)
 

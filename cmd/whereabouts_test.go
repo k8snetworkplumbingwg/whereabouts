@@ -5,11 +5,12 @@ import (
 	"net"
 	"strings"
 
+	"testing"
+
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
 	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/containernetworking/plugins/pkg/testutils"
-	"testing"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -338,6 +339,45 @@ var _ = Describe("Whereabouts operations", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(HavePrefix("LoadIPAMConfig - JSON Parsing Error"))
 
+	})
+	It("fails when there's invalid etcd credentials", func() {
+		const ifname string = "eth0"
+		const nspath string = "/some/where"
+
+		conf := `{
+		  "cniVersion": "0.3.1",
+		  "name": "mynet",
+		  "type": "ipvlan",
+		  "master": "foo0",
+		  "ipam": {
+			"type": "whereabouts",
+			"log_file" : "/tmp/whereabouts.log",
+					"log_level" : "debug",
+			"etcd_host": "127.0.0.1:2379",
+			"etcd_username": "fakeuser",
+			"etcd_password": "fakepassword",
+			"etcd_key_file": "/tmp/fake/path/to/key",
+			"etcd_cert_file": "/tmp/fake/path/to/cert",
+			"range": "192.168.1.0/24",
+			"gateway": "192.168.10.1",
+			"routes": [
+			  { "dst": "0.0.0.0/0" }
+			]
+		  }
+		}`
+
+		args := &skel.CmdArgs{
+			ContainerID: "dummy",
+			Netns:       nspath,
+			IfName:      ifname,
+			StdinData:   []byte(conf),
+		}
+
+		// Allocate the IP
+		_, _, err := testutils.CmdAddWithArgs(args, func() error {
+			return cmdAdd(args)
+		})
+		Expect(err).To(HaveOccurred())
 	})
 
 })
