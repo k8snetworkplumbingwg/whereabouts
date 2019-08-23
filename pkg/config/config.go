@@ -66,7 +66,9 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 			return nil, "", fmt.Errorf("invalid CIDR %s: %s", n.IPAM.Range, err)
 		}
 		n.IPAM.Range = ipNet.String()
-		n.IPAM.RangeStart = firstip
+		if n.IPAM.RangeStart == nil {
+			n.IPAM.RangeStart = firstip
+		}
 	}
 
 	if n.IPAM.EtcdHost == "" {

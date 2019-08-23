@@ -297,7 +297,61 @@ var _ = Describe("Whereabouts operations", func() {
 		r, raw, err := testutils.CmdAddWithArgs(args, func() error {
 			return cmdAdd(args)
 		})
-		// fmt.Printf("!bang raw: %s\n", raw)
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(strings.Index(string(raw), "\"version\":")).Should(BeNumerically(">", 0))
+
+		result, err := current.GetResult(r)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Gomega is cranky about slices with different caps
+
+		Expect(*result.IPs[0]).To(Equal(
+			current.IPConfig{
+				Version: "4",
+				Address: mustCIDR("192.168.1.5/24"),
+				Gateway: net.ParseIP("192.168.10.1"),
+			}))
+
+		// Release the IP
+		err = testutils.CmdDelWithArgs(args, func() error {
+			return cmdDel(args)
+		})
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("allocates an address using the range_start parameter", func() {
+		const ifname string = "eth0"
+		const nspath string = "/some/where"
+
+		conf := `{
+			"cniVersion": "0.3.1",
+			"name": "mynet",
+			"type": "ipvlan",
+			"master": "foo0",
+			"ipam": {
+			  "type": "whereabouts",
+			  "log_file" : "/tmp/whereabouts.log",
+					  "log_level" : "debug",
+			  "etcd_host": "127.0.0.1:2379",
+			  "range": "192.168.1.0/24",
+			  "range_start": "192.168.1.5",
+			  "gateway": "192.168.10.1"
+			}
+		  }`
+
+		args := &skel.CmdArgs{
+			ContainerID: "dummy",
+			Netns:       nspath,
+			IfName:      ifname,
+			StdinData:   []byte(conf),
+		}
+
+		// Allocate the IP
+		r, raw, err := testutils.CmdAddWithArgs(args, func() error {
+			return cmdAdd(args)
+		})
+
 		Expect(err).NotTo(HaveOccurred())
 		Expect(strings.Index(string(raw), "\"version\":")).Should(BeNumerically(">", 0))
 
