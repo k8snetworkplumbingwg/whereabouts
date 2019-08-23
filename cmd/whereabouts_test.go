@@ -267,6 +267,94 @@ var _ = Describe("Whereabouts operations", func() {
 
 	})
 
+	It("allocates an address using start/end cidr notation", func() {
+		const ifname string = "eth0"
+		const nspath string = "/some/where"
+
+		conf := `{
+			"cniVersion": "0.3.1",
+			"name": "mynet",
+			"type": "ipvlan",
+			"master": "foo0",
+			"ipam": {
+			  "type": "whereabouts",
+			  "log_file" : "/tmp/whereabouts.log",
+					  "log_level" : "debug",
+			  "etcd_host": "127.0.0.1:2379",
+			  "range": "192.168.1.5-192.168.1.25/24",
+			  "gateway": "192.168.10.1"
+			}
+		  }`
+
+		args := &skel.CmdArgs{
+			ContainerID: "dummy",
+			Netns:       nspath,
+			IfName:      ifname,
+			StdinData:   []byte(conf),
+		}
+
+		// Allocate the IP
+		r, raw, err := testutils.CmdAddWithArgs(args, func() error {
+			return cmdAdd(args)
+		})
+		// fmt.Printf("!bang raw: %s\n", raw)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(strings.Index(string(raw), "\"version\":")).Should(BeNumerically(">", 0))
+
+		result, err := current.GetResult(r)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Gomega is cranky about slices with different caps
+
+		Expect(*result.IPs[0]).To(Equal(
+			current.IPConfig{
+				Version: "4",
+				Address: mustCIDR("192.168.1.5/24"),
+				Gateway: net.ParseIP("192.168.10.1"),
+			}))
+
+		// Release the IP
+		err = testutils.CmdDelWithArgs(args, func() error {
+			return cmdDel(args)
+		})
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("fails when there's an invalid range specified", func() {
+		const ifname string = "eth0"
+		const nspath string = "/some/where"
+
+		// 192.168.1.5 should not be a member of 192.168.2.25/28
+		conf := `{
+			"cniVersion": "0.3.1",
+			"name": "mynet",
+			"type": "ipvlan",
+			"master": "foo0",
+			"ipam": {
+			  "type": "whereabouts",
+			  "log_file" : "/tmp/whereabouts.log",
+					  "log_level" : "debug",
+			  "etcd_host": "127.0.0.1:2379",
+			  "range": "192.168.1.5-192.168.2.25/28",
+			  "gateway": "192.168.10.1"
+			}
+		  }`
+
+		args := &skel.CmdArgs{
+			ContainerID: "dummy",
+			Netns:       nspath,
+			IfName:      ifname,
+			StdinData:   []byte(conf),
+		}
+
+		// Allocate the IP
+		_, _, err := testutils.CmdAddWithArgs(args, func() error {
+			return cmdAdd(args)
+		})
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(HavePrefix("invalid range start"))
+	})
+
 	It("fails when there's bad JSON", func() {
 		const ifname string = "eth0"
 		const nspath string = "/some/where"
@@ -294,8 +382,8 @@ var _ = Describe("Whereabouts operations", func() {
 		})
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(HavePrefix("LoadIPAMConfig - JSON Parsing Error"))
-
 	})
+
 	It("fails when there's invalid etcd credentials", func() {
 		const ifname string = "eth0"
 		const nspath string = "/some/where"
