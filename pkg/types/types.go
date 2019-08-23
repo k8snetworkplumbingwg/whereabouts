@@ -50,6 +50,12 @@ type Address struct {
 	Version    string
 }
 
+// IPReservations is an address that has been reserved by this plugin
+type IPReservation struct {
+	IP          net.IP `json:"ip"`
+	ContainerID string `json:"id"`
+}
+
 const (
 	// Allocate operation identifier
 	Allocate = 0

@@ -4,52 +4,46 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"github.com/dougbtv/whereabouts/pkg/logging"
-	"github.com/dougbtv/whereabouts/pkg/types"
 	"math/big"
 	"net"
 	"strconv"
-	"strings"
+
+	"github.com/dougbtv/whereabouts/pkg/logging"
+	"github.com/dougbtv/whereabouts/pkg/types"
 )
 
 // AssignIP assigns an IP using a range and a reserve list.
-func AssignIP(ipamConf types.IPAMConfig, reservelist string, containerID string) (net.IPNet, string, error) {
+func AssignIP(ipamConf types.IPAMConfig, reservelist []types.IPReservation, containerID string) (net.IPNet, []types.IPReservation, error) {
 
 	// Setup the basics here.
 	ip, ipnet, _ := net.ParseCIDR(ipamConf.Range)
 
-	newip, updatedreservelist, err := IterateForAssignment(ip, *ipnet, SplitReserveList(reservelist), ipamConf.OmitRanges, containerID)
+	newip, updatedreservelist, err := IterateForAssignment(ip, *ipnet, reservelist, ipamConf.OmitRanges, containerID)
 	if err != nil {
-		logging.Errorf("IterateForAssignment request failed with: %v", err)
-		return net.IPNet{}, "", err
+		return net.IPNet{}, nil, err
 	}
 
-	// logging.Debugf("newip: %v, updatedreservelist: %+v", newip, updatedreservelist)
-
-	return net.IPNet{IP: newip, Mask: ipnet.Mask}, JoinReserveList(updatedreservelist), nil
+	return net.IPNet{IP: newip, Mask: ipnet.Mask}, updatedreservelist, nil
 }
 
 // DeallocateIP assigns an IP using a range and a reserve list.
-func DeallocateIP(iprange string, reservelist string, containerID string) (string, error) {
+func DeallocateIP(iprange string, reservelist []types.IPReservation, containerID string) ([]types.IPReservation, error) {
 
-	updatedreservelist, err := IterateForDeallocation(SplitReserveList(reservelist), containerID)
+	updatedreservelist, err := IterateForDeallocation(reservelist, containerID)
 	if err != nil {
-		logging.Errorf("IterateForDeallocation request failed with: %v", err)
-		return "", err
+		return nil, err
 	}
 
-	// logging.Debugf("deallocate updatedreservelist: %+v", newip, updatedreservelist)
-
-	return JoinReserveList(updatedreservelist), nil
+	return updatedreservelist, nil
 }
 
 // IterateForDeallocation iterates overs currently reserved IPs and the deallocates given the container id.
-func IterateForDeallocation(reservelist []string, containerID string) ([]string, error) {
+func IterateForDeallocation(reservelist []types.IPReservation, containerID string) ([]types.IPReservation, error) {
 
 	// Cycle through and find the index that corresponds to our containerID
 	foundidx := -1
 	for idx, v := range reservelist {
-		if strings.Contains(v, " "+containerID) {
+		if v.ContainerID == containerID {
 			foundidx = idx
 			break
 		}
@@ -65,19 +59,30 @@ func IterateForDeallocation(reservelist []string, containerID string) ([]string,
 
 }
 
-func removeIdxFromSlice(s []string, i int) []string {
+func removeIdxFromSlice(s []types.IPReservation, i int) []types.IPReservation {
 	s[i] = s[len(s)-1]
 	return s[:len(s)-1]
 }
 
 // IterateForAssignment iterates given an IP/IPNet and a list of reserved IPs
-func IterateForAssignment(ip net.IP, ipnet net.IPNet, reservelist []string, excludeRanges []string, containerID string) (net.IP, []string, error) {
+func IterateForAssignment(ip net.IP, ipnet net.IPNet, reservelist []types.IPReservation, excludeRanges []string, containerID string) (net.IP, []types.IPReservation, error) {
 
 	firstip, lastip, err := GetIPRange(ip, ipnet)
 	logging.Debugf("IterateForAssignment input >> ip: %v | ipnet: %v | first IP: %v | last IP: %v", ip, ipnet, firstip, lastip)
 	if err != nil {
 		logging.Errorf("GetIPRange request failed with: %v", err)
 		return net.IP{}, reservelist, err
+	}
+
+	reserved := make(map[string]bool)
+	for _, r := range reservelist {
+		reserved[r.IP.String()] = true
+	}
+
+	excluded := []*net.IPNet{}
+	for _, v := range excludeRanges {
+		_, subnet, _ := net.ParseCIDR(v)
+		excluded = append(excluded, subnet)
 	}
 
 	// Iterate every IP address in the range
@@ -87,18 +92,8 @@ MAINITERATION:
 	for i := ip2Long(firstip); ip2Long(lastip).Cmp(i) == 1; i.Add(i, big.NewInt(1)) {
 
 		// For each address see if it has been allocated
-		isallocated := false
-		for _, v := range reservelist {
-			// Skip to the next IP if it's already allocated
-			// We look for the space at the end so 192.168.1.1 doesn't match 192.168.1.100
-			if strings.Contains(v, fmt.Sprint(longToIP(*i))+" ") {
-				isallocated = true
-				break
-			}
-		}
-
-		// Continue if this IP is allocated.
-		if isallocated {
+		if reserved[fmt.Sprint(longToIP(*i))] {
+			// Continue if this IP is allocated.
 			continue
 		}
 
@@ -117,8 +112,7 @@ MAINITERATION:
 		}
 
 		// Lastly, we need to check if this IP is within the range of excluded subnets
-		for _, v := range excludeRanges {
-			_, subnet, _ := net.ParseCIDR(v)
+		for _, subnet := range excluded {
 			if subnet.Contains(longToIP(*i).To4()) {
 				continue MAINITERATION
 			}
@@ -129,7 +123,7 @@ MAINITERATION:
 		assignedip = longToIP(*i)
 		stringip := fmt.Sprint(assignedip)
 		logging.Debugf("Reserving IP: |%v|", stringip+" "+containerID)
-		reservelist = append(reservelist, stringip+" "+containerID)
+		reservelist = append(reservelist, types.IPReservation{IP: assignedip, ContainerID: containerID})
 		break
 
 	}
@@ -140,16 +134,6 @@ MAINITERATION:
 
 	return assignedip, reservelist, nil
 
-}
-
-// SplitReserveList splits line breaks in a string into a list
-func SplitReserveList(reservelist string) []string {
-	return strings.Split(reservelist, "\n")
-}
-
-// JoinReserveList joins a reservelist back together with line breaks
-func JoinReserveList(reservelist []string) string {
-	return strings.Join(reservelist, "\n")
 }
 
 // GetIPRange returns the first and last IP in a range

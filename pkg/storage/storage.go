@@ -50,7 +50,7 @@ func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string) (net.
 	}
 
 	var newip net.IPNet
-	var updatedreservelist string
+	var updatedreservelist []types.IPReservation
 
 	switch mode {
 	case types.Allocate:

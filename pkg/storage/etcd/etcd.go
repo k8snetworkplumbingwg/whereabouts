@@ -3,6 +3,8 @@ package etcd
 import (
 	"context"
 	"fmt"
+	"net"
+	"strings"
 	"time"
 
 	"github.com/coreos/etcd/clientv3"
@@ -61,21 +63,38 @@ type IPAM struct {
 }
 
 // GetRange gets the reserved list of IPs for a range
-func (i *IPAM) GetRange(ctx context.Context, iprange string) (string, error) {
+func (i *IPAM) GetRange(ctx context.Context, iprange string) ([]types.IPReservation, error) {
 	reservelist, err := i.kv.Get(ctx, "/"+iprange)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	returnstring := ""
-	if len(reservelist.Kvs) >= 1 {
-		returnstring = string(reservelist.Kvs[0].Value)
+	if len(reservelist.Kvs) == 0 {
+		return nil, nil
 	}
-	return returnstring, nil
+
+	reservations := strings.Split(string(reservelist.Kvs[0].Value), "\n")
+	list := make([]types.IPReservation, len(reservations))
+	for i, raw := range reservations {
+		split := strings.SplitN(raw, " ", 2)
+		if len(split) != 2 {
+			return nil, fmt.Errorf("Invalid data returns from etcd, could not split line %d: %q", i, raw)
+		}
+		list[i] = types.IPReservation{
+			IP:          net.ParseIP(split[0]),
+			ContainerID: split[1],
+		}
+	}
+
+	return list, nil
 }
 
 // UpdateRange writes a new reserved list after assigning an IP within a range
-func (i *IPAM) UpdateRange(ctx context.Context, iprange string, reservelist string) error {
-	_, err := i.kv.Put(ctx, "/"+iprange, reservelist)
+func (i *IPAM) UpdateRange(ctx context.Context, iprange string, reservelist []types.IPReservation) error {
+	var raw []string
+	for _, r := range reservelist {
+		raw = append(raw, fmt.Sprintf("%s %s", r.IP.String(), r.ContainerID))
+	}
+	_, err := i.kv.Put(ctx, "/"+iprange, strings.Join(raw, "\n"))
 	return err
 }
 
