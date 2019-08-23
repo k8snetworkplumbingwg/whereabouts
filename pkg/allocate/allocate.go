@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"github.com/dougbtv/whereabouts/pkg/logging"
-	"github.com/dougbtv/whereabouts/pkg/types"
 	"math/big"
 	"net"
 	"strconv"
 	"strings"
+
+	"github.com/dougbtv/whereabouts/pkg/logging"
+	"github.com/dougbtv/whereabouts/pkg/types"
 )
 
 // AssignIP assigns an IP using a range and a reserve list.

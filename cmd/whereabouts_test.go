@@ -2,9 +2,9 @@ package main
 
 import (
 	// "fmt"
+	"fmt"
 	"net"
 	"strings"
-
 	"testing"
 
 	"github.com/containernetworking/cni/pkg/skel"
@@ -21,142 +21,99 @@ func TestWhereabouts(t *testing.T) {
 	RunSpecs(t, "cmd")
 }
 
+func AllocateAndReleaseAddressesTest(ipVersion string, ipRange string, ipGateway string, expectedAddress string) {
+	const ifname string = "eth0"
+	const nspath string = "/some/where"
+
+	conf := fmt.Sprintf(`{
+		"cniVersion": "0.3.1",
+		"name": "mynet",
+		"type": "ipvlan",
+		"master": "foo0",
+		"ipam": {
+		  "type": "whereabouts",
+		  "log_file" : "/tmp/whereabouts.log",
+				  "log_level" : "debug",
+		  "etcd_host": "127.0.0.1:2379",
+		  "range": "%s",
+		  "gateway": "%s",
+		  "routes": [
+			{ "dst": "0.0.0.0/0" }
+		  ]
+		}
+	  }`, ipRange, ipGateway)
+
+	args := &skel.CmdArgs{
+		ContainerID: "dummy",
+		Netns:       nspath,
+		IfName:      ifname,
+		StdinData:   []byte(conf),
+	}
+
+	// Allocate the IP
+	r, raw, err := testutils.CmdAddWithArgs(args, func() error {
+		return cmdAdd(args)
+	})
+	Expect(err).NotTo(HaveOccurred())
+	// fmt.Printf("!bang raw: %s\n", raw)
+	Expect(strings.Index(string(raw), "\"version\":")).Should(BeNumerically(">", 0))
+
+	result, err := current.GetResult(r)
+	Expect(err).NotTo(HaveOccurred())
+
+	// Gomega is cranky about slices with different caps
+	Expect(*result.IPs[0]).To(Equal(
+		current.IPConfig{
+			Version: ipVersion,
+			Address: mustCIDR(expectedAddress),
+			Gateway: net.ParseIP(ipGateway),
+		}))
+
+	// Release the IP
+	err = testutils.CmdDelWithArgs(args, func() error {
+		return cmdDel(args)
+	})
+	Expect(err).NotTo(HaveOccurred())
+
+	// Now, create the same thing again, and expect the same IP
+	// That way we know it dealloced the IP and assigned it again.
+	r, _, err = testutils.CmdAddWithArgs(args, func() error {
+		return cmdAdd(args)
+	})
+	Expect(err).NotTo(HaveOccurred())
+
+	result, err = current.GetResult(r)
+	Expect(err).NotTo(HaveOccurred())
+
+	Expect(*result.IPs[0]).To(Equal(
+		current.IPConfig{
+			Version: ipVersion,
+			Address: mustCIDR(expectedAddress),
+			Gateway: net.ParseIP(ipGateway),
+		}))
+
+	// And we'll release the IP again.
+	err = testutils.CmdDelWithArgs(args, func() error {
+		return cmdDel(args)
+	})
+	Expect(err).NotTo(HaveOccurred())
+}
+
 var _ = Describe("Whereabouts operations", func() {
 	It("allocates and releases addresses on ADD/DEL", func() {
-		const ifname string = "eth0"
-		const nspath string = "/some/where"
+		ipVersion := "4"
+		ipRange := "192.168.1.0/24"
+		ipGateway := "192.168.10.1"
+		expectedAddress := "192.168.1.1/24"
 
-		conf := `{
-      "cniVersion": "0.3.1",
-      "name": "mynet",
-      "type": "ipvlan",
-      "master": "foo0",
-      "ipam": {
-        "type": "whereabouts",
-        "log_file" : "/tmp/whereabouts.log",
-				"log_level" : "debug",
-        "etcd_host": "127.0.0.1:2379",
-        "range": "192.168.1.0/24",
-        "gateway": "192.168.10.1",
-        "routes": [
-          { "dst": "0.0.0.0/0" }
-        ]
-      }
-    }`
+		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, expectedAddress)
 
-		args := &skel.CmdArgs{
-			ContainerID: "dummy",
-			Netns:       nspath,
-			IfName:      ifname,
-			StdinData:   []byte(conf),
-		}
+		ipVersion = "6"
+		ipRange = "2001::1/116"
+		ipGateway = "2001::f:1"
+		expectedAddress = "2001::1/116"
 
-		// Allocate the IP
-		r, raw, err := testutils.CmdAddWithArgs(args, func() error {
-			return cmdAdd(args)
-		})
-		Expect(err).NotTo(HaveOccurred())
-		// fmt.Printf("!bang raw: %s\n", raw)
-		Expect(strings.Index(string(raw), "\"version\":")).Should(BeNumerically(">", 0))
-
-		result, err := current.GetResult(r)
-		Expect(err).NotTo(HaveOccurred())
-
-		// Gomega is cranky about slices with different caps
-		Expect(*result.IPs[0]).To(Equal(
-			current.IPConfig{
-				Version: "4",
-				Address: mustCIDR("192.168.1.1/24"),
-				Gateway: net.ParseIP("192.168.10.1"),
-			}))
-
-		// Release the IP
-		err = testutils.CmdDelWithArgs(args, func() error {
-			return cmdDel(args)
-		})
-		Expect(err).NotTo(HaveOccurred())
-
-		// Now, create the same thing again, and expect the same IP
-		// That way we know it dealloced the IP and assigned it again.
-		r, _, err = testutils.CmdAddWithArgs(args, func() error {
-			return cmdAdd(args)
-		})
-		Expect(err).NotTo(HaveOccurred())
-
-		result, err = current.GetResult(r)
-		Expect(err).NotTo(HaveOccurred())
-
-		Expect(*result.IPs[0]).To(Equal(
-			current.IPConfig{
-				Version: "4",
-				Address: mustCIDR("192.168.1.1/24"),
-				Gateway: net.ParseIP("192.168.10.1"),
-			}))
-
-		// And we'll release the IP again.
-		err = testutils.CmdDelWithArgs(args, func() error {
-			return cmdDel(args)
-		})
-		Expect(err).NotTo(HaveOccurred())
-
-	})
-
-	It("allocates IPv6 addresses", func() {
-		const ifname string = "eth0"
-		const nspath string = "/some/where"
-
-		conf := `{
-      "cniVersion": "0.3.1",
-      "name": "mynet",
-      "type": "ipvlan",
-      "master": "foo0",
-      "ipam": {
-        "type": "whereabouts",
-        "log_file" : "/tmp/whereabouts.log",
-				"log_level" : "debug",
-        "etcd_host": "127.0.0.1:2379",
-        "range": "2001::0/116",
-        "gateway": "2001::f:1",
-        "routes": [
-          { "dst": "0.0.0.0/0" }
-        ]
-      }
-    }`
-
-		args := &skel.CmdArgs{
-			ContainerID: "ipv6dummy",
-			Netns:       nspath,
-			IfName:      ifname,
-			StdinData:   []byte(conf),
-		}
-
-		// Allocate the IP
-		r, raw, err := testutils.CmdAddWithArgs(args, func() error {
-			return cmdAdd(args)
-		})
-
-		// fmt.Printf("raw: %s\n", raw)
-
-		Expect(err).NotTo(HaveOccurred())
-		Expect(strings.Index(string(raw), "\"version\":")).Should(BeNumerically(">", 0))
-
-		result, err := current.GetResult(r)
-		Expect(err).NotTo(HaveOccurred())
-
-		// Gomega is cranky about slices with different caps
-		Expect(*result.IPs[0]).To(Equal(
-			current.IPConfig{
-				Version: "6",
-				Address: mustCIDR("2001::1/116"),
-				Gateway: net.ParseIP("2001::f:1"),
-			}))
-
-		// Release the IP
-		err = testutils.CmdDelWithArgs(args, func() error {
-			return cmdDel(args)
-		})
-		Expect(err).NotTo(HaveOccurred())
-
+		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, expectedAddress)
 	})
 
 	It("excludes a range of addresses", func() {
