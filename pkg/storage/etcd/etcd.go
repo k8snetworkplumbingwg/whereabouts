@@ -77,7 +77,7 @@ func (i *IPAM) GetRange(ctx context.Context, iprange string) ([]types.IPReservat
 	for i, raw := range reservations {
 		split := strings.SplitN(raw, " ", 2)
 		if len(split) != 2 {
-			return nil, fmt.Errorf("Invalid data returns from etcd, could not split line %d: %q", i, raw)
+			return nil, nil
 		}
 		list[i] = types.IPReservation{
 			IP:          net.ParseIP(split[0]),
