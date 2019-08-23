@@ -7,7 +7,6 @@ import (
 	"math/big"
 	"net"
 	"strconv"
-
 	"github.com/dougbtv/whereabouts/pkg/logging"
 	"github.com/dougbtv/whereabouts/pkg/types"
 )

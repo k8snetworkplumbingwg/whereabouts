@@ -3,12 +3,13 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	cnitypes "github.com/containernetworking/cni/pkg/types"
-	"github.com/containernetworking/cni/pkg/types/020"
-	"github.com/dougbtv/whereabouts/pkg/logging"
-	"github.com/dougbtv/whereabouts/pkg/types"
 	"net"
 	"strings"
+
+	cnitypes "github.com/containernetworking/cni/pkg/types"
+	types020 "github.com/containernetworking/cni/pkg/types/020"
+	"github.com/dougbtv/whereabouts/pkg/logging"
+	"github.com/dougbtv/whereabouts/pkg/types"
 )
 
 // canonicalizeIP makes sure a provided ip is in standard form
