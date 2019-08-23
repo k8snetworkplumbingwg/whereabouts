@@ -6,19 +6,13 @@ import (
 	"net"
 	"time"
 
-	"github.com/coreos/etcd/clientv3"
-	"github.com/coreos/etcd/clientv3/concurrency"
-	"github.com/coreos/etcd/pkg/transport"
 	"github.com/dougbtv/whereabouts/pkg/allocate"
 	"github.com/dougbtv/whereabouts/pkg/logging"
+	"github.com/dougbtv/whereabouts/pkg/storage/etcd"
 	"github.com/dougbtv/whereabouts/pkg/types"
 )
 
-const whereaboutsPrefix = "/whereabouts"
-
 var (
-	// DialTimeout defines how long we dial etcd
-	DialTimeout = 2 * time.Second
 	// RequestTimeout defines how long the context timesout in
 	RequestTimeout = 10 * time.Second
 )
@@ -28,64 +22,35 @@ func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string) (net.
 
 	logging.Debugf("IPManagement -- mode: %v / host: %v / containerID: %v", mode, ipamConf.EtcdHost, containerID)
 
-	cfg := clientv3.Config{
-		DialTimeout: DialTimeout,
-		Endpoints:   []string{ipamConf.EtcdHost},
-		Username:    ipamConf.EtcdUsername,
-		Password:    ipamConf.EtcdPassword,
+	ipam, err := etcd.New(ipamConf)
+	if err != nil {
+		logging.Errorf("IPAM client initialization error: %v", err)
+		return net.IPNet{}, err
 	}
-	if cert, key := ipamConf.EtcdCertFile, ipamConf.EtcdKeyFile; cert != "" && key != "" {
-		tlsInfo := transport.TLSInfo{
-			CertFile:      cert,
-			KeyFile:       key,
-			TrustedCAFile: ipamConf.EtcdCACertFile,
-		}
-		tlsConfig, err := tlsInfo.ClientConfig()
-		if err != nil {
-			return net.IPNet{}, err
-		}
-		cfg.TLS = tlsConfig
-	}
+	defer ipam.Close()
+
 	ctx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
 	defer cancel()
-	cli, _ := clientv3.New(cfg)
-	defer cli.Close()
-	kv := clientv3.NewKV(cli)
 
 	// Check our connectivity first
-	err := CheckConnectivity(ctx, kv)
+	err = ipam.Status(ctx)
 	if err != nil {
-		logging.Errorf("ETCD CheckConnectivity error: %v", err)
+		logging.Errorf("IPAM backend error: %v", err)
 		return net.IPNet{}, err
 	}
-
-	// Create our session...
-	session, err := concurrency.NewSession(cli)
-	if err != nil {
-		return net.IPNet{}, err
-	}
-	defer session.Close()
-
-	// Create our mutex
-	m1 := concurrency.NewMutex(session, whereaboutsPrefix)
 
 	// ------------------------ acquire our lock
-	if err := m1.Lock(ctx); err != nil {
+	if err := ipam.Lock(ctx); err != nil {
 		return net.IPNet{}, err
 	}
-
-	// ------------------------ perform everything that's exclusive.
-	logging.Debugf("acquired lock for our session...")
-
-	reservelist, err := GetReserveList(ctx, ipamConf.Range, kv)
+	reservelist, err := ipam.GetRange(ctx, ipamConf.Range)
 	if err != nil {
 		logging.Errorf("GetReserveList error: %v", err)
 		mode = types.SkipOperation
 	}
 
-	// logging.Debugf("Updated reservelist: %v", updatedreservelist)
 	var newip net.IPNet
-	var updatedreservelist string
+	var updatedreservelist []types.IPReservation
 
 	switch mode {
 	case types.Allocate:
@@ -111,7 +76,7 @@ func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string) (net.
 	if mode != types.SkipOperation {
 
 		// Write the updated reserve list
-		err = PutReserveList(ctx, ipamConf.Range, updatedreservelist, kv)
+		err = ipam.UpdateRange(ctx, ipamConf.Range, updatedreservelist)
 		if err != nil {
 			logging.Errorf("PutReserveList error: %v", err)
 			return net.IPNet{}, err
@@ -120,7 +85,7 @@ func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string) (net.
 	}
 
 	// ------------------------ Unlock our session...
-	if err := m1.Unlock(ctx); err != nil {
+	if err := ipam.Unlock(ctx); err != nil {
 		return net.IPNet{}, err
 	}
 	logging.Debugf("released lock for our session")
@@ -128,121 +93,4 @@ func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string) (net.
 	// Don't throw errors until here!!
 	return newip, err
 
-}
-
-// ModifiedMutexLock only needs one for my purposes.
-// Example @ https://github.com/etcd-io/etcd/blob/master/clientv3/concurrency/example_mutex_test.go
-func ModifiedMutexLock(ctx context.Context, cli *clientv3.Client) error {
-
-	// Create our session...
-	s1, err := concurrency.NewSession(cli)
-	if err != nil {
-		return err
-	}
-	defer s1.Close()
-
-	// Create our mutex
-	m1 := concurrency.NewMutex(s1, whereaboutsPrefix)
-
-	// acquire our lock
-	if err := m1.Lock(ctx); err != nil {
-		return err
-	}
-
-	logging.Debugf("acquired lock for our session...")
-
-	// Unlock our session...
-	if err := m1.Unlock(ctx); err != nil {
-		return err
-	}
-	logging.Debugf("released lock for our session")
-
-	return nil
-}
-
-// CheckConnectivity is just for a test.
-func CheckConnectivity(ctx context.Context, kv clientv3.KV) error {
-	_, err := kv.Get(ctx, "anykey")
-	if err != nil {
-		return fmt.Errorf("ETCD get error: %v", err)
-	}
-	return nil
-}
-
-// PutReserveList writes a new reserved list after assigning an IP
-func PutReserveList(ctx context.Context, iprange string, reservelist string, kv clientv3.KV) error {
-	_, err := kv.Put(ctx, "/"+iprange, reservelist)
-	if err != nil {
-		return fmt.Errorf("ETCD put error: %v", err)
-	}
-
-	logging.Debugf("Updated reserve list for %v", "/"+iprange)
-	return nil
-}
-
-// GetReserveList gets a reserved list of IPs for a range.
-func GetReserveList(ctx context.Context, iprange string, kv clientv3.KV) (string, error) {
-	logging.Debugf("Getting reserve list range: %v", iprange)
-	reservelist, err := kv.Get(ctx, "/"+iprange)
-	if err != nil {
-		return "", fmt.Errorf("GetReserveList get error: %v", err)
-	}
-
-	returnstring := ""
-	found := false
-	for range reservelist.Kvs {
-		found = true
-		// fmt.Printf("%s : %s\n", ev.Key, ev.Value)
-	}
-
-	if found {
-		returnstring = string(reservelist.Kvs[0].Value)
-	}
-
-	// logging.Debugf("Reserve list value: %+v", reservelist)
-	// logging.Debugf("returnstring: %v", returnstring)
-
-	return returnstring, nil
-}
-
-// GetSingleValueDemo is just for a test.
-func GetSingleValueDemo(ctx context.Context, kv clientv3.KV) error {
-	logging.Debugf("*** GetSingleValueDemo()")
-	// Delete all keys
-	kv.Delete(ctx, "key", clientv3.WithPrefix())
-
-	// Insert a key value
-	pr, err := kv.Put(ctx, "key", "444")
-	if err != nil {
-		return fmt.Errorf("ETCD put error: %v", err)
-	}
-
-	rev := pr.Header.Revision
-
-	logging.Debugf("Revision: %v", rev)
-
-	gr, err := kv.Get(ctx, "key")
-	if err != nil {
-		return fmt.Errorf("ETCD get error: %v", err)
-	}
-
-	logging.Debugf("Value: %v / Revision: %v", string(gr.Kvs[0].Value), gr.Header.Revision)
-
-	// Modify the value of an existing key (create new revision)
-	kv.Put(ctx, "key", "555")
-
-	gr, _ = kv.Get(ctx, "key")
-	logging.Debugf("Value: %v / Revision: %v", string(gr.Kvs[0].Value), gr.Header.Revision)
-
-	// Get the value of the previous revision
-	gr, _ = kv.Get(ctx, "key", clientv3.WithRev(rev))
-	logging.Debugf("Value: %v / Revision: %v", string(gr.Kvs[0].Value), gr.Header.Revision)
-
-	return nil
-}
-
-// SetTimeouts sets the timeout for testing purposes
-func SetTimeouts(newtime time.Duration) {
-	DialTimeout = newtime
-	RequestTimeout = newtime
 }
