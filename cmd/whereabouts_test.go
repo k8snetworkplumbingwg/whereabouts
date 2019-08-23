@@ -230,11 +230,10 @@ var _ = Describe("Whereabouts operations", func() {
 
 		// Gomega is cranky about slices with different caps
 
-		// This one is the bogus stubbed in IP address.
 		Expect(*result.IPs[0]).To(Equal(
 			current.IPConfig{
 				Version: "4",
-				Address: mustCIDR("192.168.1.32/28"),
+				Address: mustCIDR("192.168.1.44/28"),
 				Gateway: net.ParseIP("192.168.1.1"),
 			}))
 

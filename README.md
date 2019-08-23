@@ -113,6 +113,8 @@ The same applies for the usage of IPv6:
 
 ### Core Parameters
 
+**Required**
+
 Three parameters are required:
 
 * `type`: This should be set to `whereabouts`.
@@ -122,15 +124,25 @@ In this case the `range` is set to `192.168.2.225/28`, this will allocate IP add
 
 If you need a tool to figure out the range of a given CIDR address, try this online tool, [subnet-calculator.com](http://www.subnet-calculator.com/).
 
-One parameter is optional:
+**Range end syntax**
 
+Additionally, the `range` parameter can support a CIDR notation that includes the last IP to use. Example: `range: "192.168.2.225-192.168.2.230/28"`.
+
+**Optional**
+
+The following parameters are optional:
+
+* `range_start` : First IP to use when allocating from the `range`. Optional, if unset is inferred from the `range`.
+* `range_end` : Last IP to use when allocating from the `range`. Optional, if unset the last ip within the range is determined.
 * `exclude`: This is a list of CIDRs to be excluded from being allocated. 
 
 In the example, we exclude IP addresses in the range `192.168.2.229/30` from being allocated (in this case it's 3 addresses, `.229, .230, .231`), as well as `192.168.2.236/32` (just a single address).
 
 *Note*: It's up to you to properly set exclusion ranges that are within your subnet, there's no double checking for you (other than that the CIDR notation parses).
 
-Additionally -- you can set the route, gateway and DNS using anything from the configurations for the [static IPAM plugin](https://github.com/containernetworking/plugins/tree/master/plugins/ipam/static) (as well as additional static IP addresses). 
+Additionally -- you can set the route, gateway and DNS using anything from the configurations for the [static IPAM plugin](https://github.com/containernetworking/plugins/tree/master/plugins/ipam/static) (as well as additional static IP addresses).
+
+
 
 ### etcd Parameters
 
