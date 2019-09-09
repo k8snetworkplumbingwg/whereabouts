@@ -37,6 +37,11 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 		return nil, "", fmt.Errorf("IPAM config missing 'ipam' key")
 	}
 
+	args := types.IPAMEnvArgs{}
+	if err := cnitypes.LoadArgs(envArgs, &args); err != nil {
+		return nil, "", fmt.Errorf("LoadArgs - CNI Args Parsing Error: %s", err)
+	}
+
 	// Logging
 	if n.IPAM.LogFile != "" {
 		logging.SetLogFile(n.IPAM.LogFile)
@@ -71,12 +76,27 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 		}
 	}
 
-	if n.IPAM.EtcdHost == "" {
-		nostoragemessage := "You have not specified a storage engine (looks like you're missing the `etcd_host` parameter in your config)"
-		return nil, "", fmt.Errorf(nostoragemessage)
+	if n.IPAM.Datastore == "" {
+		n.IPAM.Datastore = types.DatastoreETCD
 	}
 
-	// fmt.Printf("Range IP: %s / Subnet: %s", ip, subnet)
+	var err error
+	storageError := "You have not configured the storage engine (looks like you're using an invalid `%s` parameter in your config)"
+	switch n.IPAM.Datastore {
+	case types.DatastoreKubernetes:
+		if n.IPAM.Kubernetes.KubeConfigPath == "" {
+			err = fmt.Errorf(storageError, "kubernetes.kubeconfig")
+		}
+	case types.DatastoreETCD:
+		if n.IPAM.EtcdHost == "" {
+			err = fmt.Errorf(storageError, "etcd_host")
+		}
+	default:
+		err = fmt.Errorf(storageError, "datastore")
+	}
+	if err != nil {
+		return nil, "", err
+	}
 
 	if n.IPAM.GatewayStr != "" {
 		gwip := net.ParseIP(n.IPAM.GatewayStr)
@@ -93,7 +113,7 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 		}
 	}
 
-	if err := configureStatic(&n, envArgs); err != nil {
+	if err := configureStatic(&n, args); err != nil {
 		return nil, "", err
 	}
 
@@ -103,7 +123,7 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 	return n.IPAM, n.CNIVersion, nil
 }
 
-func configureStatic(n *types.Net, envArgs string) error {
+func configureStatic(n *types.Net, args types.IPAMEnvArgs) error {
 
 	// Validate all ranges
 	numV4 := 0
@@ -130,14 +150,12 @@ func configureStatic(n *types.Net, envArgs string) error {
 		}
 	}
 
-	if envArgs != "" {
-		newnumV6, newnumV4, err := handleEnvArgs(n, numV6, numV4, envArgs)
-		if err != nil {
-			return err
-		}
-		numV4 = newnumV4
-		numV6 = newnumV6
+	newnumV6, newnumV4, err := handleEnvArgs(n, numV6, numV4, args)
+	if err != nil {
+		return err
 	}
+	numV4 = newnumV4
+	numV6 = newnumV6
 
 	// CNI spec 0.2.0 and below supported only one v4 and v6 address
 	if numV4 > 1 || numV6 > 1 {
@@ -152,16 +170,10 @@ func configureStatic(n *types.Net, envArgs string) error {
 
 }
 
-func handleEnvArgs(n *types.Net, numV6 int, numV4 int, envArgs string) (int, int, error) {
+func handleEnvArgs(n *types.Net, numV6 int, numV4 int, args types.IPAMEnvArgs) (int, int, error) {
 
-	e := types.IPAMEnvArgs{}
-	err := cnitypes.LoadArgs(envArgs, &e)
-	if err != nil {
-		return numV6, numV4, err
-	}
-
-	if e.IP != "" {
-		for _, item := range strings.Split(string(e.IP), ",") {
+	if args.IP != "" {
+		for _, item := range strings.Split(string(args.IP), ",") {
 			ipstr := strings.TrimSpace(item)
 
 			ip, subnet, err := net.ParseCIDR(ipstr)
@@ -181,8 +193,8 @@ func handleEnvArgs(n *types.Net, numV6 int, numV4 int, envArgs string) (int, int
 		}
 	}
 
-	if e.GATEWAY != "" {
-		for _, item := range strings.Split(string(e.GATEWAY), ",") {
+	if args.GATEWAY != "" {
+		for _, item := range strings.Split(string(args.GATEWAY), ",") {
 			gwip := net.ParseIP(strings.TrimSpace(item))
 			if gwip == nil {
 				return numV6, numV4, fmt.Errorf("invalid gateway address: %s", item)

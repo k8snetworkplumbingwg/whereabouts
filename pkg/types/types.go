@@ -6,6 +6,12 @@ import (
 	cnitypes "github.com/containernetworking/cni/pkg/types"
 )
 
+// Datastore types
+const (
+	DatastoreETCD       = "etcd"
+	DatastoreKubernetes = "kubernetes"
+)
+
 // Net is The top-level network config - IPAM plugins are passed the full configuration
 // of the calling plugin, not just the IPAM section.
 type Net struct {
@@ -19,6 +25,7 @@ type IPAMConfig struct {
 	Name           string
 	Type           string            `json:"type"`
 	Routes         []*cnitypes.Route `json:"routes"`
+	Datastore      string            `json:"datastore"`
 	Addresses      []Address         `json:"addresses,omitempty"`
 	OmitRanges     []string          `json:"exclude,omitempty"`
 	DNS            cnitypes.DNS      `json:"dns"`
@@ -35,6 +42,7 @@ type IPAMConfig struct {
 	LogFile        string            `json:"log_file"`
 	LogLevel       string            `json:"log_level"`
 	Gateway        net.IP
+	Kubernetes     KubernetesConfig `json:"kubernetes,omitempty"`
 }
 
 // IPAMEnvArgs are the environment vars we expect
@@ -42,6 +50,12 @@ type IPAMEnvArgs struct {
 	cnitypes.CommonArgs
 	IP      cnitypes.UnmarshallableString `json:"ip,omitempty"`
 	GATEWAY cnitypes.UnmarshallableString `json:"gateway,omitempty"`
+}
+
+// KubernetesConfig describes the kubernetes-specific configuration details
+type KubernetesConfig struct {
+	KubeConfigPath string `json:"kubeconfig,omitempty"`
+	K8sAPIRoot     string `json:"k8s_api_root,omitempty"`
 }
 
 // Address is our standard address.
@@ -63,6 +77,4 @@ const (
 	Allocate = 0
 	// Deallocate operation identifier
 	Deallocate = 1
-	// SkipOperation is used for a kind of noop when an error is encountered
-	SkipOperation = 1000000
 )

@@ -30,14 +30,13 @@ func cmdAdd(args *skel.CmdArgs) error {
 		logging.Errorf("IPAM configuration load failed: %s", err)
 		return err
 	}
-	logging.Debugf("ADD - IPAM configuration successfully read: %+v", ipamConf)
+	logging.Debugf("ADD - IPAM configuration successfully read: %+v", filterConf(*ipamConf))
 
 	// Initialize our result, and assign DNS & routing.
 	result := &current.Result{}
 	result.DNS = ipamConf.DNS
 	result.Routes = ipamConf.Routes
 
-	// If there were more than one storage engine, we could switch out here (or add a storage handler?)
 	logging.Debugf("Beginning IPAM for ContainerID: %v", args.ContainerID)
 	newip, err := storage.IPManagement(types.Allocate, *ipamConf, args.ContainerID)
 	if err != nil {
@@ -75,10 +74,9 @@ func cmdDel(args *skel.CmdArgs) error {
 		logging.Errorf("IPAM configuration load failed: %s", err)
 		return err
 	}
-	logging.Debugf("DEL - IPAM configuration successfully read: %+v", ipamConf)
+	logging.Debugf("DEL - IPAM configuration successfully read: %+v", filterConf(*ipamConf))
 	logging.Debugf("ContainerID: %v", args.ContainerID)
 
-	// If there were more than one storage engine, we could switch out here (or add a storage handler?)
 	_, err = storage.IPManagement(types.Deallocate, *ipamConf, args.ContainerID)
 	if err != nil {
 		logging.Errorf("Error deallocating IP: %s", err)
@@ -86,4 +84,10 @@ func cmdDel(args *skel.CmdArgs) error {
 	}
 
 	return nil
+}
+
+func filterConf(conf types.IPAMConfig) types.IPAMConfig {
+	new := conf
+	new.EtcdPassword = "*********"
+	return new
 }
