@@ -23,7 +23,7 @@ spec:
         effect: NoSchedule
       containers:
       - name: whereabouts
-        image: dougbtv/whereabouts:latest
+        image: dougbtv/whereabouts:v0.1
         command: ["/bin/sh"]
         args:
           - "-c"
