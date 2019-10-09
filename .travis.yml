@@ -2,9 +2,6 @@ language: go
 dist: trusty
 sudo: false
 
-env:
-  - KUBEBUILDER_ASSETS="$(pwd)/bin"
-
 go:
   - 1.13.x
 
