@@ -14,17 +14,13 @@ env:
 
 before_install:
   - go get github.com/mattn/goveralls
-  - bash -c 'echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list'
-  - apt-get install apt-transport-https ca-certificates gnupg curl -y
-  - curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
-  - apt-get update && apt-get install google-cloud-sdk
-  - gsutil cp gs://kubebuilder-tools/kubebuilder-tools-1.14.1-linux-amd64.tar.gz .
+  - bash -c 'containerID=$(docker create gcr.io/kubebuilder/thirdparty-linux:1.14.1); docker cp ${containerID}:/kubebuilder_linux_amd64.tar.gz ./kubebuilder_linux_amd64.tar.gz; docker rm ${containerID}'
 
 install:
   - go get -u golang.org/x/lint/golint
   - go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.2.0
-  - tar -xzvf kubebuilder-tools-1.14.1-linux-amd64.tar.gz -C /tmp
-  - rm kubebuilder-tools-1.14.1-linux-amd64.tar.gz
+  - tar -xzvf kubebuilder_linux_amd64.tar.gz -C /tmp
+  - rm kubebuilder_linux_amd64.tar.gz
   - chmod +x -R /tmp/kubebuilder/bin/
 
 before_script:
