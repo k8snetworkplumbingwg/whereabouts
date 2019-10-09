@@ -25,6 +25,7 @@ install:
   - mv kubebuilder/bin/* bin/
   - rm -rf kubebuilder/
   - chmod +x bin/
+  - ls -lah bin/
 
 before_script:
   - controller-gen object crd:trivialVersions=true paths="./..." output:crd:artifacts:config=doc
