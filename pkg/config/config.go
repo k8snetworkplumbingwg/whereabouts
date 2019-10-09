@@ -45,9 +45,30 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 		logging.SetLogLevel(n.IPAM.LogLevel)
 	}
 
-	_, _, err := net.ParseCIDR(n.IPAM.Range)
-	if err != nil {
-		return nil, "", fmt.Errorf("invalid CIDR %s: %s", n.IPAM.Range, err)
+	if r := strings.SplitN(n.IPAM.Range, "-", 2); len(r) == 2 {
+		firstip := net.ParseIP(r[0])
+		if firstip == nil {
+			return nil, "", fmt.Errorf("invalid range start IP: %s", r[0])
+		}
+		lastip, ipNet, err := net.ParseCIDR(r[1])
+		if err != nil {
+			return nil, "", fmt.Errorf("invalid CIDR %s: %s", r[1], err)
+		}
+		if !ipNet.Contains(firstip) {
+			return nil, "", fmt.Errorf("invalid range start for CIDR %s: %s", ipNet.String(), firstip)
+		}
+		n.IPAM.Range = ipNet.String()
+		n.IPAM.RangeStart = firstip
+		n.IPAM.RangeEnd = lastip
+	} else {
+		firstip, ipNet, err := net.ParseCIDR(n.IPAM.Range)
+		if err != nil {
+			return nil, "", fmt.Errorf("invalid CIDR %s: %s", n.IPAM.Range, err)
+		}
+		n.IPAM.Range = ipNet.String()
+		if n.IPAM.RangeStart == nil {
+			n.IPAM.RangeStart = firstip
+		}
 	}
 
 	if n.IPAM.EtcdHost == "" {
@@ -72,8 +93,7 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 		}
 	}
 
-	err = configureStatic(&n, envArgs)
-	if err != nil {
+	if err := configureStatic(&n, envArgs); err != nil {
 		return nil, "", err
 	}
 

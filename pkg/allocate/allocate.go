@@ -15,9 +15,9 @@ import (
 func AssignIP(ipamConf types.IPAMConfig, reservelist []types.IPReservation, containerID string) (net.IPNet, []types.IPReservation, error) {
 
 	// Setup the basics here.
-	ip, ipnet, _ := net.ParseCIDR(ipamConf.Range)
+	_, ipnet, _ := net.ParseCIDR(ipamConf.Range)
 
-	newip, updatedreservelist, err := IterateForAssignment(ip, *ipnet, reservelist, ipamConf.OmitRanges, containerID)
+	newip, updatedreservelist, err := IterateForAssignment(*ipnet, ipamConf.RangeStart, ipamConf.RangeEnd, reservelist, ipamConf.OmitRanges, containerID)
 	if err != nil {
 		return net.IPNet{}, nil, err
 	}
@@ -64,14 +64,21 @@ func removeIdxFromSlice(s []types.IPReservation, i int) []types.IPReservation {
 }
 
 // IterateForAssignment iterates given an IP/IPNet and a list of reserved IPs
-func IterateForAssignment(ip net.IP, ipnet net.IPNet, reservelist []types.IPReservation, excludeRanges []string, containerID string) (net.IP, []types.IPReservation, error) {
+func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, reservelist []types.IPReservation, excludeRanges []string, containerID string) (net.IP, []types.IPReservation, error) {
 
-	firstip, lastip, err := GetIPRange(ip, ipnet)
-	logging.Debugf("IterateForAssignment input >> ip: %v | ipnet: %v | first IP: %v | last IP: %v", ip, ipnet, firstip, lastip)
-	if err != nil {
-		logging.Errorf("GetIPRange request failed with: %v", err)
-		return net.IP{}, reservelist, err
+	firstip := rangeStart
+	var lastip net.IP
+	if rangeEnd != nil {
+		lastip = rangeEnd
+	} else {
+		var err error
+		_, lastip, err = GetIPRange(rangeStart, ipnet)
+		if err != nil {
+			logging.Errorf("GetIPRange request failed with: %v", err)
+			return net.IP{}, reservelist, err
+		}
 	}
+	logging.Debugf("IterateForAssignment input >> ip: %v | ipnet: %v | first IP: %v | last IP: %v", rangeStart, ipnet, firstip, lastip)
 
 	reserved := make(map[string]bool)
 	for _, r := range reservelist {
@@ -128,7 +135,7 @@ MAINITERATION:
 	}
 
 	if !performedassignment {
-		return net.IP{}, reservelist, fmt.Errorf("Could not allocate IP in range: ip: %v / range: %v", ip, ipnet)
+		return net.IP{}, reservelist, fmt.Errorf("Could not allocate IP in range: ip: %v / range: %v", firstip, ipnet)
 	}
 
 	return assignedip, reservelist, nil

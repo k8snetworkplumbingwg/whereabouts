@@ -23,6 +23,8 @@ type IPAMConfig struct {
 	OmitRanges     []string          `json:"exclude,omitempty"`
 	DNS            cnitypes.DNS      `json:"dns"`
 	Range          string            `json:"range"`
+	RangeStart     net.IP            `json:"range_start,omitempty"`
+	RangeEnd       net.IP            `json:"range_end,omitempty"`
 	GatewayStr     string            `json:"gateway"`
 	EtcdHost       string            `json:"etcd_host,omitempty"`
 	EtcdUsername   string            `json:"etcd_username,omitempty"`
@@ -50,7 +52,7 @@ type Address struct {
 	Version    string
 }
 
-// IPReservations is an address that has been reserved by this plugin
+// IPReservation is an address that has been reserved by this plugin
 type IPReservation struct {
 	IP          net.IP `json:"ip"`
 	ContainerID string `json:"id"`
