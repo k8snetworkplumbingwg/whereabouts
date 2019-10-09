@@ -36,7 +36,7 @@ before_script:
 script:
   - ./hack/test-go.sh
   - ./hack/build-go.sh
-  - $GOPATH/bin/goveralls -service=travis-ci
+  - KUBEBUILDER_ASSETS="$(pwd)/bin" $GOPATH/bin/goveralls -service=travis-ci
   - docker build -t dougbtv/whereabouts .
 
 deploy:
