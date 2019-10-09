@@ -3,7 +3,7 @@ dist: trusty
 sudo: false
 
 env:
-  - KUBEBUILDER_ASSETS=./bin/
+  - KUBEBUILDER_ASSETS="$(pwd)/bin"
 
 go:
   - 1.13.x
@@ -25,7 +25,6 @@ install:
   - mv kubebuilder/bin/* bin/
   - rm -rf kubebuilder/
   - chmod +x bin/
-  - ls -lah bin/
 
 before_script:
   - controller-gen object crd:trivialVersions=true paths="./..." output:crd:artifacts:config=doc
