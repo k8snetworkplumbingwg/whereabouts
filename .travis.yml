@@ -3,7 +3,7 @@ dist: trusty
 sudo: false
 
 env:
-  - KUBEBUILDER_ASSETS=bin/
+  - KUBEBUILDER_ASSETS=./bin/
 
 go:
   - 1.13.x
