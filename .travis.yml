@@ -3,7 +3,7 @@ dist: trusty
 sudo: false
 
 env:
-  - KUBEBUILDER_ASSETS=/tmp/kubebuilder/bin
+  - KUBEBUILDER_ASSETS=bin/
 
 go:
   - 1.13.x
@@ -19,9 +19,12 @@ before_install:
 install:
   - go get -u golang.org/x/lint/golint
   - go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.2.0
-  - tar -xzvf kubebuilder_linux_amd64.tar.gz -C /tmp
+  - tar -xzvf kubebuilder_linux_amd64.tar.gz
   - rm kubebuilder_linux_amd64.tar.gz
-  - chmod +x -R /tmp/kubebuilder/bin/
+  - mkdir -p bin
+  - mv kubebuilder/bin/* bin/
+  - rm -rf kubebuilder/
+  - chmod +x bin/
 
 before_script:
   - controller-gen object crd:trivialVersions=true paths="./..." output:crd:artifacts:config=doc
