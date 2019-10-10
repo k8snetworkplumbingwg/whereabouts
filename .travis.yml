@@ -11,20 +11,13 @@ env:
 
 before_install:
   - go get github.com/mattn/goveralls
-  - bash -c 'containerID=$(docker create gcr.io/kubebuilder/thirdparty-linux:1.14.1); docker cp ${containerID}:/kubebuilder_linux_amd64.tar.gz ./kubebuilder_linux_amd64.tar.gz; docker rm ${containerID}'
 
 install:
   - go get -u golang.org/x/lint/golint
-  - go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.2.0
-  - tar -xzvf kubebuilder_linux_amd64.tar.gz
-  - rm kubebuilder_linux_amd64.tar.gz
-  - mkdir -p bin
-  - mv kubebuilder/bin/* bin/
-  - rm -rf kubebuilder/
-  - chmod +x bin/
+  - ./hack/install-kubebuilder-tools.sh
 
 before_script:
-  - controller-gen object crd:trivialVersions=true paths="./..." output:crd:artifacts:config=doc
+  - ./hack/generate-code.sh
   - bash -c 'git diff pkg/ doc/ && git diff-index --quiet HEAD -- pkg/ doc/'
   - golint pkg/... cmd/...
   - go vet */*.go
