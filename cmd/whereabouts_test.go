@@ -1,29 +1,33 @@
 package main
 
 import (
-	// "fmt"
 	"fmt"
 	"net"
 	"strings"
-	"testing"
 
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
 	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/containernetworking/plugins/pkg/testutils"
+	whereaboutstypes "github.com/dougbtv/whereabouts/pkg/types"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
-func TestWhereabouts(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "cmd")
-}
-
-func AllocateAndReleaseAddressesTest(ipVersion string, ipRange string, ipGateway string, expectedAddress string) {
+func AllocateAndReleaseAddressesTest(ipVersion string, ipRange string, ipGateway string, expectedAddresses []string, datastore string) {
 	const ifname string = "eth0"
 	const nspath string = "/some/where"
+
+	var backend string
+	var store string
+	if datastore == whereaboutstypes.DatastoreKubernetes {
+		backend = fmt.Sprintf(`"kubernetes": {"kubeconfig": "%s"}`, kubeConfigPath)
+		store = datastore
+	} else {
+		backend = fmt.Sprintf(`"etcd_host": "%s"`, etcdHost)
+		store = whereaboutstypes.DatastoreETCD
+	}
 
 	conf := fmt.Sprintf(`{
 		"cniVersion": "0.3.1",
@@ -32,71 +36,80 @@ func AllocateAndReleaseAddressesTest(ipVersion string, ipRange string, ipGateway
 		"master": "foo0",
 		"ipam": {
 		  "type": "whereabouts",
+		  "datastore": "%s",
 		  "log_file" : "/tmp/whereabouts.log",
 				  "log_level" : "debug",
-		  "etcd_host": "127.0.0.1:2379",
+		  %s,
 		  "range": "%s",
 		  "gateway": "%s",
 		  "routes": [
 			{ "dst": "0.0.0.0/0" }
 		  ]
 		}
-	  }`, ipRange, ipGateway)
+	  }`, store, backend, ipRange, ipGateway)
 
-	args := &skel.CmdArgs{
-		ContainerID: "dummy",
-		Netns:       nspath,
-		IfName:      ifname,
-		StdinData:   []byte(conf),
+	addressArgs := []*skel.CmdArgs{}
+
+	for i := 0; i < len(expectedAddresses); i++ {
+		args := &skel.CmdArgs{
+			ContainerID: fmt.Sprintf("dummy-%d", i),
+			Netns:       nspath,
+			IfName:      ifname,
+			StdinData:   []byte(conf),
+		}
+
+		// Allocate the IP
+		r, raw, err := testutils.CmdAddWithArgs(args, func() error {
+			return cmdAdd(args)
+		})
+		Expect(err).NotTo(HaveOccurred())
+		// fmt.Printf("!bang raw: %s\n", raw)
+		Expect(strings.Index(string(raw), "\"version\":")).Should(BeNumerically(">", 0))
+
+		result, err := current.GetResult(r)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Gomega is cranky about slices with different caps
+		Expect(*result.IPs[0]).To(Equal(
+			current.IPConfig{
+				Version: ipVersion,
+				Address: mustCIDR(expectedAddresses[i]),
+				Gateway: net.ParseIP(ipGateway),
+			}))
+
+		// Release the IP
+		err = testutils.CmdDelWithArgs(args, func() error {
+			return cmdDel(args)
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		// Now, create the same thing again, and expect the same IP
+		// That way we know it dealloced the IP and assigned it again.
+		r, _, err = testutils.CmdAddWithArgs(args, func() error {
+			return cmdAdd(args)
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		result, err = current.GetResult(r)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(*result.IPs[0]).To(Equal(
+			current.IPConfig{
+				Version: ipVersion,
+				Address: mustCIDR(expectedAddresses[i]),
+				Gateway: net.ParseIP(ipGateway),
+			}))
+
+		addressArgs = append(addressArgs, args)
 	}
 
-	// Allocate the IP
-	r, raw, err := testutils.CmdAddWithArgs(args, func() error {
-		return cmdAdd(args)
-	})
-	Expect(err).NotTo(HaveOccurred())
-	// fmt.Printf("!bang raw: %s\n", raw)
-	Expect(strings.Index(string(raw), "\"version\":")).Should(BeNumerically(">", 0))
-
-	result, err := current.GetResult(r)
-	Expect(err).NotTo(HaveOccurred())
-
-	// Gomega is cranky about slices with different caps
-	Expect(*result.IPs[0]).To(Equal(
-		current.IPConfig{
-			Version: ipVersion,
-			Address: mustCIDR(expectedAddress),
-			Gateway: net.ParseIP(ipGateway),
-		}))
-
-	// Release the IP
-	err = testutils.CmdDelWithArgs(args, func() error {
-		return cmdDel(args)
-	})
-	Expect(err).NotTo(HaveOccurred())
-
-	// Now, create the same thing again, and expect the same IP
-	// That way we know it dealloced the IP and assigned it again.
-	r, _, err = testutils.CmdAddWithArgs(args, func() error {
-		return cmdAdd(args)
-	})
-	Expect(err).NotTo(HaveOccurred())
-
-	result, err = current.GetResult(r)
-	Expect(err).NotTo(HaveOccurred())
-
-	Expect(*result.IPs[0]).To(Equal(
-		current.IPConfig{
-			Version: ipVersion,
-			Address: mustCIDR(expectedAddress),
-			Gateway: net.ParseIP(ipGateway),
-		}))
-
-	// And we'll release the IP again.
-	err = testutils.CmdDelWithArgs(args, func() error {
-		return cmdDel(args)
-	})
-	Expect(err).NotTo(HaveOccurred())
+	for _, args := range addressArgs {
+		// And we'll release the IP again.
+		err := testutils.CmdDelWithArgs(args, func() error {
+			return cmdDel(args)
+		})
+		Expect(err).NotTo(HaveOccurred())
+	}
 }
 
 var _ = Describe("Whereabouts operations", func() {
@@ -106,21 +119,52 @@ var _ = Describe("Whereabouts operations", func() {
 		ipGateway := "192.168.10.1"
 		expectedAddress := "192.168.1.1/24"
 
-		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, expectedAddress)
+		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, []string{expectedAddress}, whereaboutstypes.DatastoreETCD)
 
 		ipVersion = "6"
 		ipRange = "2001::1/116"
 		ipGateway = "2001::f:1"
 		expectedAddress = "2001::1/116"
 
-		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, expectedAddress)
+		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, []string{expectedAddress}, whereaboutstypes.DatastoreETCD)
+	})
+
+	It("allocates and releases addresses on ADD/DEL with a Kubernetes backend", func() {
+		ipVersion := "4"
+		ipRange := "192.168.1.11-192.168.1.23/24"
+		ipGateway := "192.168.10.1"
+		expectedAddress := "192.168.1.1/24"
+
+		expectedAddresses := []string{
+			"192.168.1.11/24",
+			"192.168.1.12/24",
+			"192.168.1.13/24",
+			"192.168.1.14/24",
+			"192.168.1.15/24",
+			"192.168.1.16/24",
+			"192.168.1.17/24",
+			"192.168.1.18/24",
+			"192.168.1.19/24",
+			"192.168.1.20/24",
+			"192.168.1.21/24",
+			"192.168.1.22/24",
+		}
+
+		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, expectedAddresses, whereaboutstypes.DatastoreKubernetes)
+
+		ipVersion = "6"
+		ipRange = "2001::1/116"
+		ipGateway = "2001::f:1"
+		expectedAddress = "2001::1/116"
+
+		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, []string{expectedAddress}, whereaboutstypes.DatastoreKubernetes)
 	})
 
 	It("excludes a range of addresses", func() {
 		const ifname string = "eth0"
 		const nspath string = "/some/where"
 
-		conf := `{
+		conf := fmt.Sprintf(`{
       "cniVersion": "0.3.1",
       "name": "mynet",
       "type": "ipvlan",
@@ -129,7 +173,7 @@ var _ = Describe("Whereabouts operations", func() {
         "type": "whereabouts",
         "log_file" : "/tmp/whereabouts.log",
 				"log_level" : "debug",
-        "etcd_host": "127.0.0.1:2379",
+        "etcd_host": "%s",
         "range": "192.168.1.0/24",
         "exclude": [
           "192.168.1.0/28",
@@ -140,7 +184,7 @@ var _ = Describe("Whereabouts operations", func() {
           { "dst": "0.0.0.0/0" }
         ]
       }
-    }`
+    }`, etcdHost)
 
 		args := &skel.CmdArgs{
 			ContainerID: "dummy",
@@ -180,14 +224,14 @@ var _ = Describe("Whereabouts operations", func() {
 		const ifname string = "eth0"
 		const nspath string = "/some/where"
 
-		conf := `{
+		conf := fmt.Sprintf(`{
       "cniVersion": "0.3.1",
       "name": "mynet",
       "type": "ipvlan",
       "master": "foo0",
       "ipam": {
         "type": "whereabouts",
-        "etcd_host": "127.0.0.1:2379",
+        "etcd_host": "%s",
         "range": "192.168.1.44/28",
         "gateway": "192.168.1.1",
         "addresses": [ {
@@ -208,7 +252,7 @@ var _ = Describe("Whereabouts operations", func() {
           "search": [ "example.com" ]
         }
       }
-    }`
+    }`, etcdHost)
 
 		args := &skel.CmdArgs{
 			ContainerID: "dummy",
@@ -271,7 +315,7 @@ var _ = Describe("Whereabouts operations", func() {
 		const ifname string = "eth0"
 		const nspath string = "/some/where"
 
-		conf := `{
+		conf := fmt.Sprintf(`{
 			"cniVersion": "0.3.1",
 			"name": "mynet",
 			"type": "ipvlan",
@@ -280,11 +324,11 @@ var _ = Describe("Whereabouts operations", func() {
 			  "type": "whereabouts",
 			  "log_file" : "/tmp/whereabouts.log",
 					  "log_level" : "debug",
-			  "etcd_host": "127.0.0.1:2379",
+			  "etcd_host": "%s",
 			  "range": "192.168.1.5-192.168.1.25/24",
 			  "gateway": "192.168.10.1"
 			}
-		  }`
+		  }`, etcdHost)
 
 		args := &skel.CmdArgs{
 			ContainerID: "dummy",
@@ -324,7 +368,7 @@ var _ = Describe("Whereabouts operations", func() {
 		const ifname string = "eth0"
 		const nspath string = "/some/where"
 
-		conf := `{
+		conf := fmt.Sprintf(`{
 			"cniVersion": "0.3.1",
 			"name": "mynet",
 			"type": "ipvlan",
@@ -333,12 +377,12 @@ var _ = Describe("Whereabouts operations", func() {
 			  "type": "whereabouts",
 			  "log_file" : "/tmp/whereabouts.log",
 					  "log_level" : "debug",
-			  "etcd_host": "127.0.0.1:2379",
+			  "etcd_host": "%s",
 			  "range": "192.168.1.0/24",
 			  "range_start": "192.168.1.5",
 			  "gateway": "192.168.10.1"
 			}
-		  }`
+		  }`, etcdHost)
 
 		args := &skel.CmdArgs{
 			ContainerID: "dummy",
@@ -379,7 +423,7 @@ var _ = Describe("Whereabouts operations", func() {
 		const nspath string = "/some/where"
 
 		// 192.168.1.5 should not be a member of 192.168.2.25/28
-		conf := `{
+		conf := fmt.Sprintf(`{
 			"cniVersion": "0.3.1",
 			"name": "mynet",
 			"type": "ipvlan",
@@ -388,11 +432,11 @@ var _ = Describe("Whereabouts operations", func() {
 			  "type": "whereabouts",
 			  "log_file" : "/tmp/whereabouts.log",
 					  "log_level" : "debug",
-			  "etcd_host": "127.0.0.1:2379",
+			  "etcd_host": "%s",
 			  "range": "192.168.1.5-192.168.2.25/28",
 			  "gateway": "192.168.10.1"
 			}
-		  }`
+		  }`, etcdHost)
 
 		args := &skel.CmdArgs{
 			ContainerID: "dummy",
@@ -442,7 +486,7 @@ var _ = Describe("Whereabouts operations", func() {
 		const ifname string = "eth0"
 		const nspath string = "/some/where"
 
-		conf := `{
+		conf := fmt.Sprintf(`{
 		  "cniVersion": "0.3.1",
 		  "name": "mynet",
 		  "type": "ipvlan",
@@ -451,7 +495,7 @@ var _ = Describe("Whereabouts operations", func() {
 			"type": "whereabouts",
 			"log_file" : "/tmp/whereabouts.log",
 					"log_level" : "debug",
-			"etcd_host": "127.0.0.1:2379",
+			"etcd_host": "%s",
 			"etcd_username": "fakeuser",
 			"etcd_password": "fakepassword",
 			"etcd_key_file": "/tmp/fake/path/to/key",
@@ -462,7 +506,7 @@ var _ = Describe("Whereabouts operations", func() {
 			  { "dst": "0.0.0.0/0" }
 			]
 		  }
-		}`
+		}`, etcdHost)
 
 		args := &skel.CmdArgs{
 			ContainerID: "dummy",

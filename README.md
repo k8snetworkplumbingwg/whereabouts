@@ -23,7 +23,7 @@ The original inspiration for Whereabouts comes from when users have tried to use
 
 Whereabouts is designed with Kubernetes in mind, but, isn't limited to use in just Kubernetes.
 
-To track which IP addresses are in use between nodes, Whereabouts uses [etcd](https://github.com/etcd-io/etcd) as a backend. The eventual goal is to make Whereabouts more flexible to use other storage backends in addition to etcd, we welcome any contributions towards this goal.
+To track which IP addresses are in use between nodes, Whereabouts uses [etcd](https://github.com/etcd-io/etcd) or a Kubernetes [Custom Resource](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/#custom-resources) as a backend. The goal is to make Whereabouts more flexible and to use additional storage backends, we welcome any contributions towards this goal.
 
 Please note that Whereabouts is very new. Any issues and PRs are welcome, some of the known limitations are found at the bottom of the README.
 
@@ -48,6 +48,15 @@ kubectl get svc | grep "etcd-cluster-client"
 This will give you the service name and the port to use, in this case you'll specify it in the configuration in a `service-name:port` format, the default port for etcd clients is `2379`.
 
 *Note*: It's important to remember that CNI plugins (typically) run directly on the host and not inside pods. This means that if you use the DNS name (which might look something like `example-etcd-cluster-client.default.svc.cluster.local`) for the service (recommended) make sure that you can resolve those hostnames directly from your hosts. You may find some tips regarding that [here](https://blog.heptio.com/configuring-your-linux-host-to-resolve-a-local-kubernetes-clusters-service-urls-a8c7bdb212a7).
+
+### Installing the IPPool CRD
+
+To use the `kubernetes` datastore option, install the kubernetes Custom Resource Definition specification for the `ippools.whereabouts.cni.k8s.io/v1alpha1` type before installing whereabouts.
+
+```
+git clone https://github.com/dougbtv/whereabouts && cd whereabouts
+kubectl apply -f ./doc/whereabouts.cni.k8s.io_ippools.yaml
+```
 
 ### Installing Whereabouts.
 
@@ -106,6 +115,31 @@ The same applies for the usage of IPv6:
         "etcd_host": "example-etcd-cluster-client.cluster.local:2379",
         "range": "2001::0/116",
         "gateway": "2001::f:1"
+      }
+}
+```
+
+### Example Kubernetes Datastore Config
+
+```
+{
+      "cniVersion": "0.3.0",
+      "name": "whereaboutsexample",
+      "type": "macvlan",
+      "master": "eth0",
+      "mode": "bridge",
+      "ipam": {
+        "type": "whereabouts",
+        "datastore": "kubernetes",
+        "kubernetes": { "kubeconfig": "/etc/cni/net.d/whereabouts.d/whereabouts.kubeconfig" },
+        "range": "192.168.2.225/28",
+        "exclude": [
+           "192.168.2.229/30",
+           "192.168.2.236/32"
+        ],
+        "log_file" : "/tmp/whereabouts.log",
+        "log_level" : "debug",
+        "gateway": "192.168.2.1"
       }
 }
 ```
