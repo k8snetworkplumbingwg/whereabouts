@@ -145,7 +145,7 @@ func (i *KubernetesIPAM) getPool(ctx context.Context, name string, iprange strin
 // Status tests connectivity to the kubernetes backend
 func (i *KubernetesIPAM) Status(ctx context.Context) error {
 	list := &whereaboutsv1alpha1.IPPoolList{}
-	err := i.client.List(ctx, list)
+	err := i.client.List(ctx, list, &client.ListOptions{Namespace: i.namespace})
 	return err
 }
 
