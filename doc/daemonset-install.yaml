@@ -36,7 +36,7 @@ rules:
   - patch
   - delete
 ---
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: whereabouts
@@ -45,6 +45,9 @@ metadata:
     tier: node
     app: whereabouts
 spec:
+  selector:
+    matchLabels:
+      name: whereabouts
   updateStrategy:
     type: RollingUpdate
   template:
@@ -52,6 +55,7 @@ spec:
       labels:
         tier: node
         app: whereabouts
+        name: whereabouts
     spec:
       serviceAccountName: whereabouts
       nodeSelector:
@@ -61,7 +65,7 @@ spec:
         effect: NoSchedule
       containers:
       - name: whereabouts
-        image: dougbtv/whereabouts:v0.2
+        image: dougbtv/whereabouts:latest
         env:
         - name: WHEREABOUTS_NAMESPACE
           valueFrom:
@@ -88,4 +92,3 @@ spec:
         - name: cni-net-dir
           hostPath:
             path: /etc/cni/net.d
-      

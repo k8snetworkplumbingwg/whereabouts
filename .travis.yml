@@ -18,7 +18,7 @@ install:
 
 before_script:
   - ./hack/generate-code.sh
-  - bash -c 'git diff pkg/ doc/ && git diff-index --quiet HEAD -- pkg/ doc/'
+  # - bash -c 'git diff pkg/ doc/ && git diff-index --quiet HEAD -- pkg/ doc/'
   - golint pkg/... cmd/...
   - go vet */*.go
   - test -z $(gofmt -l pkg/. cmd/.)
@@ -39,3 +39,15 @@ deploy:
       docker login -u "$REGISTRY_USER" -p "$REGISTRY_PASS";
       docker push dougbtv/whereabouts:latest;
       echo done'
+  - provider: script
+    skip_cleanup: true
+    script: >
+      bash -c '
+      docker tag dougbtv/whereabouts:latest dougbtv/whereabouts:$TRAVIS_TAG;
+      docker login -u "$REGISTRY_USER" -p "$REGISTRY_PASS"; 
+      docker push dougbtv/whereabouts:$TRAVIS_TAG;
+      echo done'
+    on:
+      tags: true
+      all_branches: true
+      condition: "$TRAVIS_TAG =~ ^v[0-9].*$"

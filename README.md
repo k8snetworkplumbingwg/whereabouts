@@ -13,7 +13,7 @@ Whereabouts can be used for both IPv4 & IPv6 addressing.
 
 CNI (Container Network Interface) plugins typically have a configuration element named `ipam`. CNI IPAM plugins can assign IP addresses, and Whereabouts assigns IP addresses within a range -- without having to use a DHCP server. 
 
-Whereabouts takes an address range, like `192.168.2.0/24` in CIDR notation, and will assign IP addresses within that range. In this case, it will assign IP addresses from `192.168.2.1` to `192.168.2.255`. When an IP address is assigned to a pod, Whereabouts tracks that IP address and range in an etcd key/value store for the lifetime of that pod. When the pod is removed, Whereabouts then frees the address and makes it available to assign on subsequent requests. Whereabouts always assigns the lowest value address that's available in the range.
+Whereabouts takes an address range, like `192.168.2.0/24` in CIDR notation, and will assign IP addresses within that range. In this case, it will assign IP addresses from `192.168.2.1` to `192.168.2.255`. When an IP address is assigned to a pod, Whereabouts tracks that IP address in a data store for the lifetime of that pod. When the pod is removed, Whereabouts then frees the address and makes it available to assign on subsequent requests. Whereabouts always assigns the lowest value address that's available in the range.
 
 You can also specify ranges to exclude from assignment, so if for example you'd like to assign IP addresses within the range `192.168.2.0/24`, you can exclude IP addresses within it by adding them to an exclude list. For example, if you decide to exclude the range `192.168.2.0/28`, the first IP address assigned in the range will be `192.168.2.16`.
 
@@ -29,34 +29,12 @@ Please note that Whereabouts is very new. Any issues and PRs are welcome, some o
 
 ## Installation
 
-There's three steps to installing Whereabouts
+There's two steps to installing Whereabouts:
 
-* Installing etcd, for storage for our allocated IP addresses.
 * Installing Whereabouts itself (it's just a binary on disk).
 * Creating IPAM CNI configurations.
 
-### Installing etcd.
-
-We recommend that you if you're trying it out in a lab, that you use the [etcd-operator](https://github.com/coreos/etcd-operator), the [installation guide](https://github.com/coreos/etcd-operator/blob/master/doc/user/install_guide.md) is just a few steps. 
-
-Once you've got etcd running -- all you'll need to provide Whereabouts is the endpoint(s) for it. In the etcd-operator style installation, you'd find those with:
-
-```
-kubectl get svc | grep "etcd-cluster-client"
-```
-
-This will give you the service name and the port to use, in this case you'll specify it in the configuration in a `service-name:port` format, the default port for etcd clients is `2379`.
-
-*Note*: It's important to remember that CNI plugins (typically) run directly on the host and not inside pods. This means that if you use the DNS name (which might look something like `example-etcd-cluster-client.default.svc.cluster.local`) for the service (recommended) make sure that you can resolve those hostnames directly from your hosts. You may find some tips regarding that [here](https://blog.heptio.com/configuring-your-linux-host-to-resolve-a-local-kubernetes-clusters-service-urls-a8c7bdb212a7).
-
-### Installing the IPPool CRD
-
-To use the `kubernetes` datastore option, install the kubernetes Custom Resource Definition specification for the `ippools.whereabouts.cni.k8s.io/v1alpha1` type before installing whereabouts.
-
-```
-git clone https://github.com/dougbtv/whereabouts && cd whereabouts
-kubectl apply -f ./doc/whereabouts.cni.k8s.io_ippools.yaml
-```
+Optionally, you can use etcd directly as a backend for data storage. In which case, you'll want to install etcd, a suggested method is provided later in the README.
 
 ### Installing Whereabouts.
 
@@ -64,14 +42,45 @@ You can install this plugin with a Daemonset, using:
 
 ```
 git clone https://github.com/dougbtv/whereabouts && cd whereabouts
-kubectl apply -f ./doc/daemonset-install.yaml
+kubectl apply -f {./doc/daemonset-install.yaml,./doc/whereabouts.cni.k8s.io_ippools.yaml}
 ```
 
+*NOTE*: This daemonset is for use with Kubernetes version 1.16 and later. It may also be useful with previous versions, however you'll need to change the `apiVersion` of the daemonset in the provided yaml, [see the deprecation notice](https://kubernetes.io/blog/2019/07/18/api-deprecations-in-1-16/).
+
 You can compile from this repo (with `./hack/build-go.sh`) and copy the resulting binary onto each node in the `/opt/cni/bin` directory (by default).
+
+Not that we're also including a Custom Resource Definition (CRD) to use the `kubernetes` datastore option. This installs the kubernetes CRD specification for the `ippools.whereabouts.cni.k8s.io/v1alpha1` type.
 
 ## Example Config
 
 Included here is an entire CNI configuration. Whereabouts only cares about the `ipam` section of the CNI config. In particular this example uses the `macvlan` CNI plugin. (If you decide to copy this block and try it too, make sure that the `master` setting is set to a network interface name that exists on your nodes). Typically, you'll already have a CNI configuration for an existing CNI plugin in your cluster, and you'll just copy the `ipam` section and modify the values there.
+
+```
+{
+      "cniVersion": "0.3.0",
+      "name": "whereaboutsexample",
+      "type": "macvlan",
+      "master": "eth0",
+      "mode": "bridge",
+      "ipam": {
+        "type": "whereabouts",
+        "datastore": "kubernetes",
+        "kubernetes": { "kubeconfig": "/etc/cni/net.d/whereabouts.d/whereabouts.kubeconfig" },
+        "range": "192.168.2.225/28",
+        "exclude": [
+           "192.168.2.229/30",
+           "192.168.2.236/32"
+        ],
+        "log_file" : "/tmp/whereabouts.log",
+        "log_level" : "debug",
+        "gateway": "192.168.2.1"
+      }
+}
+```
+
+### Example etcd datastore configuration
+
+If you'll use the etcd datastore option, you'll likely want to install etcd first. Follow the instructions to do so in a later section of the README.
 
 *NOTE*: You'll almost certainly want to change `etcd_host`.
 
@@ -118,32 +127,6 @@ The same applies for the usage of IPv6:
       }
 }
 ```
-
-### Example Kubernetes Datastore Config
-
-```
-{
-      "cniVersion": "0.3.0",
-      "name": "whereaboutsexample",
-      "type": "macvlan",
-      "master": "eth0",
-      "mode": "bridge",
-      "ipam": {
-        "type": "whereabouts",
-        "datastore": "kubernetes",
-        "kubernetes": { "kubeconfig": "/etc/cni/net.d/whereabouts.d/whereabouts.kubeconfig" },
-        "range": "192.168.2.225/28",
-        "exclude": [
-           "192.168.2.229/30",
-           "192.168.2.236/32"
-        ],
-        "log_file" : "/tmp/whereabouts.log",
-        "log_level" : "debug",
-        "gateway": "192.168.2.1"
-      }
-}
-```
-
 
 ### Core Parameters
 
@@ -197,6 +180,21 @@ There are two optional parameters for logging, they are:
 * `log_file`: A file path to a logfile to log to.
 * `log_level`: Set the logging verbosity, from most to least: `debug`,`error`,`panic`
 
+### Installing etcd. (optional)
+
+etcd installation is optional. By default, we recommend the custom resource backend (given in the first example configuration).
+
+We recommend that you if you're trying it out in a lab, that you use the [etcd-operator](https://github.com/coreos/etcd-operator), the [installation guide](https://github.com/coreos/etcd-operator/blob/master/doc/user/install_guide.md) is just a few steps. 
+
+Once you've got etcd running -- all you'll need to provide Whereabouts is the endpoint(s) for it. In the etcd-operator style installation, you'd find those with:
+
+```
+kubectl get svc | grep "etcd-cluster-client"
+```
+
+This will give you the service name and the port to use, in this case you'll specify it in the configuration in a `service-name:port` format, the default port for etcd clients is `2379`.
+
+*Note*: It's important to remember that CNI plugins (typically) run directly on the host and not inside pods. This means that if you use the DNS name (which might look something like `example-etcd-cluster-client.default.svc.cluster.local`) for the service (recommended) make sure that you can resolve those hostnames directly from your hosts. You may find some tips regarding that [here](https://blog.heptio.com/configuring-your-linux-host-to-resolve-a-local-kubernetes-clusters-service-urls-a8c7bdb212a7).
 
 ## Building
 
