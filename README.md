@@ -42,7 +42,7 @@ You can install this plugin with a Daemonset, using:
 
 ```
 git clone https://github.com/dougbtv/whereabouts && cd whereabouts
-kubectl apply -f {./doc/daemonset-install.yaml,./doc/whereabouts.cni.k8s.io_ippools.yaml}
+kubectl apply -f ./doc/daemonset-install.yaml -f ./doc/whereabouts.cni.k8s.io_ippools.yaml
 ```
 
 *NOTE*: This daemonset is for use with Kubernetes version 1.16 and later. It may also be useful with previous versions, however you'll need to change the `apiVersion` of the daemonset in the provided yaml, [see the deprecation notice](https://kubernetes.io/blog/2019/07/18/api-deprecations-in-1-16/).
