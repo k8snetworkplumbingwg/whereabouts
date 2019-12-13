@@ -1,0 +1,15 @@
+# This dockerfile is used for building for OpenShift
+FROM openshift/origin-release:rhel-8-golang-1.12 as builder
+RUN mkdir -p $GOPATH/src/github.com/dougbtv/whereabouts
+WORKDIR $GOPATH/src/github.com/dougbtv/whereabouts
+COPY . .
+RUN ./hack/build-go.sh
+RUN cp ./bin/whereabouts /whereabouts
+
+FROM openshift/origin-base
+COPY --from=builder /whereabouts /usr/src/whereabouts/bin/whereabouts
+
+LABEL io.k8s.display-name="Whereabouts CNI" \
+      io.k8s.description="This is a component of OpenShift Container Platform and provides a cluster-wide IPAM CNI plugin." \
+      io.openshift.tags="openshift" \
+      maintainer="CTO Networking <nfvpe-container@redhat.com>"
