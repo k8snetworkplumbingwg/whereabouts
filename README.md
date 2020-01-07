@@ -128,7 +128,7 @@ The same applies for the usage of IPv6:
 }
 ```
 
-### Core Parameters
+## Core Parameters
 
 **Required**
 
@@ -159,8 +159,6 @@ In the example, we exclude IP addresses in the range `192.168.2.229/30` from bei
 
 Additionally -- you can set the route, gateway and DNS using anything from the configurations for the [static IPAM plugin](https://github.com/containernetworking/plugins/tree/master/plugins/ipam/static) (as well as additional static IP addresses).
 
-
-
 ### etcd Parameters
 
 **Required:**
@@ -180,7 +178,68 @@ There are two optional parameters for logging, they are:
 * `log_file`: A file path to a logfile to log to.
 * `log_level`: Set the logging verbosity, from most to least: `debug`,`error`,`panic`
 
-### Installing etcd. (optional)
+## Flatfile configuration
+
+There is one option for flat file configuration:
+
+* `configuration_path`: A file path to a Whereabouts configuration file.
+
+If you're using [Multus CNI](http://multus-cni.io/) or another meta-plugin, you may wish to reduce the number of parameters you need to specify in the IPAM section by putting commonly used options into a flat file -- primarily to make it simpler to type and to reduce having to copy and paste the same parameters repeatedly.
+
+Whereabouts will look for the configuration in these locations, in this order:
+
+* The location specified by the `configuration_path` option.
+* `/etc/kubernetes/cni/net.d/whereabouts.d/whereabouts.conf`
+* `/etc/cni/net.d/whereabouts.d/whereabouts.conf`
+
+You may specify the `configuration_path` to point to another location should it be desired.
+
+Any options added to the `whereabouts.conf` are overridden by configuration options that are in the primary CNI configuration (e.g. in a custom resource `NetworkAttachmentDefinition` used by Multus CNI or in the first file ASCII-betically in the CNI configuration directory -- which is `/etc/cni/net.d/` by default).
+
+
+### Example flat file configuration
+
+You can reduce the number of parameters used if you need to make more than one Whereabouts configuration (such as if you're using [Multus CNI](http://multus-cni.io/))
+
+Create a file named `/etc/cni/net.d/whereabouts.d/whereabouts.conf`, with the contents:
+
+```
+{
+  "datastore": "kubernetes",
+  "kubernetes": {
+    "kubeconfig": "/etc/cni/net.d/whereabouts.d/whereabouts.kubeconfig"
+  },
+  "log_file": "/tmp/whereabouts.log",
+  "log_level": "debug"
+}
+```
+
+With that in place, you can now create an IPAM configuration that has a lot less options, in this case we'll give an example using a `NetworkAttachmentDefinition` as used with Multus CNI (or other implementations of the [Network Plumbing Working Group specification](https://github.com/k8snetworkplumbingwg/multi-net-spec))
+
+An example configuration using a `NetworkAttachmentDefinition`:
+
+```
+apiVersion: "k8s.cni.cncf.io/v1"
+kind: NetworkAttachmentDefinition
+metadata:
+  name: whereabouts-conf
+spec:
+  config: '{
+      "cniVersion": "0.3.0",
+      "name": "whereaboutsexample",
+      "type": "macvlan",
+      "master": "eth0",
+      "mode": "bridge",
+      "ipam": {
+        "type": "whereabouts",
+        "range": "192.168.2.225/28"
+      }
+    }'
+```
+
+You'll note that in the `ipam` section there's a lot less parameters than are used in the previous examples.
+
+## Installing etcd. (optional)
 
 etcd installation is optional. By default, we recommend the custom resource backend (given in the first example configuration).
 
@@ -212,11 +271,9 @@ The typeface used in the logo is [AZONIX](https://www.dafont.com/azonix.font), b
 
 ## Known limitations
 
-* It has read/write locking to prevent race conditions, but, it's not optimized. It's write locked for all ranges.
 * If you specify overlapping ranges -- you're almost certain to have collisions, so if you specify one config with `192.168.0.0/16` and another with `192.168.0.0/24`, you'll have collisions.
     - This could be fixed with an admission controller.
     - And admission controller could also prevent you from starting a pod in a given range if you were out of addresses within that range.
-* There's approximately a cap of 18,500 possible addresses in a given range before you'll have to configure etcd to allow more than 1.5 megs in a value.
 * There's probably a lot of comparison of IP addresses that could be optimized, lots of string conversion.
-* The etcd method that I use is all ASCII. If this was binary, it could probably store more and have more efficient IP address comparison.
+* The etcd method has a number of limitations, in that it uses an all ASCII methodology. If this was binary, it could probably store more and have more efficient IP address comparison.
 * Unlikely to work in Canada, apparently it would have to be "where aboots?" for Canadians to be able to operate it.
