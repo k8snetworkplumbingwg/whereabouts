@@ -10,9 +10,9 @@ set -u -e
 #
 #SPDX-License-Identifier: Apache-2.0
 
-CNI_BIN_DIR="/host/opt/cni/bin/"
-WHEREABOUTS_KUBECONFIG_FILE_HOST="/etc/cni/net.d/whereabouts.d/whereabouts.kubeconfig"
-CNI_CONF_DIR="/host/etc/cni/net.d"
+CNI_BIN_DIR=${CNI_BIN_DIR:-"/host/opt/cni/bin/"}
+WHEREABOUTS_KUBECONFIG_FILE_HOST=${WHEREABOUTS_KUBECONFIG_FILE_HOST:-"/etc/cni/net.d/whereabouts.d/whereabouts.kubeconfig"}
+CNI_CONF_DIR=${CNI_CONF_DIR:-"/host/etc/cni/net.d"}
 
 # Make a whereabouts.d directory (for our kubeconfig)
 
