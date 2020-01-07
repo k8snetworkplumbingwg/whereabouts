@@ -1,13 +1,29 @@
 # This dockerfile is used for building for OpenShift
-FROM openshift/origin-release:rhel-8-golang-1.12 as builder
-RUN mkdir -p $GOPATH/src/github.com/dougbtv/whereabouts
-WORKDIR $GOPATH/src/github.com/dougbtv/whereabouts
-COPY . .
-RUN ./hack/build-go.sh
-RUN cp ./bin/whereabouts /whereabouts
+FROM openshift/origin-release:rhel-8-golang-1.12 as rhel8
+ADD . /go/src/github.com/dougbtv/whereabouts
+WORKDIR /go/src/github.com/dougbtv/whereabouts
+ENV CGO_ENABLED=1
+ENV GO111MODULE=off
+ENV VERSION=rhel8 COMMIT=unset
+RUN go build -o bin/whereabouts cmd/whereabouts.go
+WORKDIR /
+
+FROM openshift/origin-release:rhel-7-golang-1.12 as rhel7
+ADD . /go/src/github.com/dougbtv/whereabouts
+WORKDIR /go/src/github.com/dougbtv/whereabouts
+ENV CGO_ENABLED=1
+ENV GO111MODULE=off
+RUN go build -o bin/whereabouts cmd/whereabouts.go
+WORKDIR /
 
 FROM openshift/origin-base
-COPY --from=builder /whereabouts /usr/src/whereabouts/bin/whereabouts
+RUN mkdir -p /usr/src/whereabouts/images && \
+       mkdir -p /usr/src/whereabouts/bin && \
+       mkdir -p /usr/src/whereabouts/rhel7/bin && \
+       mkdir -p /usr/src/whereabouts/rhel8/bin
+COPY --from=rhel7 /go/src/github.com/dougbtv/whereabouts/bin/whereabouts /usr/src/whereabouts/rhel7/bin
+COPY --from=rhel7 /go/src/github.com/dougbtv/whereabouts/bin/whereabouts /usr/src/whereabouts/bin
+COPY --from=rhel8 /go/src/github.com/dougbtv/whereabouts/bin/whereabouts /usr/src/whereabouts/rhel8/bin
 
 LABEL io.k8s.display-name="Whereabouts CNI" \
       io.k8s.description="This is a component of OpenShift Container Platform and provides a cluster-wide IPAM CNI plugin." \
