@@ -3,13 +3,16 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net"
+	"os"
 	"strings"
 
 	cnitypes "github.com/containernetworking/cni/pkg/types"
 	types020 "github.com/containernetworking/cni/pkg/types/020"
 	"github.com/dougbtv/whereabouts/pkg/logging"
 	"github.com/dougbtv/whereabouts/pkg/types"
+	"github.com/imdario/mergo"
 )
 
 // canonicalizeIP makes sure a provided ip is in standard form
@@ -28,6 +31,8 @@ func canonicalizeIP(ip *net.IP) error {
 // as `bytes`. At the moment values provided in envArgs are ignored so there
 // is no possibility to overload the json configuration using envArgs
 func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, error) {
+
+	// We first load up what we already have, before we start reading a file...
 	n := types.Net{}
 	if err := json.Unmarshal(bytes, &n); err != nil {
 		return nil, "", fmt.Errorf("LoadIPAMConfig - JSON Parsing Error: %s / bytes: %s", err, bytes)
@@ -42,12 +47,58 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 		return nil, "", fmt.Errorf("LoadArgs - CNI Args Parsing Error: %s", err)
 	}
 
+	// Once we have our basics, let's look for our (optional) configuration file
+	confdirs := []string{"/etc/kubernetes/cni/net.d/whereabouts.d/whereabouts.conf", "/etc/cni/net.d/whereabouts.d/whereabouts.conf"}
+	// We prefix the optional configuration path (so we look there first)
+	if n.IPAM.ConfigurationPath != "" {
+		confdirs = append([]string{n.IPAM.ConfigurationPath}, confdirs...)
+	}
+
+	// Cycle through the path and parse the JSON config
+	flatipam := types.Net{}
+	foundflatfile := ""
+	for _, confpath := range confdirs {
+		if pathExists(confpath) {
+
+			jsonFile, err := os.Open(confpath)
+
+			if err != nil {
+				return nil, "", fmt.Errorf("Error opening flat configuration file @ %s with: %s", confpath, err)
+			}
+
+			defer jsonFile.Close()
+
+			jsonBytes, err := ioutil.ReadAll(jsonFile)
+			if err != nil {
+				return nil, "", fmt.Errorf("LoadIPAMConfig Flatfile (%s) - ioutil.ReadAll error: %s", confpath, err)
+			}
+
+			if err := json.Unmarshal(jsonBytes, &flatipam.IPAM); err != nil {
+				return nil, "", fmt.Errorf("LoadIPAMConfig Flatfile (%s) - JSON Parsing Error: %s / bytes: %s", confpath, err, jsonBytes)
+			}
+
+			foundflatfile = confpath
+
+			break
+		}
+	}
+
+	// Now let's try to merge the configurations...
+	// NB: Don't try to do any initialization before this point or it won't account for merged flat file.
+	if err := mergo.Merge(&n, flatipam); err != nil {
+		logging.Errorf("Merge error with flat file: %s", err)
+	}
+
 	// Logging
 	if n.IPAM.LogFile != "" {
 		logging.SetLogFile(n.IPAM.LogFile)
 	}
 	if n.IPAM.LogLevel != "" {
 		logging.SetLogLevel(n.IPAM.LogLevel)
+	}
+
+	if foundflatfile != "" {
+		logging.Debugf("Used defaults from parsed flat file config @ %s", foundflatfile)
 	}
 
 	if r := strings.SplitN(n.IPAM.Range, "-", 2); len(r) == 2 {
@@ -121,6 +172,17 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 	n.IPAM.Name = n.Name
 
 	return n.IPAM, n.CNIVersion, nil
+}
+
+func pathExists(path string) bool {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true
+	}
+	if os.IsNotExist(err) {
+		return false
+	}
+	return true
 }
 
 func configureStatic(n *types.Net, args types.IPAMEnvArgs) error {
