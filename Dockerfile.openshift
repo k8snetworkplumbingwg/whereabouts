@@ -3,17 +3,17 @@ FROM openshift/origin-release:rhel-8-golang-1.12 as rhel8
 ADD . /go/src/github.com/dougbtv/whereabouts
 WORKDIR /go/src/github.com/dougbtv/whereabouts
 ENV CGO_ENABLED=1
-ENV GO111MODULE=off
+ENV GO111MODULE=on
 ENV VERSION=rhel8 COMMIT=unset
-RUN go build -o bin/whereabouts cmd/whereabouts.go
+RUN go build -mod vendor -o bin/whereabouts cmd/whereabouts.go
 WORKDIR /
 
 FROM openshift/origin-release:rhel-7-golang-1.12 as rhel7
 ADD . /go/src/github.com/dougbtv/whereabouts
 WORKDIR /go/src/github.com/dougbtv/whereabouts
 ENV CGO_ENABLED=1
-ENV GO111MODULE=off
-RUN go build -o bin/whereabouts cmd/whereabouts.go
+ENV GO111MODULE=on
+RUN go build -mod vendor -o bin/whereabouts cmd/whereabouts.go
 WORKDIR /
 
 FROM openshift/origin-base
