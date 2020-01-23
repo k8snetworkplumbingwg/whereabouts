@@ -28,6 +28,8 @@ script:
   - ./hack/build-go.sh
   - KUBEBUILDER_ASSETS="$(pwd)/bin" $GOPATH/bin/goveralls -service=travis-ci
   - docker build -t dougbtv/whereabouts .
+  - docker build -t dougbtv/whereabouts-ocp -f Dockerfile.openshift .
+  - docker images
 
 deploy:
   # Push images to Dockerhub on merge to master
@@ -38,6 +40,7 @@ deploy:
       bash -c '
       docker login -u "$REGISTRY_USER" -p "$REGISTRY_PASS";
       docker push dougbtv/whereabouts:latest;
+      docker push dougbtv/whereabouts-ocp:latest;
       echo done'
   - provider: script
     skip_cleanup: true
