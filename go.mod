@@ -32,7 +32,6 @@ require (
 	golang.org/x/net v0.0.0-20190501004415-9ce7a6920f09 // indirect
 	golang.org/x/text v0.3.2 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.0.1
-	google.golang.org/appengine v1.4.0 // indirect
 	google.golang.org/genproto v0.0.0-20190819201941-24fa4b261c55 // indirect
 	google.golang.org/grpc v1.23.0 // indirect
 	k8s.io/apimachinery v0.0.0-20190404173353-6a84e37a896d
