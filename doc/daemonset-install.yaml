@@ -24,7 +24,7 @@ metadata:
   name: whereabouts-cni
 rules:
 - apiGroups:
-  - whereabouts.cni.k8s.io
+  - whereabouts.cni.cncf.io
   resources:
   - ippools
   verbs:
