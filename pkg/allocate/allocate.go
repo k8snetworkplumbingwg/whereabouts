@@ -66,7 +66,9 @@ func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, r
 	firstip := rangeStart
 	var lastip net.IP
 	if rangeEnd != nil {
-		lastip = rangeEnd
+		end := IPToBigInt(rangeEnd)
+		end = end.Add(end, big.NewInt(1))
+		lastip = BigIntToIP(*end)
 	} else {
 		var err error
 		_, lastip, err = GetIPRange(rangeStart, ipnet)
