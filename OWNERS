@@ -12,3 +12,6 @@ approvers:
   - zshi-redhat
   - fepan
   - s1061123
+component: "Networking"
+subcomponent: "multus"
+
