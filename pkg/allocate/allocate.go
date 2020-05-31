@@ -2,11 +2,10 @@ package allocate
 
 import (
 	"fmt"
-	"math/big"
-	"net"
-
 	"github.com/dougbtv/whereabouts/pkg/logging"
 	"github.com/dougbtv/whereabouts/pkg/types"
+	"math/big"
+	"net"
 )
 
 // AssignIP assigns an IP using a range and a reserve list.
@@ -71,7 +70,7 @@ func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, r
 		lastip = BigIntToIP(*end)
 	} else {
 		var err error
-		_, lastip, err = GetIPRange(rangeStart, ipnet)
+		firstip, lastip, err = GetIPRange(rangeStart, ipnet)
 		if err != nil {
 			logging.Errorf("GetIPRange request failed with: %v", err)
 			return net.IP{}, reservelist, err
@@ -95,7 +94,7 @@ func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, r
 	var assignedip net.IP
 	performedassignment := false
 MAINITERATION:
-	for i := IPToBigInt(firstip); IPToBigInt(lastip).Cmp(i) == 1; i.Add(i, big.NewInt(1)) {
+	for i := IPToBigInt(firstip); IPToBigInt(lastip).Cmp(i) == 1 || IPToBigInt(lastip).Cmp(i) == 0; i.Add(i, big.NewInt(1)) {
 
 		assignedip = BigIntToIP(*i)
 		stringip := fmt.Sprint(assignedip)
@@ -135,7 +134,7 @@ MAINITERATION:
 	}
 
 	if !performedassignment {
-		return net.IP{}, reservelist, fmt.Errorf("Could not allocate IP in range: ip: %v / range: %v", firstip, ipnet)
+		return net.IP{}, reservelist, fmt.Errorf("Could not allocate IP in range: ip: %v / - %v / range: %#v", firstip, lastip, ipnet)
 	}
 
 	return assignedip, reservelist, nil
@@ -152,8 +151,8 @@ func GetIPRange(ip net.IP, ipnet net.IPNet) (net.IP, net.IP, error) {
 	masklen := bits - ones
 
 	// Error when the mask isn't large enough.
-	if ones < 3 {
-		return nil, nil, fmt.Errorf("Net mask is too short, must be 3 or more: %v", masklen)
+	if masklen < 2 {
+		return nil, nil, fmt.Errorf("Net mask is too short, must be 2 or more: %v", masklen)
 	}
 
 	// Get a long from the current IP address
@@ -185,9 +184,17 @@ func GetIPRange(ip net.IP, ipnet net.IPNet) (net.IP, net.IP, error) {
 	// We can OR that value...
 	var highestiplong big.Int
 	highestiplong.Or(&lowestiplong, &masklong)
+	// remove network and broadcast address from the  range
+	var incIP big.Int
+	incIP.SetInt64(1)
+	lowestiplong.Add(&lowestiplong, &incIP)   // fixes to remove network address
+	highestiplong.Sub(&highestiplong, &incIP) //fixes to remove broadcast address
 
 	// Convert to net.IPs
 	firstip := BigIntToIP(lowestiplong)
+	if lowestiplong.Cmp(longip) < 0 { // if range_start was provided and its greater.
+		firstip = BigIntToIP(*longip)
+	}
 	lastip := BigIntToIP(highestiplong)
 
 	return firstip, lastip, nil
