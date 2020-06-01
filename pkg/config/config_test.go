@@ -40,6 +40,8 @@ var _ = Describe("Allocation operations", func() {
 		Expect(ipamconfig.LogFile).To(Equal("/tmp/whereabouts.log"))
 		Expect(ipamconfig.EtcdHost).To(Equal("foo"))
 		Expect(ipamconfig.Range).To(Equal("192.168.1.0/24"))
+		Expect(ipamconfig.RangeStart).To(Equal(net.ParseIP("192.168.1.5")))
+		Expect(ipamconfig.RangeEnd).To(Equal(net.ParseIP("192.168.1.25")))
 		Expect(ipamconfig.Gateway).To(Equal(net.ParseIP("192.168.10.1")))
 
 	})
@@ -67,7 +69,8 @@ var _ = Describe("Allocation operations", func() {
       "ipam": {
         "configuration_path": "/tmp/whereabouts.conf",
         "type": "whereabouts",
-        "range": "192.168.1.5-192.168.1.25/24",
+        "range": "192.168.2.230/24",
+        "range_start": "192.168.2.223",
         "gateway": "192.168.10.1"
       }
       }`
@@ -76,7 +79,8 @@ var _ = Describe("Allocation operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ipamconfig.LogLevel).To(Equal("debug"))
 		Expect(ipamconfig.LogFile).To(Equal("/tmp/whereabouts.log"))
-		Expect(ipamconfig.Range).To(Equal("192.168.1.0/24"))
+		Expect(ipamconfig.Range).To(Equal("192.168.2.0/24"))
+		Expect(ipamconfig.RangeStart.String()).To(Equal("192.168.2.223"))
 		// Gateway should remain unchanged from conf due to preference for primary config
 		Expect(ipamconfig.Gateway).To(Equal(net.ParseIP("192.168.10.1")))
 		Expect(ipamconfig.Datastore).To(Equal("kubernetes"))

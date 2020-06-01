@@ -118,7 +118,6 @@ var _ = Describe("Whereabouts operations", func() {
 		ipRange := "192.168.1.0/24"
 		ipGateway := "192.168.10.1"
 		expectedAddress := "192.168.1.1/24"
-
 		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, []string{expectedAddress}, whereaboutstypes.DatastoreETCD)
 
 		ipVersion = "6"
@@ -277,7 +276,7 @@ var _ = Describe("Whereabouts operations", func() {
 		Expect(*result.IPs[0]).To(Equal(
 			current.IPConfig{
 				Version: "4",
-				Address: mustCIDR("192.168.1.44/28"),
+				Address: mustCIDR("192.168.1.33/28"),
 				Gateway: net.ParseIP("192.168.1.1"),
 			}))
 
@@ -530,6 +529,5 @@ func mustCIDR(s string) net.IPNet {
 	if err != nil {
 		Fail(err.Error())
 	}
-
 	return *n
 }

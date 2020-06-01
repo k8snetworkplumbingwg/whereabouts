@@ -123,6 +123,7 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 		}
 		n.IPAM.Range = ipNet.String()
 		if n.IPAM.RangeStart == nil {
+			firstip = net.ParseIP(firstip.Mask(ipNet.Mask).String()) // if range_start is not net then pick the first network address
 			n.IPAM.RangeStart = firstip
 		}
 	}
