@@ -41,7 +41,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 	newip, err := storage.IPManagement(types.Allocate, *ipamConf, args.ContainerID)
 	if err != nil {
 		logging.Errorf("Error assigning IP: %s", err)
-		return fmt.Errorf("Error assigning IP: %s", err)
+		return fmt.Errorf("Error assigning IP: %w", err)
 	}
 
 	// Determine if v4 or v6.
