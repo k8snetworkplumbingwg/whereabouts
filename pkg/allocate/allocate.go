@@ -2,11 +2,23 @@ package allocate
 
 import (
 	"fmt"
-	"github.com/dougbtv/whereabouts/pkg/logging"
-	"github.com/dougbtv/whereabouts/pkg/types"
 	"math/big"
 	"net"
+
+	"github.com/dougbtv/whereabouts/pkg/logging"
+	"github.com/dougbtv/whereabouts/pkg/types"
 )
+
+// AssignmentError defines an IP assignment error.
+type AssignmentError struct {
+	firstIP net.IP
+	lastIP  net.IP
+	ipnet   net.IPNet
+}
+
+func (a AssignmentError) Error() string {
+	return fmt.Sprintf("Could not allocate IP in range: ip: %v / - %v / range: %#v", a.firstIP, a.lastIP, a.ipnet)
+}
 
 // AssignIP assigns an IP using a range and a reserve list.
 func AssignIP(ipamConf types.IPAMConfig, reservelist []types.IPReservation, containerID string) (net.IPNet, []types.IPReservation, error) {
@@ -65,9 +77,7 @@ func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, r
 	firstip := rangeStart
 	var lastip net.IP
 	if rangeEnd != nil {
-		end := IPToBigInt(rangeEnd)
-		end = end.Add(end, big.NewInt(1))
-		lastip = BigIntToIP(*end)
+		lastip = rangeEnd
 	} else {
 		var err error
 		firstip, lastip, err = GetIPRange(rangeStart, ipnet)
@@ -134,7 +144,7 @@ MAINITERATION:
 	}
 
 	if !performedassignment {
-		return net.IP{}, reservelist, fmt.Errorf("Could not allocate IP in range: ip: %v / - %v / range: %#v", firstip, lastip, ipnet)
+		return net.IP{}, reservelist, AssignmentError{firstip, lastip, ipnet}
 	}
 
 	return assignedip, reservelist, nil
