@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-    "strings"
 	"github.com/containernetworking/cni/pkg/skel"
 	cnitypes "github.com/containernetworking/cni/pkg/types"
 	"github.com/containernetworking/cni/pkg/types/current"
@@ -79,8 +78,9 @@ func cmdDel(args *skel.CmdArgs) error {
 
 	_, err = storage.IPManagement(types.Deallocate, *ipamConf, args.ContainerID)
 	if err != nil {
-		if (strings.Contains(fmt.Sprintf("%s", err), "Did not find reserved IP for container")) {
-			logging.Debugf("Cannot deallocate IP, it might not have been assigned by us. %s", err)
+		re, ok := err.(*types.IPNotFoundError)
+		if ok {
+			logging.Debugf("Cannot deallocate IP, it might not have been assigned by us, so ignoring. %s", re)
 		} else {
 			logging.Errorf("Error deallocating IP: %s", err)
 			return fmt.Errorf("Error deallocating IP: %s", err)

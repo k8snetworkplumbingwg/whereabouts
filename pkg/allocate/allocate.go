@@ -1,6 +1,7 @@
 package allocate
 
 import (
+	//"errors"
 	"fmt"
 	"github.com/dougbtv/whereabouts/pkg/logging"
 	"github.com/dougbtv/whereabouts/pkg/types"
@@ -47,7 +48,9 @@ func IterateForDeallocation(reservelist []types.IPReservation, containerID strin
 
 	// Check if it's a valid index
 	if foundidx < 0 {
-		return reservelist, fmt.Errorf("Did not find reserved IP for container %v", containerID)
+		return reservelist, &types.IPNotFoundError {
+			ContainerID: containerID,
+		}
 	}
 
 	updatedreservelist := removeIdxFromSlice(reservelist, foundidx)
