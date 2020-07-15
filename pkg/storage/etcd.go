@@ -10,6 +10,7 @@ import (
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/clientv3/concurrency"
 	"github.com/coreos/etcd/pkg/transport"
+	"github.com/dougbtv/whereabouts/pkg/logging"
 	"github.com/dougbtv/whereabouts/pkg/types"
 )
 
@@ -72,6 +73,28 @@ type ETCDIPAM struct {
 func (i *ETCDIPAM) Status(ctx context.Context) error {
 	_, err := i.kv.Get(ctx, "anykey")
 	return err
+}
+
+// EtcdOverlappingRangeStore represents a set of cluster wide resources
+type EtcdOverlappingRangeStore struct {
+	client *clientv3.Client
+}
+
+// GetOverlappingRangeStore returns an OverlappingRangeStore interface
+func (i *ETCDIPAM) GetOverlappingRangeStore() (OverlappingRangeStore, error) {
+	return &EtcdOverlappingRangeStore{i.client}, nil
+}
+
+// IsAllocatedInOverlappingRange checks to see if the IP is allocated across the whole cluster (and not just the current range)
+func (i *EtcdOverlappingRangeStore) IsAllocatedInOverlappingRange(ctx context.Context, ip net.IP) (bool, error) {
+	logging.Debugf("ETCD IsAllocatedInOverlappingRange is NOT IMPLEMENTED!!!! TODO")
+	return false, nil
+}
+
+// UpdateOverlappingRangeAllocation updates our clusterwide allocation for overlapping ranges.
+func (i *EtcdOverlappingRangeStore) UpdateOverlappingRangeAllocation(ctx context.Context, mode int, ip net.IP, containerID string) error {
+	logging.Debugf("ETCD UpdateOverlappingRangeWide is NOT IMPLEMENTED!!!! TODO")
+	return nil
 }
 
 // Close shuts down the clients etcd connections

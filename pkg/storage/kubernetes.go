@@ -101,7 +101,7 @@ func toAllocationMap(reservelist []whereaboutstypes.IPReservation, firstip net.I
 // GetIPPool returns a storage.IPPool for the given range
 func (i *KubernetesIPAM) GetIPPool(ctx context.Context, ipRange string) (IPPool, error) {
 	// v6 filter
-	normalized := strings.ReplaceAll(ipRange, "::", "-")
+	normalized := strings.ReplaceAll(ipRange, ":", "-")
 	// replace subnet cidr slash
 	normalized = strings.ReplaceAll(normalized, "/", "-")
 
@@ -154,6 +154,80 @@ func (i *KubernetesIPAM) Close() error {
 	return nil
 }
 
+// KubernetesOverlappingRangeStore represents a OverlappingRangeStore interface
+type KubernetesOverlappingRangeStore struct {
+	client      client.Client
+	containerID string
+	namespace   string
+}
+
+// GetOverlappingRangeStore returns a clusterstore interface
+func (i *KubernetesIPAM) GetOverlappingRangeStore() (OverlappingRangeStore, error) {
+	return &KubernetesOverlappingRangeStore{i.client, i.containerID, i.namespace}, nil
+}
+
+// IsAllocatedInOverlappingRange checks for IP addresses to see if they're allocated cluster wide, for overlapping ranges
+func (c *KubernetesOverlappingRangeStore) IsAllocatedInOverlappingRange(ctx context.Context, ip net.IP) (bool, error) {
+
+	// IPv6 doesn't make for valid CR names, so normalize it.
+	normalizedip := strings.ReplaceAll(fmt.Sprint(ip), ":", "-")
+
+	logging.Debugf("OverlappingRangewide allocation check for IP: %v", normalizedip)
+
+	// clusteripres := &whereaboutsv1alpha1.OverlappingRangeIPReservation{
+	// 	ObjectMeta: metav1.ObjectMeta{Name: normalizedip, Namespace: i.namespace},
+	// }
+	clusteripres := &whereaboutsv1alpha1.OverlappingRangeIPReservation{
+		ObjectMeta: metav1.ObjectMeta{Name: normalizedip, Namespace: c.namespace},
+	}
+	if err := c.client.Get(ctx, types.NamespacedName{Name: normalizedip, Namespace: c.namespace}, clusteripres); errors.IsNotFound(err) {
+		// cluster ip reservation does not exist, this appears to be good news.
+		// logging.Debugf("IP %v is not reserved cluster wide, allowing.", ip)
+		return false, nil
+	} else if err != nil {
+		logging.Errorf("k8s get OverlappingRangeIPReservation error: %s", err)
+		return false, fmt.Errorf("k8s get OverlappingRangeIPReservation error: %s", err)
+	}
+
+	logging.Debugf("IP %v is reserved cluster wide.", ip)
+	return true, nil
+}
+
+// UpdateOverlappingRangeAllocation updates clusterwide allocation for overlapping ranges.
+func (c *KubernetesOverlappingRangeStore) UpdateOverlappingRangeAllocation(ctx context.Context, mode int, ip net.IP, containerID string) error {
+	// Normalize the IP
+	normalizedip := strings.ReplaceAll(fmt.Sprint(ip), ":", "-")
+
+	clusteripres := &whereaboutsv1alpha1.OverlappingRangeIPReservation{
+		ObjectMeta: metav1.ObjectMeta{Name: normalizedip, Namespace: c.namespace},
+	}
+
+	var err error
+	var verb string
+	switch mode {
+	case whereaboutstypes.Allocate:
+		// Put together our cluster ip reservation
+		verb = "allocate"
+
+		clusteripres.Spec = whereaboutsv1alpha1.OverlappingRangeIPReservationSpec{
+			ContainerID: containerID,
+		}
+
+		err = c.client.Create(ctx, clusteripres)
+
+	case whereaboutstypes.Deallocate:
+		verb = "deallocate"
+		err = c.client.Delete(ctx, clusteripres)
+	}
+
+	if err != nil {
+		return err
+	}
+
+	logging.Debugf("K8s UpdateOverlappingRangeAllocation success on %v: %+v", verb, clusteripres)
+	return nil
+}
+
 // KubernetesIPPool represents an IPPool resource and its parsed set of allocations
 type KubernetesIPPool struct {
 	client      client.Client
@@ -192,7 +266,7 @@ func (p *KubernetesIPPool) Update(ctx context.Context, reservations []whereabout
 	// add additional tests to the patch
 	ops := []jsonpatch.Operation{
 		// ensure patch is applied to appropriate resource version only
-		jsonpatch.Operation{Operation: "test", Path: "/metadata/resourceVersion", Value: orig.ObjectMeta.ResourceVersion},
+		{Operation: "test", Path: "/metadata/resourceVersion", Value: orig.ObjectMeta.ResourceVersion},
 	}
 	for _, o := range patch {
 		// safeguard add ops -- "add" will update existing paths, this "test" ensures the path is empty
