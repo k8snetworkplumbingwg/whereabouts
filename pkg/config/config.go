@@ -33,7 +33,11 @@ func canonicalizeIP(ip *net.IP) error {
 func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, error) {
 
 	// We first load up what we already have, before we start reading a file...
-	n := types.Net{}
+	n := types.Net{
+		IPAM: &types.IPAMConfig{
+			OverlappingRanges: true,
+		},
+	}
 	if err := json.Unmarshal(bytes, &n); err != nil {
 		return nil, "", fmt.Errorf("LoadIPAMConfig - JSON Parsing Error: %s / bytes: %s", err, bytes)
 	}

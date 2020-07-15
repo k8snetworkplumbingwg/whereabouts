@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"net"
 	"time"
 
 	"github.com/dougbtv/whereabouts/pkg/types"
@@ -24,6 +25,13 @@ type IPPool interface {
 // Store is the interface that wraps the basic IP Allocation methods on the underlying storage backend
 type Store interface {
 	GetIPPool(ctx context.Context, ipRange string) (IPPool, error)
+	GetOverlappingRangeStore() (OverlappingRangeStore, error)
 	Status(ctx context.Context) error
 	Close() error
+}
+
+// OverlappingRangeStore is an interface for wrapping overlappingrange storage options
+type OverlappingRangeStore interface {
+	IsAllocatedInOverlappingRange(ctx context.Context, ip net.IP) (bool, error)
+	UpdateOverlappingRangeAllocation(ctx context.Context, mode int, ip net.IP, containerID string) error
 }
