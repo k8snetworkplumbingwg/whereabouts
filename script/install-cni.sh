@@ -42,6 +42,12 @@ if [ -f "$SERVICE_ACCOUNT_PATH/token" ]; then
     TLS_CFG="certificate-authority-data: $(cat $KUBE_CA_FILE | base64 | tr -d '\n')"
   fi
 
+  # Kubernetes service address must be wrapped if it is IPv6 address
+  KUBERNETES_SERVICE_HOST_WRAP=$KUBERNETES_SERVICE_HOST
+  if [ "$KUBERNETES_SERVICE_HOST_WRAP" != "${KUBERNETES_SERVICE_HOST_WRAP#*:[0-9a-fA-F]}" ]; then
+    KUBERNETES_SERVICE_HOST_WRAP=\[$KUBERNETES_SERVICE_HOST_WRAP\]
+  fi
+
   # Write a kubeconfig file for the CNI plugin.  Do this
   # to skip TLS verification for now.  We should eventually support
   # writing more complete kubeconfig files. This is only used
@@ -55,7 +61,7 @@ kind: Config
 clusters:
 - name: local
   cluster:
-    server: ${KUBERNETES_SERVICE_PROTOCOL:-https}://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}
+    server: ${KUBERNETES_SERVICE_PROTOCOL:-https}://${KUBERNETES_SERVICE_HOST_WRAP}:${KUBERNETES_SERVICE_PORT}
     $TLS_CFG
 users:
 - name: whereabouts
