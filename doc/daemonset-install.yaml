@@ -27,6 +27,7 @@ rules:
   - whereabouts.cni.cncf.io
   resources:
   - ippools
+  - overlappingrangeipreservations
   verbs:
   - get
   - list
@@ -57,6 +58,7 @@ spec:
         app: whereabouts
         name: whereabouts
     spec:
+      hostNetwork: true      
       serviceAccountName: whereabouts
       nodeSelector:
         beta.kubernetes.io/arch: amd64
