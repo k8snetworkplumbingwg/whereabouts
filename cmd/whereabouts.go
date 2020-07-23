@@ -75,7 +75,7 @@ func cmdDel(args *skel.CmdArgs) error {
 		return err
 	}
 	logging.Debugf("DEL - IPAM configuration successfully read: %+v", filterConf(*ipamConf))
-	logging.Debugf("ContainerID: %v", args.ContainerID)
+	logging.Debugf("Beginning delete for ContainerID: %v", args.ContainerID)
 
 	_, err = storage.IPManagement(types.Deallocate, *ipamConf, args.ContainerID)
 	if err != nil {

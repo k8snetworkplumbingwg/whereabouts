@@ -42,7 +42,7 @@ You can install this plugin with a Daemonset, using:
 
 ```
 git clone https://github.com/dougbtv/whereabouts && cd whereabouts
-kubectl apply -f ./doc/daemonset-install.yaml -f ./doc/whereabouts.cni.cncf.io_ippools.yaml
+kubectl apply -f ./doc/daemonset-install.yaml -f ./doc/whereabouts.cni.cncf.io_ippools.yaml -f ./doc/whereabouts.cni.cncf.io_overlappingrangeipreservations.yaml
 ```
 
 *NOTE*: This daemonset is for use with Kubernetes version 1.16 and later. It may also be useful with previous versions, however you'll need to change the `apiVersion` of the daemonset in the provided yaml, [see the deprecation notice](https://kubernetes.io/blog/2019/07/18/api-deprecations-in-1-16/).
@@ -178,6 +178,14 @@ There are two optional parameters for logging, they are:
 * `log_file`: A file path to a logfile to log to.
 * `log_level`: Set the logging verbosity, from most to least: `debug`,`error`,`panic`
 
+### Overlapping Ranges
+
+The overlapping ranges feature is enabled by default, and will not allow an IP address to be re-assigned across two different ranges which overlap. However, this can be disabled.
+
+* `enable_overlapping_ranges`: *(boolean)* Checks to see if an IP has been allocated across another range before assigning it (defaults to `true`).
+
+Please note: This feature is only implemented for the Kubernetes storage backend.
+
 ## Flatfile configuration
 
 There is one option for flat file configuration:
@@ -271,9 +279,8 @@ The typeface used in the logo is [AZONIX](https://www.dafont.com/azonix.font), b
 
 ## Known limitations
 
-* If you specify overlapping ranges -- you're almost certain to have collisions, so if you specify one config with `192.168.0.0/16` and another with `192.168.0.0/24`, you'll have collisions.
-    - This could be fixed with an admission controller.
-    - And admission controller could also prevent you from starting a pod in a given range if you were out of addresses within that range.
+* A hard system crash on a node might leave behind stranded IP allocations, so if you have a trashing system, this might exhaust IPs.
+  - Potentially we need an operator to ensure data is clean, even if just at some kind of interval (e.g. with a cron job)
 * There's probably a lot of comparison of IP addresses that could be optimized, lots of string conversion.
 * The etcd method has a number of limitations, in that it uses an all ASCII methodology. If this was binary, it could probably store more and have more efficient IP address comparison.
 * Unlikely to work in Canada, apparently it would have to be "where aboots?" for Canadians to be able to operate it.
