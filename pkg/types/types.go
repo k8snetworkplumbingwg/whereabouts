@@ -41,6 +41,7 @@ type IPAMConfig struct {
 	EtcdCACertFile    string            `json:"etcd_ca_cert_file,omitempty"`
 	LogFile           string            `json:"log_file"`
 	LogLevel          string            `json:"log_level"`
+	OverlappingRanges bool              `json:"enable_overlapping_ranges,omitempty"`
 	Gateway           net.IP
 	Kubernetes        KubernetesConfig `json:"kubernetes,omitempty"`
 	ConfigurationPath string           `json:"configuration_path"`
@@ -71,6 +72,7 @@ type Address struct {
 type IPReservation struct {
 	IP          net.IP `json:"ip"`
 	ContainerID string `json:"id"`
+	IsAllocated bool
 }
 
 const (
