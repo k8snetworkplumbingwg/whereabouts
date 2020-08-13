@@ -56,7 +56,7 @@ func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string) (net.
 	}
 	if err != nil {
 		logging.Errorf("IPAM %s client initialization error: %v", ipamConf.Datastore, err)
-		return newip, err
+		return newip, fmt.Errorf("IPAM %s client initialization error: %v", ipamConf.Datastore, err)
 	}
 	defer ipam.Close()
 

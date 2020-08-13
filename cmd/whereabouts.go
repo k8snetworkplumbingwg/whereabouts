@@ -40,8 +40,8 @@ func cmdAdd(args *skel.CmdArgs) error {
 	logging.Debugf("Beginning IPAM for ContainerID: %v", args.ContainerID)
 	newip, err := storage.IPManagement(types.Allocate, *ipamConf, args.ContainerID)
 	if err != nil {
-		logging.Errorf("Error assigning IP: %s", err)
-		return fmt.Errorf("Error assigning IP: %w", err)
+		logging.Errorf("Error at storage engine: %s", err)
+		return fmt.Errorf("Error at storage engine: %w", err)
 	}
 
 	// Determine if v4 or v6.
