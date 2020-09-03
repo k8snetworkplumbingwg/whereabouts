@@ -18,6 +18,7 @@ CNI_CONF_DIR=${CNI_CONF_DIR:-"/host/etc/cni/net.d"}
 
 mkdir -p $CNI_CONF_DIR/whereabouts.d
 WHEREABOUTS_KUBECONFIG=$CNI_CONF_DIR/whereabouts.d/whereabouts.kubeconfig
+WHEREABOUTS_FLATFILE=$CNI_CONF_DIR/whereabouts.d/whereabouts.conf
 
 # ------------------------------- Generate a "kube-config"
 SERVICE_ACCOUNT_PATH=/var/run/secrets/kubernetes.io/serviceaccount
@@ -91,6 +92,19 @@ contexts:
     user: whereabouts
     namespace: ${WHEREABOUTS_NAMESPACE}
 current-context: whereabouts-context
+EOF
+
+  touch $WHEREABOUTS_FLATFILE
+  chmod ${KUBECONFIG_MODE:-600} $WHEREABOUTS_FLATFILE
+  cat > $WHEREABOUTS_FLATFILE <<EOF
+{
+  "datastore": "kubernetes",
+  "kubernetes": {
+    "kubeconfig": "${WHEREABOUTS_KUBECONFIG}"
+  },
+  "log_file": "/tmp/whereabouts.log",
+  "log_level": "debug"
+}
 EOF
 
 else
