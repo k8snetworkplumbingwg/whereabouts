@@ -49,7 +49,7 @@ func NewETCDIPAM(ipamConf types.IPAMConfig) (*ETCDIPAM, error) {
 	if err != nil {
 		return nil, err
 	}
-	mutex := concurrency.NewMutex(session, fmt.Sprintf("%s/%s", whereaboutsPrefix, ipamConf.Range))
+	mutex := concurrency.NewMutex(session, fmt.Sprintf("%s/%s", whereaboutsPrefix, ipamConf.Name))
 
 	// acquire our lock
 	if err := mutex.Lock(context.Background()); err != nil {

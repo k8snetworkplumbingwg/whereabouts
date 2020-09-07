@@ -38,7 +38,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 	result.Routes = ipamConf.Routes
 
 	logging.Debugf("Beginning IPAM for ContainerID: %v", args.ContainerID)
-	newip, err := storage.IPManagement(types.Allocate, *ipamConf, args.ContainerID)
+	newip, gateway, err := storage.IPManagement(types.Allocate, *ipamConf, args.ContainerID)
 	if err != nil {
 		logging.Errorf("Error at storage engine: %s", err)
 		return fmt.Errorf("Error at storage engine: %w", err)
@@ -55,7 +55,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 	result.IPs = append(result.IPs, &current.IPConfig{
 		Version: useVersion,
 		Address: newip,
-		Gateway: ipamConf.Gateway})
+		Gateway: gateway})
 
 	// Assign all the static IP elements.
 	for _, v := range ipamConf.Addresses {
@@ -77,7 +77,7 @@ func cmdDel(args *skel.CmdArgs) error {
 	logging.Debugf("DEL - IPAM configuration successfully read: %+v", filterConf(*ipamConf))
 	logging.Debugf("ContainerID: %v", args.ContainerID)
 
-	_, err = storage.IPManagement(types.Deallocate, *ipamConf, args.ContainerID)
+	_, _, err = storage.IPManagement(types.Deallocate, *ipamConf, args.ContainerID)
 	if err != nil {
 		logging.Errorf("Error deallocating IP: %s", err)
 		return fmt.Errorf("Error deallocating IP: %s", err)

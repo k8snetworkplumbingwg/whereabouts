@@ -4,14 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/big"
-	"net"
-	"strconv"
-	"strings"
-
-	"github.com/dougbtv/whereabouts/pkg/allocate"
 	whereaboutsv1alpha1 "github.com/dougbtv/whereabouts/pkg/api/v1alpha1"
-	"github.com/dougbtv/whereabouts/pkg/logging"
 	whereaboutstypes "github.com/dougbtv/whereabouts/pkg/types"
 	jsonpatch "gomodules.xyz/jsonpatch/v2"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -20,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
+	"net"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 )
@@ -58,7 +52,7 @@ func NewKubernetesIPAM(containerID string, ipamConf whereaboutstypes.IPAMConfig)
 	if err != nil {
 		return nil, err
 	}
-	return &KubernetesIPAM{c, ipamConf, containerID, namespace, DatastoreRetries}, nil
+	return &KubernetesIPAM{c, ipamConf, containerID, namespace, ipamConf.Name, DatastoreRetries}, nil
 }
 
 // KubernetesIPAM manages ip blocks in an kubernetes CRD backend
@@ -67,55 +61,37 @@ type KubernetesIPAM struct {
 	config      whereaboutstypes.IPAMConfig
 	containerID string
 	namespace   string
+	name        string
 	retries     int
 }
 
-func toIPReservationList(allocations map[string]whereaboutsv1alpha1.IPAllocation, firstip net.IP) []whereaboutstypes.IPReservation {
+func toIPReservationList(allocations map[string]whereaboutsv1alpha1.IPAllocation) []whereaboutstypes.IPReservation {
 	reservelist := []whereaboutstypes.IPReservation{}
-	i := allocate.IPToBigInt(firstip)
-	for offset, a := range allocations {
-		ipOffset, err := strconv.ParseInt(offset, 10, 64)
-		if err != nil {
-			// allocations that are invalid int64s should be ignored
-			// toAllocationMap should be the only writer of offsets, via `fmt.Sprintf("%d", ...)``
-			logging.Errorf("Error decoding ip offset (backend: kubernetes): %v", err)
-			continue
-		}
-		ip := allocate.BigIntToIP(*big.NewInt(0).Add(i, big.NewInt(ipOffset)))
+	for ipString, a := range allocations {
+		ip := net.ParseIP(ipString)
 		reservelist = append(reservelist, whereaboutstypes.IPReservation{IP: ip, ContainerID: a.ContainerID})
 	}
 	return reservelist
 }
 
-func toAllocationMap(reservelist []whereaboutstypes.IPReservation, firstip net.IP) map[string]whereaboutsv1alpha1.IPAllocation {
-	first := allocate.IPToBigInt(firstip)
+func toAllocationMap(reservelist []whereaboutstypes.IPReservation) map[string]whereaboutsv1alpha1.IPAllocation {
+
 	allocations := make(map[string]whereaboutsv1alpha1.IPAllocation)
 	for _, r := range reservelist {
-		currentip := allocate.IPToBigInt(r.IP)
-		index := currentip.Sub(currentip, first).Int64()
-		allocations[fmt.Sprintf("%d", index)] = whereaboutsv1alpha1.IPAllocation{ContainerID: r.ContainerID}
+		allocations[r.IP.String()] = whereaboutsv1alpha1.IPAllocation{ContainerID: r.ContainerID}
 	}
 	return allocations
 }
 
 // GetIPPool returns a storage.IPPool for the given range
 func (i *KubernetesIPAM) GetIPPool(ctx context.Context, ipRange string) (IPPool, error) {
-	// v6 filter
-	normalized := strings.ReplaceAll(ipRange, "::", "-")
-	// replace subnet cidr slash
-	normalized = strings.ReplaceAll(normalized, "/", "-")
 
-	pool, err := i.getPool(ctx, normalized, ipRange)
+	pool, err := i.getPool(ctx, i.name, ipRange)
 	if err != nil {
 		return nil, err
 	}
 
-	firstIP, _, err := pool.ParseCIDR()
-	if err != nil {
-		return nil, err
-	}
-
-	return &KubernetesIPPool{i.client, i.containerID, firstIP, pool}, nil
+	return &KubernetesIPPool{i.client, i.containerID, pool}, nil
 }
 
 func (i *KubernetesIPAM) getPool(ctx context.Context, name string, iprange string) (*whereaboutsv1alpha1.IPPool, error) {
@@ -158,13 +134,12 @@ func (i *KubernetesIPAM) Close() error {
 type KubernetesIPPool struct {
 	client      client.Client
 	containerID string
-	firstIP     net.IP
 	pool        *whereaboutsv1alpha1.IPPool
 }
 
 // Allocations returns the initially retrieved set of allocations for this pool
 func (p *KubernetesIPPool) Allocations() []whereaboutstypes.IPReservation {
-	return toIPReservationList(p.pool.Spec.Allocations, p.firstIP)
+	return toIPReservationList(p.pool.Spec.Allocations)
 }
 
 // Update sets the pool allocated IP list to the given IP reservations
@@ -177,7 +152,7 @@ func (p *KubernetesIPPool) Update(ctx context.Context, reservations []whereabout
 	}
 
 	// update the pool before marshalling once again
-	p.pool.Spec.Allocations = toAllocationMap(reservations, p.firstIP)
+	p.pool.Spec.Allocations = toAllocationMap(reservations)
 	modBytes, err := json.Marshal(p.pool)
 	if err != nil {
 		return err

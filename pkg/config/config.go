@@ -89,6 +89,17 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 		logging.Errorf("Merge error with flat file: %s", err)
 	}
 
+	if len(n.IPAM.Ranges) == 0 {
+		n.IPAM.Ranges = append(n.IPAM.Ranges, types.IPRange{
+			Range:      n.IPAM.Range,
+			RangeStart: n.IPAM.RangeStart,
+			RangeEnd:   n.IPAM.RangeEnd,
+			GatewayStr: n.IPAM.GatewayStr,
+			Gateway:    n.IPAM.Gateway,
+			OmitRanges: n.IPAM.OmitRanges,
+		})
+	}
+
 	// Logging
 	if n.IPAM.LogFile != "" {
 		logging.SetLogFile(n.IPAM.LogFile)
@@ -101,31 +112,8 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 		logging.Debugf("Used defaults from parsed flat file config @ %s", foundflatfile)
 	}
 
-	if r := strings.SplitN(n.IPAM.Range, "-", 2); len(r) == 2 {
-		firstip := net.ParseIP(r[0])
-		if firstip == nil {
-			return nil, "", fmt.Errorf("invalid range start IP: %s", r[0])
-		}
-		lastip, ipNet, err := net.ParseCIDR(r[1])
-		if err != nil {
-			return nil, "", fmt.Errorf("invalid CIDR %s: %s", r[1], err)
-		}
-		if !ipNet.Contains(firstip) {
-			return nil, "", fmt.Errorf("invalid range start for CIDR %s: %s", ipNet.String(), firstip)
-		}
-		n.IPAM.Range = ipNet.String()
-		n.IPAM.RangeStart = firstip
-		n.IPAM.RangeEnd = lastip
-	} else {
-		firstip, ipNet, err := net.ParseCIDR(n.IPAM.Range)
-		if err != nil {
-			return nil, "", fmt.Errorf("invalid CIDR %s: %s", n.IPAM.Range, err)
-		}
-		n.IPAM.Range = ipNet.String()
-		if n.IPAM.RangeStart == nil {
-			firstip = net.ParseIP(firstip.Mask(ipNet.Mask).String()) // if range_start is not net then pick the first network address
-			n.IPAM.RangeStart = firstip
-		}
+	if err := parseRanges(&n.IPAM.Ranges); err != nil {
+		return nil, "", err
 	}
 
 	if n.IPAM.Datastore == "" {
@@ -150,21 +138,6 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 		return nil, "", err
 	}
 
-	if n.IPAM.GatewayStr != "" {
-		gwip := net.ParseIP(n.IPAM.GatewayStr)
-		if gwip == nil {
-			return nil, "", fmt.Errorf("Couldn't parse gateway IP: %s", n.IPAM.GatewayStr)
-		}
-		n.IPAM.Gateway = gwip
-	}
-
-	for i := range n.IPAM.OmitRanges {
-		_, _, err := net.ParseCIDR(n.IPAM.OmitRanges[i])
-		if err != nil {
-			return nil, "", fmt.Errorf("invalid CIDR in exclude list %s: %s", n.IPAM.OmitRanges[i], err)
-		}
-	}
-
 	if err := configureStatic(&n, args); err != nil {
 		return nil, "", err
 	}
@@ -173,6 +146,55 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 	n.IPAM.Name = n.Name
 
 	return n.IPAM, n.CNIVersion, nil
+}
+
+func parseRanges(ranges *[]types.IPRange) error {
+	for idx := range *ranges {
+		ipRange := &(*ranges)[idx]
+		if r := strings.SplitN(ipRange.Range, "-", 2); len(r) == 2 {
+			firstip := net.ParseIP(r[0])
+			if firstip == nil {
+				return fmt.Errorf("invalid range start IP: %s", r[0])
+			}
+			lastip, ipNet, err := net.ParseCIDR(r[1])
+			if err != nil {
+				return fmt.Errorf("invalid CIDR %s: %s", r[1], err)
+			}
+			if !ipNet.Contains(firstip) {
+				return fmt.Errorf("invalid range start for CIDR %s: %s", ipNet.String(), firstip)
+			}
+			ipRange.Range = ipNet.String()
+			ipRange.RangeStart = firstip
+			ipRange.RangeEnd = lastip
+		} else {
+			firstip, ipNet, err := net.ParseCIDR(ipRange.Range)
+			if err != nil {
+				return fmt.Errorf("invalid CIDR %s: %s", ipRange.Range, err)
+			}
+			ipRange.Range = ipNet.String()
+			if ipRange.RangeStart == nil {
+				firstip = net.ParseIP(firstip.Mask(ipNet.Mask).String()) // if range_start is not net then pick the first network address
+				ipRange.RangeStart = firstip
+			}
+		}
+
+		if ipRange.GatewayStr != "" {
+			gwip := net.ParseIP(ipRange.GatewayStr)
+			if gwip == nil {
+				return fmt.Errorf("Couldn't parse gateway IP: %s", ipRange.GatewayStr)
+			}
+			ipRange.Gateway = gwip
+		}
+
+		for i := range ipRange.OmitRanges {
+			_, _, err := net.ParseCIDR(ipRange.OmitRanges[i])
+			if err != nil {
+				return fmt.Errorf("invalid CIDR in exclude list %s: %s", ipRange.OmitRanges[i], err)
+			}
+		}
+	}
+
+	return nil
 }
 
 func pathExists(path string) bool {

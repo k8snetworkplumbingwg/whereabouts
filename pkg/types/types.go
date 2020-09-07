@@ -33,6 +33,7 @@ type IPAMConfig struct {
 	RangeStart        net.IP            `json:"range_start,omitempty"`
 	RangeEnd          net.IP            `json:"range_end,omitempty"`
 	GatewayStr        string            `json:"gateway"`
+	Ranges            []IPRange         `json:"ranges"`
 	EtcdHost          string            `json:"etcd_host,omitempty"`
 	EtcdUsername      string            `json:"etcd_username,omitempty"`
 	EtcdPassword      string            `json:"etcd_password,omitempty"`
@@ -71,6 +72,15 @@ type Address struct {
 type IPReservation struct {
 	IP          net.IP `json:"ip"`
 	ContainerID string `json:"id"`
+}
+
+type IPRange struct {
+	Range      string `json:"range"`
+	RangeStart net.IP `json:"range_start,omitempty"`
+	RangeEnd   net.IP `json:"range_end,omitempty"`
+	GatewayStr string `json:"gateway"`
+	Gateway    net.IP
+	OmitRanges []string `json:"exclude,omitempty"`
 }
 
 const (

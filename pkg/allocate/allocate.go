@@ -20,13 +20,21 @@ func (a AssignmentError) Error() string {
 	return fmt.Sprintf("Could not allocate IP in range: ip: %v / - %v / range: %#v", a.firstIP, a.lastIP, a.ipnet)
 }
 
+type DeallocateError struct {
+	contaiterID string
+}
+
+func (a DeallocateError) Error() string {
+	return fmt.Sprintf("Could not Deallocate IP for: %s", a.contaiterID)
+}
+
 // AssignIP assigns an IP using a range and a reserve list.
-func AssignIP(ipamConf types.IPAMConfig, reservelist []types.IPReservation, containerID string) (net.IPNet, []types.IPReservation, error) {
+func AssignIP(ipRange types.IPRange, reservelist []types.IPReservation, containerID string) (net.IPNet, []types.IPReservation, error) {
 
 	// Setup the basics here.
-	_, ipnet, _ := net.ParseCIDR(ipamConf.Range)
+	_, ipnet, _ := net.ParseCIDR(ipRange.Range)
 
-	newip, updatedreservelist, err := IterateForAssignment(*ipnet, ipamConf.RangeStart, ipamConf.RangeEnd, reservelist, ipamConf.OmitRanges, containerID)
+	newip, updatedreservelist, err := IterateForAssignment(*ipnet, ipRange.RangeStart, ipRange.RangeEnd, reservelist, ipRange.OmitRanges, containerID)
 	if err != nil {
 		return net.IPNet{}, nil, err
 	}
@@ -35,7 +43,7 @@ func AssignIP(ipamConf types.IPAMConfig, reservelist []types.IPReservation, cont
 }
 
 // DeallocateIP assigns an IP using a range and a reserve list.
-func DeallocateIP(iprange string, reservelist []types.IPReservation, containerID string) ([]types.IPReservation, error) {
+func DeallocateIP(_ types.IPRange, reservelist []types.IPReservation, containerID string) ([]types.IPReservation, error) {
 
 	updatedreservelist, err := IterateForDeallocation(reservelist, containerID)
 	if err != nil {
@@ -59,7 +67,7 @@ func IterateForDeallocation(reservelist []types.IPReservation, containerID strin
 
 	// Check if it's a valid index
 	if foundidx < 0 {
-		return reservelist, fmt.Errorf("Did not find reserved IP for container %v", containerID)
+		return reservelist, DeallocateError{contaiterID: containerID}
 	}
 
 	updatedreservelist := removeIdxFromSlice(reservelist, foundidx)
