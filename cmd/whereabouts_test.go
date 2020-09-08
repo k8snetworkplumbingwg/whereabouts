@@ -128,6 +128,7 @@ var _ = Describe("Whereabouts operations", func() {
 		expectedAddress = "2001::1/116"
 
 		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, []string{expectedAddress}, whereaboutstypes.DatastoreETCD)
+
 	})
 
 	It("allocates and releases addresses on ADD/DEL with a Kubernetes backend", func() {
@@ -159,6 +160,17 @@ var _ = Describe("Whereabouts operations", func() {
 		expectedAddress = "2001::1/116"
 
 		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, []string{expectedAddress}, whereaboutstypes.DatastoreKubernetes)
+	})
+
+	It("allocates IPv6 addresses with DNS-1123 conformant naming with a Kubernetes backend", func() {
+
+		ipVersion := "6"
+		ipRange := "fd00:0:0:10:0:0:3:1-fd00:0:0:10:0:0:3:6/64"
+		ipGateway := "2001::f:1"
+		expectedAddress := "fd00:0:0:10:0:0:3:1/64"
+
+		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, []string{expectedAddress}, whereaboutstypes.DatastoreKubernetes)
+
 	})
 
 	It("excludes a range of addresses", func() {
