@@ -21,11 +21,11 @@ func (a AssignmentError) Error() string {
 }
 
 type DeallocateError struct {
-	contaiterID string
+	containerID string
 }
 
 func (a DeallocateError) Error() string {
-	return fmt.Sprintf("Could not Deallocate IP for: %s", a.contaiterID)
+	return fmt.Sprintf("Could not Deallocate IP for: %s", a.containerID)
 }
 
 // AssignIP assigns an IP using a range and a reserve list.
@@ -67,7 +67,7 @@ func IterateForDeallocation(reservelist []types.IPReservation, containerID strin
 
 	// Check if it's a valid index
 	if foundidx < 0 {
-		return reservelist, DeallocateError{contaiterID: containerID}
+		return reservelist, DeallocateError{containerID: containerID}
 	}
 
 	updatedreservelist := removeIdxFromSlice(reservelist, foundidx)

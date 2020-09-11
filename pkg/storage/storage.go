@@ -80,12 +80,12 @@ func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string) (net.
 
 		} else {
 			switch mode {
-			case 0:
+			case types.Allocate:
 				if _, ok := err.(allocate.AssignmentError); ok {
 					logging.Debugf("range not have free IP, try next")
 					continue
 				}
-			case 1:
+			case types.Deallocate:
 				if _, ok := err.(allocate.DeallocateError); ok {
 					logging.Debugf("range not have container, try next")
 					continue
