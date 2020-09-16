@@ -77,7 +77,7 @@ EOF
 {
   "datastore": "kubernetes",
   "kubernetes": {
-    "kubeconfig": "${WHEREABOUTS_KUBECONFIG}"
+    "kubeconfig": "${WHEREABOUTS_KUBECONFIG_FILE_HOST}"
   },
   "log_file": "/tmp/whereabouts.log",
   "log_level": "debug"
