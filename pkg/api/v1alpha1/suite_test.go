@@ -1,6 +1,9 @@
 package v1alpha1
 
+// TODO: delete this file, doesn't test anything the cmd suite_test doesn't already
+// the api types (at this time) just contain structs, no implementation
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -11,6 +14,7 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
+	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
@@ -19,12 +23,19 @@ var cfg *rest.Config
 var k8sClient client.Client
 var testEnv *envtest.Environment
 
+func crdDir() string {
+	if dir := os.Getenv("WHEREABOUTS_CRD_DIR"); dir != "" {
+		return dir
+	}
+	return "doc"
+}
+
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
 
 	RunSpecsWithDefaultAndCustomReporters(t,
 		"v1alpha1 Suite",
-		[]Reporter{envtest.NewlineReporter{}})
+		[]Reporter{printer.NewlineReporter{}})
 }
 
 var _ = BeforeSuite(func(done Done) {
@@ -32,7 +43,7 @@ var _ = BeforeSuite(func(done Done) {
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths: []string{filepath.Join("..", "..", "..", "doc")},
+		CRDDirectoryPaths: []string{filepath.Join("..", "..", "..", crdDir())},
 	}
 
 	err := SchemeBuilder.AddToScheme(scheme.Scheme)
