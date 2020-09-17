@@ -40,6 +40,13 @@ Optionally, you can use etcd directly as a backend for data storage. In which ca
 
 You can install this plugin with a Daemonset, using:
 
+#### Pre-Kubernetes v1.16+
+```
+git clone https://github.com/dougbtv/whereabouts && cd whereabouts
+kubectl apply -f ./doc/daemonset-install.yaml -f ./doc/v1beta1/whereabouts.cni.cncf.io_ippools.yaml
+```
+
+#### On Kubernetes v1.16+
 ```
 git clone https://github.com/dougbtv/whereabouts && cd whereabouts
 kubectl apply -f ./doc/daemonset-install.yaml -f ./doc/whereabouts.cni.cncf.io_ippools.yaml
