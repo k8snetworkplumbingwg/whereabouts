@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # install controller-gen
-go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.2.0
+go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.4.0
 
 # install kubebuilder tools to bin/
 mkdir -p bin
