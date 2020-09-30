@@ -8,7 +8,7 @@ ENV VERSION=rhel8 COMMIT=unset
 RUN go build -mod vendor -o bin/whereabouts cmd/whereabouts.go
 WORKDIR /
 
-FROM registry.svc.ci.openshift.org/ocp/builder:rhel-7-golang-openshift-4.6 as rhel7
+FROM registry.svc.ci.openshift.org/ocp/builder:rhel-7-golang-1.15-openshift-4.6 AS rhel7
 ADD . /go/src/github.com/dougbtv/whereabouts
 WORKDIR /go/src/github.com/dougbtv/whereabouts
 ENV CGO_ENABLED=1
