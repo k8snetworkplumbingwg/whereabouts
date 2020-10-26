@@ -25,6 +25,23 @@ KUBE_CA_FILE=${KUBE_CA_FILE:-$SERVICE_ACCOUNT_PATH/ca.crt}
 SERVICEACCOUNT_TOKEN=$(cat $SERVICE_ACCOUNT_PATH/token)
 SKIP_TLS_VERIFY=${SKIP_TLS_VERIFY:-false}
 
+# Setup our logging routines
+
+function log()
+{
+    echo "$(date --iso-8601=seconds) ${1}"
+}
+
+function error()
+{
+    log "ERR:  {$1}"
+}
+
+function warn()
+{
+    log "WARN: {$1}"
+}
+
 
 # Check if we're running as a k8s pod.
 if [ -f "$SERVICE_ACCOUNT_PATH/token" ]; then
