@@ -79,8 +79,8 @@ func cmdDel(args *skel.CmdArgs) error {
 
 	_, err = storage.IPManagement(types.Deallocate, *ipamConf, args.ContainerID)
 	if err != nil {
-		logging.Errorf("Error deallocating IP: %s", err)
-		return fmt.Errorf("Error deallocating IP: %s", err)
+		logging.Verbosef("WARNING: Problem deallocating IP: %s", err)
+		// return fmt.Errorf("Error deallocating IP: %s", err)
 	}
 
 	return nil
