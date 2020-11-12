@@ -130,7 +130,7 @@ MAINITERATION:
 
 		// Lastly, we need to check if this IP is within the range of excluded subnets
 		for _, subnet := range excluded {
-			if subnet.Contains(BigIntToIP(*i).To4()) {
+			if subnet.Contains(BigIntToIP(*i).To16()) {
 				continue MAINITERATION
 			}
 		}

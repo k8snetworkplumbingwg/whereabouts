@@ -233,6 +233,67 @@ var _ = Describe("Whereabouts operations", func() {
 
 	})
 
+	It("excludes a range of IPv6 addresses", func() {
+		const ifname string = "eth0"
+		const nspath string = "/some/where"
+
+		conf := fmt.Sprintf(`{
+      "cniVersion": "0.3.1",
+      "name": "mynet",
+      "type": "ipvlan",
+      "master": "foo0",
+      "ipam": {
+        "type": "whereabouts",
+        "log_file" : "/tmp/whereabouts.log",
+				"log_level" : "debug",
+        "etcd_host": "%s",
+        "range": "2001::1/116",
+        "exclude": [
+          "2001::0/128",
+          "2001::1/128",
+          "2001::2/128"
+        ],
+        "gateway": "2001::f:1",
+        "routes": [
+          { "dst": "0.0.0.0/0" }
+        ]
+      }
+    }`, etcdHost)
+
+		args := &skel.CmdArgs{
+			ContainerID: "dummy",
+			Netns:       nspath,
+			IfName:      ifname,
+			StdinData:   []byte(conf),
+		}
+
+		// Allocate the IP
+		r, raw, err := testutils.CmdAddWithArgs(args, func() error {
+			return cmdAdd(args)
+		})
+		Expect(err).NotTo(HaveOccurred())
+		// fmt.Printf("!bang raw: %s\n", raw)
+		Expect(strings.Index(string(raw), "\"version\":")).Should(BeNumerically(">", 0))
+
+		result, err := current.GetResult(r)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Gomega is cranky about slices with different caps
+		Expect(*result.IPs[0]).To(Equal(
+			current.IPConfig{
+				Version: "6",
+				Address: mustCIDR("2001::3/116"),
+				Gateway: net.ParseIP("2001::f:1"),
+			}))
+
+		// Release the IP
+		err = testutils.CmdDelWithArgs(args, func() error {
+			return cmdDel(args)
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+	})
+
 	It("can still assign static parameters", func() {
 		const ifname string = "eth0"
 		const nspath string = "/some/where"
