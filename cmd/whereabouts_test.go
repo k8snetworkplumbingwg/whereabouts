@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"github.com/containernetworking/cni/pkg/types"
 	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/containernetworking/plugins/pkg/testutils"
+	"github.com/dougbtv/whereabouts/pkg/allocate"
 	whereaboutstypes "github.com/dougbtv/whereabouts/pkg/types"
 
 	. "github.com/onsi/ginkgo"
@@ -126,6 +128,7 @@ var _ = Describe("Whereabouts operations", func() {
 		expectedAddress = "2001::1/116"
 
 		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, []string{expectedAddress}, whereaboutstypes.DatastoreETCD)
+
 	})
 
 	It("allocates and releases addresses on ADD/DEL with a Kubernetes backend", func() {
@@ -157,6 +160,17 @@ var _ = Describe("Whereabouts operations", func() {
 		expectedAddress = "2001::1/116"
 
 		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, []string{expectedAddress}, whereaboutstypes.DatastoreKubernetes)
+	})
+
+	It("allocates IPv6 addresses with DNS-1123 conformant naming with a Kubernetes backend", func() {
+
+		ipVersion := "6"
+		ipRange := "fd00:0:0:10:0:0:3:1-fd00:0:0:10:0:0:3:6/64"
+		ipGateway := "2001::f:1"
+		expectedAddress := "fd00:0:0:10:0:0:3:1/64"
+
+		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, []string{expectedAddress}, whereaboutstypes.DatastoreKubernetes)
+
 	})
 
 	It("excludes a range of addresses", func() {
@@ -209,6 +223,67 @@ var _ = Describe("Whereabouts operations", func() {
 				Version: "4",
 				Address: mustCIDR("192.168.1.32/24"),
 				Gateway: net.ParseIP("192.168.10.1"),
+			}))
+
+		// Release the IP
+		err = testutils.CmdDelWithArgs(args, func() error {
+			return cmdDel(args)
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+	})
+
+	It("excludes a range of IPv6 addresses", func() {
+		const ifname string = "eth0"
+		const nspath string = "/some/where"
+
+		conf := fmt.Sprintf(`{
+      "cniVersion": "0.3.1",
+      "name": "mynet",
+      "type": "ipvlan",
+      "master": "foo0",
+      "ipam": {
+        "type": "whereabouts",
+        "log_file" : "/tmp/whereabouts.log",
+				"log_level" : "debug",
+        "etcd_host": "%s",
+        "range": "2001::1/116",
+        "exclude": [
+          "2001::0/128",
+          "2001::1/128",
+          "2001::2/128"
+        ],
+        "gateway": "2001::f:1",
+        "routes": [
+          { "dst": "0.0.0.0/0" }
+        ]
+      }
+    }`, etcdHost)
+
+		args := &skel.CmdArgs{
+			ContainerID: "dummy",
+			Netns:       nspath,
+			IfName:      ifname,
+			StdinData:   []byte(conf),
+		}
+
+		// Allocate the IP
+		r, raw, err := testutils.CmdAddWithArgs(args, func() error {
+			return cmdAdd(args)
+		})
+		Expect(err).NotTo(HaveOccurred())
+		// fmt.Printf("!bang raw: %s\n", raw)
+		Expect(strings.Index(string(raw), "\"version\":")).Should(BeNumerically(">", 0))
+
+		result, err := current.GetResult(r)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Gomega is cranky about slices with different caps
+		Expect(*result.IPs[0]).To(Equal(
+			current.IPConfig{
+				Version: "6",
+				Address: mustCIDR("2001::3/116"),
+				Gateway: net.ParseIP("2001::f:1"),
 			}))
 
 		// Release the IP
@@ -415,6 +490,82 @@ var _ = Describe("Whereabouts operations", func() {
 			return cmdDel(args)
 		})
 		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("allocates addresses using range_end as an upper limit", func() {
+		const ifname string = "eth0"
+		const nspath string = "/some/where"
+
+		conf := fmt.Sprintf(`{
+			"cniVersion": "0.3.1",
+			"name": "mynet",
+			"type": "ipvlan",
+			"master": "foo0",
+			"ipam": {
+			  "type": "whereabouts",
+			  "log_file" : "/tmp/whereabouts.log",
+					  "log_level" : "debug",
+			  "etcd_host": "%s",
+			  "range": "192.168.1.0/24",
+			  "range_start": "192.168.1.5",
+			  "range_end": "192.168.1.12",
+			  "gateway": "192.168.10.1"
+			}
+		  }`, etcdHost)
+
+		var ipArgs []*skel.CmdArgs
+		// allocate 8 IPs (192.168.1.5 - 192.168.1.12); the entirety of the pool defined above
+		for i := 0; i < 8; i++ {
+			args := &skel.CmdArgs{
+				ContainerID: fmt.Sprintf("dummy-%d", i),
+				Netns:       nspath,
+				IfName:      ifname,
+				StdinData:   []byte(conf),
+			}
+			r, raw, err := testutils.CmdAddWithArgs(args, func() error {
+				return cmdAdd(args)
+			})
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(strings.Index(string(raw), "\"version\":")).Should(BeNumerically(">", 0))
+
+			result, err := current.GetResult(r)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(*result.IPs[0]).To(Equal(
+				current.IPConfig{
+					Version: "4",
+					Address: mustCIDR(fmt.Sprintf("192.168.1.%d/24", 5+i)),
+					Gateway: net.ParseIP("192.168.10.1"),
+				}))
+			ipArgs = append(ipArgs, args)
+		}
+
+		// assigning more IPs should result in error due to the defined range_start - range_end
+		args := &skel.CmdArgs{
+			ContainerID: fmt.Sprintf("dummy-failure"),
+			Netns:       nspath,
+			IfName:      ifname,
+			StdinData:   []byte(conf),
+		}
+		_, _, err := testutils.CmdAddWithArgs(args, func() error {
+			return cmdAdd(args)
+		})
+		Expect(err).To(HaveOccurred())
+		// ensure the error is of the correct type
+		switch e := errors.Unwrap(err); e.(type) {
+		case allocate.AssignmentError:
+		default:
+			Fail(fmt.Sprintf("expected AssignmentError, got: %s", e))
+		}
+
+		// Release assigned IPs
+		for _, args := range ipArgs {
+			err := testutils.CmdDelWithArgs(args, func() error {
+				return cmdDel(args)
+			})
+			Expect(err).NotTo(HaveOccurred())
+		}
 	})
 
 	It("fails when there's an invalid range specified", func() {

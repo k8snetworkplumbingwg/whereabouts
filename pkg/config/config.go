@@ -108,7 +108,7 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 		}
 		lastip, ipNet, err := net.ParseCIDR(r[1])
 		if err != nil {
-			return nil, "", fmt.Errorf("invalid CIDR %s: %s", r[1], err)
+			return nil, "", fmt.Errorf("invalid CIDR (do you have the 'range' parameter set for Whereabouts?) '%s': %s", r[1], err)
 		}
 		if !ipNet.Contains(firstip) {
 			return nil, "", fmt.Errorf("invalid range start for CIDR %s: %s", ipNet.String(), firstip)

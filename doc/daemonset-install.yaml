@@ -57,6 +57,7 @@ spec:
         app: whereabouts
         name: whereabouts
     spec:
+      hostNetwork: true      
       serviceAccountName: whereabouts
       nodeSelector:
         beta.kubernetes.io/arch: amd64
@@ -65,7 +66,7 @@ spec:
         effect: NoSchedule
       containers:
       - name: whereabouts
-        image: dougbtv/whereabouts:latest
+        image: docker.io/dougbtv/whereabouts:latest
         env:
         - name: WHEREABOUTS_NAMESPACE
           valueFrom:

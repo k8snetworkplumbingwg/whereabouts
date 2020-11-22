@@ -39,8 +39,8 @@ func cmdAdd(args *skel.CmdArgs) error {
 	logging.Debugf("Beginning IPAM for ContainerID: %v", args.ContainerID)
 	newip, err := storage.IPManagement(types.Allocate, *ipamConf, args.ContainerID)
 	if err != nil {
-		logging.Errorf("Error assigning IP: %s", err)
-		return fmt.Errorf("Error assigning IP: %s", err)
+		logging.Errorf("Error at storage engine: %s", err)
+		return fmt.Errorf("Error at storage engine: %w", err)
 	}
 
 	// Determine if v4 or v6.
@@ -77,16 +77,18 @@ func cmdDel(args *skel.CmdArgs) error {
 	logging.Debugf("ContainerID: %v", args.ContainerID)
 
 	_, err = storage.IPManagement(types.Deallocate, *ipamConf, args.ContainerID)
-	if err != nil {
+
+  if err != nil {
 		re, ok := err.(*types.IPNotFoundError)
-		if ok {
+	
+    if ok {
 			logging.Debugf("Cannot deallocate IP, it might not have been assigned by us, so ignoring. %s", re)
 		} else {
 			logging.Errorf("Error deallocating IP: %s", err)
 			return fmt.Errorf("Error deallocating IP: %s", err)
 		}
-	}
-
+	
+  }
 	return nil
 }
 
