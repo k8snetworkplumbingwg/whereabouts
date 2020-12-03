@@ -82,7 +82,7 @@ var _ = Describe("Allocation operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(fmt.Sprint(firstip)).To(Equal("2001::1"))
-		Expect(fmt.Sprint(lastip)).To(Equal("2001::ffe"))
+		Expect(fmt.Sprint(lastip)).To(Equal("2001::fff"))
 
 	})
 	It("creates an IPv6 range properly for 96 bits network address", func() {
@@ -96,7 +96,7 @@ var _ = Describe("Allocation operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(fmt.Sprint(firstip)).To(Equal("2001:db8:abcd:12::1"))
-		Expect(fmt.Sprint(lastip)).To(Equal("2001:db8:abcd:12::ffff:fffe"))
+		Expect(fmt.Sprint(lastip)).To(Equal("2001:db8:abcd:12::ffff:ffff"))
 
 	})
 	It("creates an IPv6 range properly for 64 bits network address", func() {
@@ -110,7 +110,7 @@ var _ = Describe("Allocation operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(fmt.Sprint(firstip)).To(Equal("2001:db8:abcd:12::1"))
-		Expect(fmt.Sprint(lastip)).To(Equal("2001:db8:abcd:12:ffff:ffff:ffff:fffe"))
+		Expect(fmt.Sprint(lastip)).To(Equal("2001:db8:abcd:12:ffff:ffff:ffff:ffff"))
 
 	})
 	It("do not fail when the mask meets minimum required", func() {

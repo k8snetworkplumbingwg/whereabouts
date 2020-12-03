@@ -115,15 +115,10 @@ MAINITERATION:
 		}
 
 		// We can try to work with the current IP
-		// However, let's skip 0-based addresses
-		// So go ahead and continue if the 4th/16th byte equals 0
+		// However, let's skip 0-based addresses in IPv4
 		ipbytes := i.Bytes()
 		if isIntIPv4(i) {
 			if ipbytes[5] == 0 {
-				continue
-			}
-		} else {
-			if ipbytes[15] == 0 {
 				continue
 			}
 		}
@@ -197,8 +192,12 @@ func GetIPRange(ip net.IP, ipnet net.IPNet) (net.IP, net.IP, error) {
 	// remove network and broadcast address from the  range
 	var incIP big.Int
 	incIP.SetInt64(1)
-	lowestiplong.Add(&lowestiplong, &incIP)   // fixes to remove network address
-	highestiplong.Sub(&highestiplong, &incIP) //fixes to remove broadcast address
+	// removes network address
+	lowestiplong.Add(&lowestiplong, &incIP)
+	// remove broadcast address, only when IPv4 (IPv6 doesn't have broadcast addresses)
+	if IsIPv4(ip) {
+		highestiplong.Sub(&highestiplong, &incIP)
+	}
 
 	// Convert to net.IPs
 	firstip := BigIntToIP(lowestiplong)
