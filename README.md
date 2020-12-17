@@ -60,8 +60,6 @@ Included here is an entire CNI configuration. Whereabouts only cares about the `
       "mode": "bridge",
       "ipam": {
         "type": "whereabouts",
-        "datastore": "kubernetes",
-        "kubernetes": { "kubeconfig": "/etc/cni/net.d/whereabouts.d/whereabouts.kubeconfig" },
         "range": "192.168.2.225/28",
         "exclude": [
            "192.168.2.229/30",
