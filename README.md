@@ -47,6 +47,19 @@ kubectl apply -f ./doc/daemonset-install.yaml -f ./doc/whereabouts.cni.cncf.io_i
 
 The daemonset installation requires Kubernetes Version 1.16 or later.
 
+### Installing with helm 3
+You can also install multus and whereabouts with helm 3 (helm 2 is not supported)
+
+```
+git clone https://github.com/k8snetworkplumbingwg/helm-charts.git
+cd helm-charts
+helm upgrade --install multus ./multus  --namespace kube-system
+helm upgrade --install whereabouts ./whereabouts --namespace kube-system
+
+```
+
+Helm will install the crd as well as the daemonset
+
 ## Example IPAM Config
 
 Included here is an entire CNI configuration. Whereabouts only cares about the `ipam` section of the CNI config. In particular this example uses the `macvlan` CNI plugin. (If you decide to copy this block and try it too, make sure that the `master` setting is set to a network interface name that exists on your nodes). Typically, you'll already have a CNI configuration for an existing CNI plugin in your cluster, and you'll just copy the `ipam` section and modify the values there.
