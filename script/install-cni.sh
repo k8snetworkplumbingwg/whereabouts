@@ -19,12 +19,30 @@ CNI_CONF_DIR=${CNI_CONF_DIR:-"/host/etc/cni/net.d"}
 mkdir -p $CNI_CONF_DIR/whereabouts.d
 WHEREABOUTS_KUBECONFIG=$CNI_CONF_DIR/whereabouts.d/whereabouts.kubeconfig
 WHEREABOUTS_FLATFILE=$CNI_CONF_DIR/whereabouts.d/whereabouts.conf
+WHEREABOUTS_KUBECONFIG_LITERAL=$(echo "$WHEREABOUTS_KUBECONFIG" | sed -e s'|/host||')
 
 # ------------------------------- Generate a "kube-config"
 SERVICE_ACCOUNT_PATH=/var/run/secrets/kubernetes.io/serviceaccount
 KUBE_CA_FILE=${KUBE_CA_FILE:-$SERVICE_ACCOUNT_PATH/ca.crt}
 SERVICEACCOUNT_TOKEN=$(cat $SERVICE_ACCOUNT_PATH/token)
 SKIP_TLS_VERIFY=${SKIP_TLS_VERIFY:-false}
+
+# Setup our logging routines
+
+function log()
+{
+    echo "$(date --iso-8601=seconds) ${1}"
+}
+
+function error()
+{
+    log "ERR:  {$1}"
+}
+
+function warn()
+{
+    log "WARN: {$1}"
+}
 
 
 # Check if we're running as a k8s pod.
@@ -43,6 +61,12 @@ if [ -f "$SERVICE_ACCOUNT_PATH/token" ]; then
     TLS_CFG="certificate-authority-data: $(cat $KUBE_CA_FILE | base64 | tr -d '\n')"
   fi
 
+  # Kubernetes service address must be wrapped if it is IPv6 address
+  KUBERNETES_SERVICE_HOST_WRAP=$KUBERNETES_SERVICE_HOST
+  if [ "$KUBERNETES_SERVICE_HOST_WRAP" != "${KUBERNETES_SERVICE_HOST_WRAP#*:[0-9a-fA-F]}" ]; then
+    KUBERNETES_SERVICE_HOST_WRAP=\[$KUBERNETES_SERVICE_HOST_WRAP\]
+  fi
+
   # Write a kubeconfig file for the CNI plugin.  Do this
   # to skip TLS verification for now.  We should eventually support
   # writing more complete kubeconfig files. This is only used
@@ -56,7 +80,7 @@ kind: Config
 clusters:
 - name: local
   cluster:
-    server: ${KUBERNETES_SERVICE_PROTOCOL:-https}://[${KUBERNETES_SERVICE_HOST}]:${KUBERNETES_SERVICE_PORT}
+    server: ${KUBERNETES_SERVICE_PROTOCOL:-https}://${KUBERNETES_SERVICE_HOST_WRAP}:${KUBERNETES_SERVICE_PORT}
     $TLS_CFG
 users:
 - name: whereabouts
@@ -77,7 +101,7 @@ EOF
 {
   "datastore": "kubernetes",
   "kubernetes": {
-    "kubeconfig": "${WHEREABOUTS_KUBECONFIG_FILE_HOST}"
+    "kubeconfig": "${WHEREABOUTS_KUBECONFIG_LITERAL}"
   },
   "log_file": "/tmp/whereabouts.log",
   "log_level": "debug"
