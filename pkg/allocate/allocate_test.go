@@ -85,6 +85,57 @@ var _ = Describe("Allocation operations", func() {
 		Expect(fmt.Sprint(lastip)).To(Equal("2001::fff"))
 
 	})
+
+	It("creates an IPv6 range when the first hextets's zeroes have been shortened", func() {
+
+		ip, ipnet, err := net.ParseCIDR("fd:db8:abcd:0012::0/96")
+		ip, _ = AddressRange(ipnet)
+
+		Expect(err).NotTo(HaveOccurred())
+
+		firstip, lastip, err := GetIPRange(net.ParseIP(ip.String()), *ipnet)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(fmt.Sprint(firstip)).To(Equal("fd:db8:abcd:12::1"))
+		Expect(fmt.Sprint(lastip)).To(Equal("fd:db8:abcd:12::ffff:ffff"))
+
+	})
+	It("!bang THIS DOESN'T WORK: creates an IPv6 range properly for 112 bits network address", func() {
+
+		//                               00fd:0100:0200:0030:0371:0000:0000:0000/112
+		// ip, ipnet, err := net.ParseCIDR("fd:100:200:30:371::0/112")
+		// ip, ipnet, err := net.ParseCIDR("fd:100:200:30:371::0/112")
+		ip, ipnet, err := net.ParseCIDR("fd:100:200:30:371::0/112")
+		// ip, ipnet, err := net.ParseCIDR("2001:0100:0200:0030:0371:0000:0000:0000/112")
+		ip, _ = AddressRange(ipnet)
+
+		Expect(err).NotTo(HaveOccurred())
+
+		firstip, lastip, err := GetIPRange(net.ParseIP(ip.String()), *ipnet)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(fmt.Sprint(firstip)).To(Equal("fd:100:200:30:371::1"))
+		Expect(fmt.Sprint(lastip)).To(Equal("fd:100:200:30:371::ffff"))
+
+	})
+	It("!bang THIS WORKS... creates an IPv6 range properly for 112 bits network address", func() {
+
+		//                               00fd:0100:0200:0030:0371:0000:0000:0000/112
+		// ip, ipnet, err := net.ParseCIDR("fd:100:200:30:371::0/112")
+		// ip, ipnet, err := net.ParseCIDR("fd:100:200:30:371::0/112")
+		// ip, ipnet, err := net.ParseCIDR("fd:100:200:30:371::0/112")
+		ip, ipnet, err := net.ParseCIDR("2001:0100:0200:0030:0371:0000:0000:0000/112")
+		ip, _ = AddressRange(ipnet)
+
+		Expect(err).NotTo(HaveOccurred())
+
+		firstip, lastip, err := GetIPRange(net.ParseIP(ip.String()), *ipnet)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(fmt.Sprint(firstip)).To(Equal("2001:100:200:30:371::1"))
+		Expect(fmt.Sprint(lastip)).To(Equal("2001:100:200:30:371::ffff"))
+
+	})
 	It("creates an IPv6 range properly for 96 bits network address", func() {
 
 		ip, ipnet, err := net.ParseCIDR("2001:db8:abcd:0012::0/96")

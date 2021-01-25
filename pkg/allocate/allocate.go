@@ -145,8 +145,74 @@ MAINITERATION:
 	return assignedip, reservelist, nil
 }
 
+func mergeIPAddress(net, host []byte) ([]byte, error) {
+	if len(net) != len(host) {
+		return nil, fmt.Errorf("not matched!")
+	}
+	addr := append([]byte{}, net...)
+	for i, _ := range(net) {
+		addr[i] = net[i] | host[i]
+	}
+	return addr, nil
+}
+
 // GetIPRange returns the first and last IP in a range
 func GetIPRange(ip net.IP, ipnet net.IPNet) (net.IP, net.IP, error) {
+	// ====== BEGIN =====
+	// TODO: consider need to have this check.... this is only for
+	// unit-testing code
+	//
+	// Good hints here: http://networkbit.ch/golang-ip-address-manipulation/
+	// Nice info on bitwise operations: https://yourbasic.org/golang/bitwise-operator-cheat-sheet/
+	// Get info about the mask.
+	mask := ipnet.Mask
+	ones, bits := mask.Size()
+	masklen := bits - ones
+
+	// Error when the mask isn't large enough.
+	if masklen < 2 {
+		return nil, nil, fmt.Errorf("Net mask is too short, must be 2 or more: %v", masklen)
+	}
+	// ====== END =====
+
+	// real code here
+	// NOTE:
+	// this function splits ip address into network part and host part
+	// first. Then start/end IP address should be following:
+	// start IP address <network part> + host part (0 or args)
+	// end IP address <network part> | <max value of host part bits (*1)>
+	// *1 should be the inverse from "network mask"
+	//				(e.g. ffffff00 -> 000000ff)
+
+	// get network part
+	network := ip.Mask(ipnet.Mask)
+	// get bitmask for host
+	hostMask := net.IPMask(append([]byte{}, ipnet.Mask...))
+	for i, n := range(hostMask) {
+		hostMask[i] = ^n
+	}
+	// get host part of ip
+	first := ip.Mask(net.IPMask(hostMask))
+	// if ip is just same as ipnet.IP, i.e. just network address,
+	// increment it for start ip
+	if ip.Equal(ipnet.IP) {
+		first[len(first)-1] = 0x1
+	}
+	// calculate last byte 
+	last := hostMask
+	// if IPv4 case, decrement 1 for broadcasting address
+	if ip.To4() != nil {
+		last[len(last)-1] -= 1
+	}
+	// get first ip and last ip based on network part + host part
+	firstIP, _ := mergeIPAddress([]byte(network), first)
+	lastIP , _ := mergeIPAddress([]byte(network), last)
+
+	return firstIP, lastIP, nil
+}
+
+// GetIPRange_ returns the first and last IP in a range
+func GetIPRange_(ip net.IP, ipnet net.IPNet) (net.IP, net.IP, error) {
 
 	// Good hints here: http://networkbit.ch/golang-ip-address-manipulation/
 	// Nice info on bitwise operations: https://yourbasic.org/golang/bitwise-operator-cheat-sheet/
@@ -206,6 +272,8 @@ func GetIPRange(ip net.IP, ipnet net.IPNet) (net.IP, net.IP, error) {
 	}
 	lastip := BigIntToIP(highestiplong)
 
+	logging.Debugf("!bang first/last: %v / %v", firstip, lastip)
+
 	return firstip, lastip, nil
 
 }
@@ -224,7 +292,7 @@ func BigIntToIP(inipint big.Int) net.IP {
 	var outip net.IP
 	outip = net.IP(make([]byte, net.IPv6len))
 	intbytes := inipint.Bytes()
-	if len(intbytes) == net.IPv6len {
+	if len(intbytes) > net.IPv4len+2 {
 		// This is an IPv6 address.
 		for i := 0; i < len(intbytes); i++ {
 			outip[i] = intbytes[i]
@@ -232,15 +300,40 @@ func BigIntToIP(inipint big.Int) net.IP {
 	} else {
 		// It's an IPv4 address.
 		for i := 0; i < len(intbytes); i++ {
+			// !bang WHY IS IT HAPPENING HERE!?
+			logging.Debugf("!bang, wtf: %v | ipv6len: %v | ipv4len: %v", len(intbytes), net.IPv6len, net.IPv4len)
 			outip[i+10] = intbytes[i]
 		}
 	}
+	logging.Debugf("!bang outip? %v", outip)
 	return outip
 }
 
 // IPToBigInt converts a net.IP to a big.Int
 func IPToBigInt(IPv6Addr net.IP) *big.Int {
 	IPv6Int := big.NewInt(0)
-	IPv6Int.SetBytes(IPv6Addr)
+	foo := []byte(IPv6Addr)
+	// shortholder := []byte()
+	// if len(foo) == net.IPv4len {
+	// 	if foo[0] == 0 {
+	// 		shortholder = []byte(0)
+	// 	}
+	// }
+	logging.Debugf("!bang foo: %v", foo)
+	logging.Debugf("!bang foo len: %v", len(foo))
+	IPv6Int.SetBytes(foo)
+	// !bang
+	// I need to figure out the byte size?
+	logging.Debugf("!bang binary: %b", IPv6Int)
+
+	if len(IPv6Int.Bytes()) > net.IPv4len+2 {
+		logging.Debugf("!bang what's the bytesize in IPToBigInt: %v", len(IPv6Int.Bytes()))
+		for i := net.IPv6len - len(IPv6Int.Bytes()); i > 0; i-- {
+			logging.Debugf("!bang HAPPENS ONCE!?")
+			// IPv6Int.Lsh(IPv6Int, uint(8))
+			// logging.Debugf("!bang after : %b", IPv6Int)
+		}
+	}
+
 	return IPv6Int
 }
