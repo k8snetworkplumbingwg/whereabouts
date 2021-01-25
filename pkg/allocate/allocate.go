@@ -206,6 +206,8 @@ func GetIPRange(ip net.IP, ipnet net.IPNet) (net.IP, net.IP, error) {
 	}
 	lastip := BigIntToIP(highestiplong)
 
+	logging.Debugf("!bang first/last: %v / %v", firstip, lastip)
+
 	return firstip, lastip, nil
 
 }
@@ -224,7 +226,7 @@ func BigIntToIP(inipint big.Int) net.IP {
 	var outip net.IP
 	outip = net.IP(make([]byte, net.IPv6len))
 	intbytes := inipint.Bytes()
-	if len(intbytes) == net.IPv6len {
+	if len(intbytes) > net.IPv4len+2 {
 		// This is an IPv6 address.
 		for i := 0; i < len(intbytes); i++ {
 			outip[i] = intbytes[i]
@@ -232,15 +234,40 @@ func BigIntToIP(inipint big.Int) net.IP {
 	} else {
 		// It's an IPv4 address.
 		for i := 0; i < len(intbytes); i++ {
+			// !bang WHY IS IT HAPPENING HERE!?
+			logging.Debugf("!bang, wtf: %v | ipv6len: %v | ipv4len: %v", len(intbytes), net.IPv6len, net.IPv4len)
 			outip[i+10] = intbytes[i]
 		}
 	}
+	logging.Debugf("!bang outip? %v", outip)
 	return outip
 }
 
 // IPToBigInt converts a net.IP to a big.Int
 func IPToBigInt(IPv6Addr net.IP) *big.Int {
 	IPv6Int := big.NewInt(0)
-	IPv6Int.SetBytes(IPv6Addr)
+	foo := []byte(IPv6Addr)
+	// shortholder := []byte()
+	// if len(foo) == net.IPv4len {
+	// 	if foo[0] == 0 {
+	// 		shortholder = []byte(0)
+	// 	}
+	// }
+	logging.Debugf("!bang foo: %v", foo)
+	logging.Debugf("!bang foo len: %v", len(foo))
+	IPv6Int.SetBytes(foo)
+	// !bang
+	// I need to figure out the byte size?
+	logging.Debugf("!bang binary: %b", IPv6Int)
+
+	if len(IPv6Int.Bytes()) > net.IPv4len+2 {
+		logging.Debugf("!bang what's the bytesize in IPToBigInt: %v", len(IPv6Int.Bytes()))
+		for i := net.IPv6len - len(IPv6Int.Bytes()); i > 0; i-- {
+			logging.Debugf("!bang HAPPENS ONCE!?")
+			// IPv6Int.Lsh(IPv6Int, uint(8))
+			// logging.Debugf("!bang after : %b", IPv6Int)
+		}
+	}
+
 	return IPv6Int
 }
