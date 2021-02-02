@@ -80,7 +80,7 @@ func toIPReservationList(allocations map[string]whereaboutsv1alpha1.IPAllocation
 			continue
 		}
 		ip := allocate.IPAddOffset(firstip, uint64(numOffset))
-		reservelist = append(reservelist, whereaboutstypes.IPReservation{IP: ip, ContainerID: a.ContainerID})
+		reservelist = append(reservelist, whereaboutstypes.IPReservation{IP: ip, ContainerID: a.ContainerID, PodRef: a.PodRef})
 	}
 	return reservelist
 }
@@ -89,7 +89,7 @@ func toAllocationMap(reservelist []whereaboutstypes.IPReservation, firstip net.I
 	allocations := make(map[string]whereaboutsv1alpha1.IPAllocation)
 	for _, r := range reservelist {
 		index := allocate.IPGetOffset(r.IP, firstip)
-		allocations[fmt.Sprintf("%d", index)] = whereaboutsv1alpha1.IPAllocation{ContainerID: r.ContainerID}
+		allocations[fmt.Sprintf("%d", index)] = whereaboutsv1alpha1.IPAllocation{ContainerID: r.ContainerID, PodRef: r.PodRef}
 	}
 	return allocations
 }

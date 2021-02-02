@@ -58,6 +58,7 @@ func AllocateAndReleaseAddressesTest(ipVersion string, ipRange string, ipGateway
 			Netns:       nspath,
 			IfName:      ifname,
 			StdinData:   []byte(conf),
+			Args:        "IgnoreUnknown=1;K8S_POD_NAMESPACE=dummyNS;K8S_POD_NAME=dummyPOD",
 		}
 
 		// Allocate the IP

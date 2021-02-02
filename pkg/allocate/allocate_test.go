@@ -259,7 +259,7 @@ var _ = Describe("Allocation operations", func() {
 
 		var ipres []types.IPReservation
 		var exrange []string
-		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef")
+		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
 		Expect(fmt.Sprint(newip)).To(Equal("192.168.1.1"))
 
 	})
@@ -274,7 +274,7 @@ var _ = Describe("Allocation operations", func() {
 
 		var ipres []types.IPReservation
 		var exrange []string
-		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef")
+		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
 		Expect(fmt.Sprint(newip)).To(Equal("caa5::1"))
 
 	})
@@ -289,7 +289,7 @@ var _ = Describe("Allocation operations", func() {
 
 		var ipres []types.IPReservation
 		var exrange []string
-		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef")
+		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
 		Expect(fmt.Sprint(newip)).To(Equal("::1"))
 
 	})
@@ -306,7 +306,7 @@ var _ = Describe("Allocation operations", func() {
 
 		var ipres []types.IPReservation
 		var exrange []string
-		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef")
+		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
 		Expect(fmt.Sprint(newip)).To(Equal("fd::1"))
 
 	})
@@ -321,7 +321,7 @@ var _ = Describe("Allocation operations", func() {
 
 		var ipres []types.IPReservation
 		var exrange []string
-		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef")
+		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
 		Expect(fmt.Sprint(newip)).To(Equal("100::2:1"))
 
 	})
