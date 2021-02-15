@@ -2,6 +2,7 @@ package allocate
 
 import (
 	"fmt"
+	"github.com/dougbtv/whereabouts/pkg/types"
 	"math/big"
 	"net"
 	"testing"
@@ -86,7 +87,7 @@ var _ = Describe("Allocation operations", func() {
 
 	})
 
-	It("creates an IPv6 range when the first hextets's zeroes have been shortened", func() {
+	It("creates an IPv6 range when the first hextet has leading zeroes", func() {
 
 		ip, ipnet, err := net.ParseCIDR("fd:db8:abcd:0012::0/96")
 		ip, _ = AddressRange(ipnet)
@@ -100,42 +101,84 @@ var _ = Describe("Allocation operations", func() {
 		Expect(fmt.Sprint(lastip)).To(Equal("fd:db8:abcd:12::ffff:ffff"))
 
 	})
-	It("!bang THIS DOESN'T WORK: creates an IPv6 range properly for 112 bits network address", func() {
 
-		//                               00fd:0100:0200:0030:0371:0000:0000:0000/112
-		// ip, ipnet, err := net.ParseCIDR("fd:100:200:30:371::0/112")
-		// ip, ipnet, err := net.ParseCIDR("fd:100:200:30:371::0/112")
-		ip, ipnet, err := net.ParseCIDR("fd:100:200:30:371::0/112")
-		// ip, ipnet, err := net.ParseCIDR("2001:0100:0200:0030:0371:0000:0000:0000/112")
-		ip, _ = AddressRange(ipnet)
+	It("can IterateForAssignment on an IPv4 address", func() {
 
+		firstip, ipnet, err := net.ParseCIDR("192.168.1.1/24")
 		Expect(err).NotTo(HaveOccurred())
 
-		firstip, lastip, err := GetIPRange(net.ParseIP(ip.String()), *ipnet)
-		Expect(err).NotTo(HaveOccurred())
+		// figure out the range start.
+		calculatedrangestart := net.ParseIP(firstip.Mask(ipnet.Mask).String())
 
-		Expect(fmt.Sprint(firstip)).To(Equal("fd:100:200:30:371::1"))
-		Expect(fmt.Sprint(lastip)).To(Equal("fd:100:200:30:371::ffff"))
+		var ipres []types.IPReservation
+		var exrange []string
+		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef")
+		Expect(fmt.Sprint(newip)).To(Equal("192.168.1.1"))
 
 	})
-	It("!bang THIS WORKS... creates an IPv6 range properly for 112 bits network address", func() {
 
-		//                               00fd:0100:0200:0030:0371:0000:0000:0000/112
-		// ip, ipnet, err := net.ParseCIDR("fd:100:200:30:371::0/112")
-		// ip, ipnet, err := net.ParseCIDR("fd:100:200:30:371::0/112")
-		// ip, ipnet, err := net.ParseCIDR("fd:100:200:30:371::0/112")
-		ip, ipnet, err := net.ParseCIDR("2001:0100:0200:0030:0371:0000:0000:0000/112")
-		ip, _ = AddressRange(ipnet)
+	It("can IterateForAssignment on an IPv6 address when the first hextet has NO leading zeroes", func() {
 
+		firstip, ipnet, err := net.ParseCIDR("caa5::0/112")
 		Expect(err).NotTo(HaveOccurred())
 
-		firstip, lastip, err := GetIPRange(net.ParseIP(ip.String()), *ipnet)
-		Expect(err).NotTo(HaveOccurred())
+		// figure out the range start.
+		calculatedrangestart := net.ParseIP(firstip.Mask(ipnet.Mask).String())
 
-		Expect(fmt.Sprint(firstip)).To(Equal("2001:100:200:30:371::1"))
-		Expect(fmt.Sprint(lastip)).To(Equal("2001:100:200:30:371::ffff"))
+		var ipres []types.IPReservation
+		var exrange []string
+		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef")
+		Expect(fmt.Sprint(newip)).To(Equal("caa5::1"))
 
 	})
+
+	It("can IterateForAssignment on an IPv6 address when the first hextet has ALL leading zeroes", func() {
+
+		firstip, ipnet, err := net.ParseCIDR("::1/126")
+		Expect(err).NotTo(HaveOccurred())
+
+		// figure out the range start.
+		calculatedrangestart := net.ParseIP(firstip.Mask(ipnet.Mask).String())
+
+		var ipres []types.IPReservation
+		var exrange []string
+		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef")
+		Expect(fmt.Sprint(newip)).To(Equal("::1"))
+
+	})
+
+	//
+
+	It("can IterateForAssignment on an IPv6 address when the first hextet has TWO leading zeroes", func() {
+
+		firstip, ipnet, err := net.ParseCIDR("fd::1/116")
+		Expect(err).NotTo(HaveOccurred())
+
+		// figure out the range start.
+		calculatedrangestart := net.ParseIP(firstip.Mask(ipnet.Mask).String())
+
+		var ipres []types.IPReservation
+		var exrange []string
+		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef")
+		Expect(fmt.Sprint(newip)).To(Equal("fd::1"))
+
+	})
+
+	It("can IterateForAssignment on an IPv6 address when the first hextet has leading zeroes", func() {
+
+		firstip, ipnet, err := net.ParseCIDR("100::2:1/126")
+		Expect(err).NotTo(HaveOccurred())
+
+		// figure out the range start.
+		calculatedrangestart := net.ParseIP(firstip.Mask(ipnet.Mask).String())
+
+		var ipres []types.IPReservation
+		var exrange []string
+		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef")
+		Expect(fmt.Sprint(newip)).To(Equal("100::2:1"))
+
+	})
+
 	It("creates an IPv6 range properly for 96 bits network address", func() {
 
 		ip, ipnet, err := net.ParseCIDR("2001:db8:abcd:0012::0/96")

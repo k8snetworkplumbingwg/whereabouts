@@ -81,7 +81,7 @@ func toIPReservationList(allocations map[string]whereaboutsv1alpha1.IPAllocation
 			logging.Errorf("Error decoding ip offset (backend: kubernetes): %v", err)
 			continue
 		}
-		ip := allocate.BigIntToIP(*big.NewInt(0).Add(i, big.NewInt(ipOffset)))
+		ip := allocate.BigIntToIP(*big.NewInt(0).Add(i, big.NewInt(ipOffset)), allocate.IsIPv4(firstip))
 		reservelist = append(reservelist, whereaboutstypes.IPReservation{IP: ip, ContainerID: a.ContainerID})
 	}
 	return reservelist

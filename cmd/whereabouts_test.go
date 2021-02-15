@@ -40,12 +40,12 @@ func AllocateAndReleaseAddressesTest(ipVersion string, ipRange string, ipGateway
 		  "type": "whereabouts",
 		  "datastore": "%s",
 		  "log_file" : "/tmp/whereabouts.log",
-				  "log_level" : "debug",
+		  "log_level" : "debug",
 		  %s,
 		  "range": "%s",
 		  "gateway": "%s",
 		  "routes": [
-			{ "dst": "0.0.0.0/0" }
+		    { "dst": "0.0.0.0/0" }
 		  ]
 		}
 	  }`, store, backend, ipRange, ipGateway)
@@ -158,6 +158,16 @@ var _ = Describe("Whereabouts operations", func() {
 		ipRange = "2001::1/116"
 		ipGateway = "2001::f:1"
 		expectedAddress = "2001::1/116"
+
+		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, []string{expectedAddress}, whereaboutstypes.DatastoreKubernetes)
+	})
+
+	It("allocates and releases an IPv6 address with left-hand zeroes on ADD/DEL with a Kubernetes backend", func() {
+
+		ipVersion := "6"
+		ipRange := "fd::1/116"
+		ipGateway := "fd::f:1"
+		expectedAddress := "fd::1/116"
 
 		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, []string{expectedAddress}, whereaboutstypes.DatastoreKubernetes)
 	})

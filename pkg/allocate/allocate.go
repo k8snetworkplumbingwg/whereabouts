@@ -86,11 +86,15 @@ func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, r
 			return net.IP{}, reservelist, err
 		}
 	}
+
+	// Check if this is ipv4mode
+	ipv4mode := IsIPv4(firstip)
+
 	logging.Debugf("IterateForAssignment input >> ip: %v | ipnet: %v | first IP: %v | last IP: %v", rangeStart, ipnet, firstip, lastip)
 
 	reserved := make(map[string]bool)
 	for _, r := range reservelist {
-		ip := BigIntToIP(*IPToBigInt(r.IP))
+		ip := BigIntToIP(*IPToBigInt(r.IP), ipv4mode)
 		reserved[ip.String()] = true
 	}
 
@@ -106,7 +110,10 @@ func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, r
 MAINITERATION:
 	for i := IPToBigInt(firstip); IPToBigInt(lastip).Cmp(i) == 1 || IPToBigInt(lastip).Cmp(i) == 0; i.Add(i, big.NewInt(1)) {
 
-		assignedip = BigIntToIP(*i)
+		// logging.Debugf("!trace firstip bigint: %v", i)
+
+		assignedip = BigIntToIP(*i, ipv4mode)
+		// logging.Debugf("!trace assignedip: %v", assignedip)
 		stringip := fmt.Sprint(assignedip)
 		// For each address see if it has been allocated
 		if reserved[stringip] {
@@ -117,15 +124,15 @@ MAINITERATION:
 		// We can try to work with the current IP
 		// However, let's skip 0-based addresses in IPv4
 		ipbytes := i.Bytes()
-		if isIntIPv4(i) {
-			if ipbytes[5] == 0 {
+		if ipv4mode {
+			if ipbytes[len(ipbytes)-1] == 0 {
 				continue
 			}
 		}
 
 		// Lastly, we need to check if this IP is within the range of excluded subnets
 		for _, subnet := range excluded {
-			if subnet.Contains(BigIntToIP(*i).To16()) {
+			if subnet.Contains(BigIntToIP(*i, ipv4mode).To16()) {
 				continue MAINITERATION
 			}
 		}
@@ -147,10 +154,10 @@ MAINITERATION:
 
 func mergeIPAddress(net, host []byte) ([]byte, error) {
 	if len(net) != len(host) {
-		return nil, fmt.Errorf("not matched!")
+		return nil, fmt.Errorf("netmask and host do not match")
 	}
 	addr := append([]byte{}, net...)
-	for i, _ := range(net) {
+	for i := range net {
 		addr[i] = net[i] | host[i]
 	}
 	return addr, nil
@@ -188,7 +195,7 @@ func GetIPRange(ip net.IP, ipnet net.IPNet) (net.IP, net.IP, error) {
 	network := ip.Mask(ipnet.Mask)
 	// get bitmask for host
 	hostMask := net.IPMask(append([]byte{}, ipnet.Mask...))
-	for i, n := range(hostMask) {
+	for i, n := range hostMask {
 		hostMask[i] = ^n
 	}
 	// get host part of ip
@@ -198,84 +205,17 @@ func GetIPRange(ip net.IP, ipnet net.IPNet) (net.IP, net.IP, error) {
 	if ip.Equal(ipnet.IP) {
 		first[len(first)-1] = 0x1
 	}
-	// calculate last byte 
+	// calculate last byte
 	last := hostMask
 	// if IPv4 case, decrement 1 for broadcasting address
 	if ip.To4() != nil {
-		last[len(last)-1] -= 1
+		last[len(last)-1]--
 	}
 	// get first ip and last ip based on network part + host part
 	firstIP, _ := mergeIPAddress([]byte(network), first)
-	lastIP , _ := mergeIPAddress([]byte(network), last)
+	lastIP, _ := mergeIPAddress([]byte(network), last)
 
 	return firstIP, lastIP, nil
-}
-
-// GetIPRange_ returns the first and last IP in a range
-func GetIPRange_(ip net.IP, ipnet net.IPNet) (net.IP, net.IP, error) {
-
-	// Good hints here: http://networkbit.ch/golang-ip-address-manipulation/
-	// Nice info on bitwise operations: https://yourbasic.org/golang/bitwise-operator-cheat-sheet/
-	// Get info about the mask.
-	mask := ipnet.Mask
-	ones, bits := mask.Size()
-	masklen := bits - ones
-
-	// Error when the mask isn't large enough.
-	if masklen < 2 {
-		return nil, nil, fmt.Errorf("Net mask is too short, must be 2 or more: %v", masklen)
-	}
-
-	// Get a long from the current IP address
-	longip := IPToBigInt(ip)
-
-	// Shift out to get the lowest IP value.
-	var lowestiplong big.Int
-	lowestiplong.Rsh(longip, uint(masklen))
-	lowestiplong.Lsh(&lowestiplong, uint(masklen))
-
-	// Get the mask as a long, shift it out
-	var masklong big.Int
-	// We need to generate the largest number...
-	// Let's try to figure out if it's IPv4 or v6
-	var maxval big.Int
-	if len(lowestiplong.Bytes()) == net.IPv6len {
-		// It's v6
-		// Maximum IPv6 value: 0xffffffffffffffffffffffffffffffff
-		maxval.SetString("0xffffffffffffffffffffffffffffffff", 0)
-	} else {
-		// It's v4
-		// Maximum IPv4 value: 4294967295
-		maxval.SetUint64(4294967295)
-	}
-
-	masklong.Rsh(&maxval, uint(ones))
-
-	// Now figure out the highest value...
-	// We can OR that value...
-	var highestiplong big.Int
-	highestiplong.Or(&lowestiplong, &masklong)
-	// remove network and broadcast address from the  range
-	var incIP big.Int
-	incIP.SetInt64(1)
-	// removes network address
-	lowestiplong.Add(&lowestiplong, &incIP)
-	// remove broadcast address, only when IPv4 (IPv6 doesn't have broadcast addresses)
-	if IsIPv4(ip) {
-		highestiplong.Sub(&highestiplong, &incIP)
-	}
-
-	// Convert to net.IPs
-	firstip := BigIntToIP(lowestiplong)
-	if lowestiplong.Cmp(longip) < 0 { // if range_start was provided and its greater.
-		firstip = BigIntToIP(*longip)
-	}
-	lastip := BigIntToIP(highestiplong)
-
-	logging.Debugf("!bang first/last: %v / %v", firstip, lastip)
-
-	return firstip, lastip, nil
-
 }
 
 // IsIPv4 checks if an IP is v4.
@@ -288,52 +228,45 @@ func isIntIPv4(checkipint *big.Int) bool {
 }
 
 // BigIntToIP converts a big.Int to a net.IP
-func BigIntToIP(inipint big.Int) net.IP {
+func BigIntToIP(inipint big.Int, isipv4 bool) net.IP {
 	var outip net.IP
-	outip = net.IP(make([]byte, net.IPv6len))
 	intbytes := inipint.Bytes()
-	if len(intbytes) > net.IPv4len+2 {
-		// This is an IPv6 address.
+
+	// For IPv6 addresses
+	if !isipv4 {
+		outip = net.IP(make([]byte, net.IPv6len))
+
+		// We want to pad bytes to the left of this INT until we have an IPv6 length.
+		if len(intbytes) < net.IPv6len {
+			offsetnumberofbytes := net.IPv6len - len(intbytes)
+			for m := 0; m < offsetnumberofbytes; m++ {
+				intbytes = append(make([]byte, 1), intbytes...)
+			}
+		}
+
+		// Assign the bytes.
 		for i := 0; i < len(intbytes); i++ {
 			outip[i] = intbytes[i]
 		}
-	} else {
-		// It's an IPv4 address.
-		for i := 0; i < len(intbytes); i++ {
-			// !bang WHY IS IT HAPPENING HERE!?
-			logging.Debugf("!bang, wtf: %v | ipv6len: %v | ipv4len: %v", len(intbytes), net.IPv6len, net.IPv4len)
-			outip[i+10] = intbytes[i]
-		}
+
 	}
-	logging.Debugf("!bang outip? %v", outip)
+
+	// It's an IPv4 address.
+	// Make a phony IPv4 address so we get the "magic bytes" (10 & 11 == 255)
+	outip = net.ParseIP("0.0.0.0")
+
+	for i := 0; i < len(intbytes); i++ {
+		outip[15-i] = intbytes[len(intbytes)-i-1]
+	}
 	return outip
+
 }
 
 // IPToBigInt converts a net.IP to a big.Int
 func IPToBigInt(IPv6Addr net.IP) *big.Int {
 	IPv6Int := big.NewInt(0)
 	foo := []byte(IPv6Addr)
-	// shortholder := []byte()
-	// if len(foo) == net.IPv4len {
-	// 	if foo[0] == 0 {
-	// 		shortholder = []byte(0)
-	// 	}
-	// }
-	logging.Debugf("!bang foo: %v", foo)
-	logging.Debugf("!bang foo len: %v", len(foo))
 	IPv6Int.SetBytes(foo)
-	// !bang
-	// I need to figure out the byte size?
-	logging.Debugf("!bang binary: %b", IPv6Int)
-
-	if len(IPv6Int.Bytes()) > net.IPv4len+2 {
-		logging.Debugf("!bang what's the bytesize in IPToBigInt: %v", len(IPv6Int.Bytes()))
-		for i := net.IPv6len - len(IPv6Int.Bytes()); i > 0; i-- {
-			logging.Debugf("!bang HAPPENS ONCE!?")
-			// IPv6Int.Lsh(IPv6Int, uint(8))
-			// logging.Debugf("!bang after : %b", IPv6Int)
-		}
-	}
 
 	return IPv6Int
 }
