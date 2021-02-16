@@ -130,14 +130,14 @@ The same applies for the usage of IPv6:
 
 **Required**
 
-Three parameters are required:
+These parameters are required:
 
 * `type`: This should be set to `whereabouts`.
 * `range`: This specifies the range in which IP addresses will be allocated.
 
-In this case the `range` is set to `192.168.2.225/28`, this will allocate IP addresses in the range excluding the first network address and the last broadcast address.
+If for example the `range` is set to `192.168.2.225/28`, this will allocate IP addresses in the range excluding the first network address and the last broadcast address.
 
-If you need a tool to figure out the range of a given CIDR address, try this online tool, [subnet-calculator.com](http://www.subnet-calculator.com/).
+If you need a tool to figure out the range of a given CIDR address, try this online tool, [subnet-calculator.com](http://www.subnet-calculator.com/) or an [IPv6 subnet calculator](https://www.vultr.com/resources/subnet-calculator-ipv6/).
 
 **Range end syntax**
 
