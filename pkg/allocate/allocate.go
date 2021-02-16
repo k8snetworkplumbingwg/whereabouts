@@ -75,11 +75,11 @@ func removeIdxFromSlice(s []types.IPReservation, i int) []types.IPReservation {
 	return s[:len(s)-1]
 }
 
-// byteSliseAdd adds ar1 to ar2
+// byteSliceAdd adds ar1 to ar2
 // note: ar1/ar2 should be 16-length array
-func byteSliseAdd(ar1, ar2 []byte) ([]byte, error) {
+func byteSliceAdd(ar1, ar2 []byte) ([]byte, error) {
 	if len(ar1) != len(ar2) {
-		return nil, fmt.Errorf("byteSliseAdd: bytes array mismatch: %v != %v", len(ar1), len(ar2))
+		return nil, fmt.Errorf("byteSliceAdd: bytes array mismatch: %v != %v", len(ar1), len(ar2))
 	}
 	carry := uint(0)
 
@@ -97,11 +97,11 @@ func byteSliseAdd(ar1, ar2 []byte) ([]byte, error) {
 	return sumByte, nil
 }
 
-// byteSliseSub subtract ar2 from ar1. This function assumes that ar1 > ar2
+// byteSliceSub subtracts ar2 from ar1. This function assumes that ar1 > ar2
 // note: ar1/ar2 should be 16-length array
-func byteSliseSub(ar1, ar2 []byte) ([]byte, error) {
+func byteSliceSub(ar1, ar2 []byte) ([]byte, error) {
 	if len(ar1) != len(ar2) {
-		return nil, fmt.Errorf("byteSliseSub: bytes array mismatch")
+		return nil, fmt.Errorf("byteSliceSub: bytes array mismatch")
 	}
 	carry := int(0)
 
@@ -155,7 +155,7 @@ func IPGetOffset(ip1, ip2 net.IP) uint64 {
 		return 0
 	}
 
-	ipOffset, _ := byteSliseSub([]byte(ip1.To16()), []byte(ip2.To16()))
+	ipOffset, _ := byteSliceSub([]byte(ip1.To16()), []byte(ip2.To16()))
 	return ipAddrToUint64(ipOffset)
 }
 
@@ -169,7 +169,7 @@ func IPAddOffset(ip net.IP, offset uint64) net.IP {
 	// make pseudo IP variable for offset
 	idxIP := ipAddrFromUint64(offset)
 
-	b, _ := byteSliseAdd([]byte(ip.To16()), []byte(idxIP))
+	b, _ := byteSliceAdd([]byte(ip.To16()), []byte(idxIP))
 	return net.IP(b)
 }
 
