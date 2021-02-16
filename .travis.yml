@@ -17,6 +17,7 @@ install:
   - ./hack/install-kubebuilder-tools.sh
 
 before_script:
+  - docker login -u "$REGISTRY_USER" -p "$REGISTRY_PASS";
   - ./hack/generate-code.sh
   # - bash -c 'git diff pkg/ doc/ && git diff-index --quiet HEAD -- pkg/ doc/'
   - golint pkg/... cmd/...
