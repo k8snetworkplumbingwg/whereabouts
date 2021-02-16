@@ -19,8 +19,8 @@ func TestAllocate(t *testing.T) {
 
 var _ = Describe("Allocation utility functions", func() {
 	/*
-		func byteSliseAdd(ar1, ar2 []byte) ([]byte, error) {
-		func byteSliseSub(ar1, ar2 []byte) ([]byte, error) {
+		func byteSliceAdd(ar1, ar2 []byte) ([]byte, error) {
+		func byteSliceSub(ar1, ar2 []byte) ([]byte, error) {
 		func ipAddrToUint64(ip net.IP) uint64 {
 		func ipAddrFromUint64(num uint64) net.IP {
 		func IPAddOffset(ip net.IP, offset uint64) net.IP {
@@ -29,7 +29,7 @@ var _ = Describe("Allocation utility functions", func() {
 	It("tests byteSliceAdd normal case", func() {
 		b1 := []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1}
 		b2 := []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10, 10}
-		bSum, err := byteSliseAdd(b1, b2)
+		bSum, err := byteSliceAdd(b1, b2)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(bSum).To(Equal([]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 11, 11}))
 	})
@@ -37,7 +37,7 @@ var _ = Describe("Allocation utility functions", func() {
 	It("tests byteSliceAdd carry case", func() {
 		b1 := []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255}
 		b2 := []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
-		bSum, err := byteSliseAdd(b1, b2)
+		bSum, err := byteSliceAdd(b1, b2)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(bSum).To(Equal([]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0}))
 	})
@@ -45,7 +45,7 @@ var _ = Describe("Allocation utility functions", func() {
 	It("tests byteSliceSub normal case", func() {
 		b1 := []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10, 10}
 		b2 := []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1}
-		bSum, err := byteSliseSub(b1, b2)
+		bSum, err := byteSliceSub(b1, b2)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(bSum).To(Equal([]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9, 9}))
 	})
@@ -53,25 +53,25 @@ var _ = Describe("Allocation utility functions", func() {
 	It("tests byteSliceSub carry case", func() {
 		b1 := []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0}
 		b2 := []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
-		bSum, err := byteSliseSub(b1, b2)
+		bSum, err := byteSliceSub(b1, b2)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(bSum).To(Equal([]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255}))
 	})
 
-	It("ipAddrToUint64", func() {
+	It("can convert ipAddrToUint64", func() {
 		b := []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 255, 255}
 		bNum := ipAddrToUint64(net.IP(b))
 		Expect(bNum).To(Equal(uint64(0x1ffff)))
 	})
 
-	It("ipAddrFromUint64", func() {
+	It("can convert ipAddrFromUint64", func() {
 		uintNum := uint64(0x1ffff)
 		ip := net.IP([]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 255, 255})
 		bNum := ipAddrFromUint64(uintNum)
 		Expect(bNum).To(Equal(ip))
 	})
 
-	It("IPAddOffset normal case", func() {
+	It("confirms the IPAddOffset normal case", func() {
 		ip1 := net.ParseIP("192.168.2.23")
 		ip2 := IPAddOffset(ip1, uint64(1))
 		Expect(ip2).To(Equal(net.ParseIP("192.168.2.24")))
@@ -81,7 +81,7 @@ var _ = Describe("Allocation utility functions", func() {
 		Expect(ip4).To(Equal(net.ParseIP("ff02::2")))
 	})
 
-	It("IPAddOffset carry case", func() {
+	It("confirms the IPAddOffset carry case", func() {
 		ip1 := net.ParseIP("192.168.2.255")
 		ip2 := IPAddOffset(ip1, uint64(1))
 		Expect(ip2).To(Equal(net.ParseIP("192.168.3.0")))
@@ -103,7 +103,7 @@ var _ = Describe("Allocation utility functions", func() {
 		Expect(ip10).To(Equal(net.ParseIP("ff02::1:0:0")))
 	})
 
-	It("IPAddOffset error case", func() {
+	It("confirms the IPAddOffset error case", func() {
 		ip1 := net.ParseIP("192.168.2.255")
 		ip2 := IPAddOffset(ip1, uint64(math.MaxUint32+1))
 		Expect(ip2).To(BeNil())
@@ -113,7 +113,7 @@ var _ = Describe("Allocation utility functions", func() {
 		Expect(ip4).NotTo(BeNil())
 	})
 
-	It("IPGetOffset normal case", func() {
+	It("confirms the IPGetOffset normal case", func() {
 		ip1 := net.ParseIP("192.168.2.255")
 		ip2 := net.ParseIP("192.168.2.1")
 		offset1 := IPGetOffset(ip1, ip2)
@@ -125,7 +125,7 @@ var _ = Describe("Allocation utility functions", func() {
 		Expect(offset2).To(Equal(uint64(254)))
 	})
 
-	It("IPGetOffset carry case", func() {
+	It("confirms the IPGetOffset carry case", func() {
 		ip1 := net.ParseIP("192.168.3.0")
 		ip2 := net.ParseIP("192.168.2.1")
 		offset1 := IPGetOffset(ip1, ip2)
@@ -142,7 +142,7 @@ var _ = Describe("Allocation utility functions", func() {
 		Expect(offset3).To(Equal(uint64(0xffff)))
 	})
 
-	It("IPGetOffset error case", func() {
+	It("confirms the IPGetOffset error case", func() {
 		// cannot get offset from v4/v6
 		ip1 := net.ParseIP("192.168.3.0")
 		ip2 := net.ParseIP("ff02::1")
