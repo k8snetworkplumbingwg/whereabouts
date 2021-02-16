@@ -161,6 +161,16 @@ var _ = Describe("Whereabouts operations", func() {
 		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, []string{expectedAddress}, whereaboutstypes.DatastoreKubernetes)
 	})
 
+	It("allocates and releases an IPv6 address with left-hand zeroes on ADD/DEL with a Kubernetes backend", func() {
+
+		ipVersion := "6"
+		ipRange := "fd::1/116"
+		ipGateway := "fd::f:1"
+		expectedAddress := "fd::1/116"
+
+		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, []string{expectedAddress}, whereaboutstypes.DatastoreKubernetes)
+	})
+
 	It("detects IPv4 addresses used in other ranges, to allow for overlapping IP address ranges", func() {
 		const ifname string = "eth0"
 		const nspath string = "/some/where"
