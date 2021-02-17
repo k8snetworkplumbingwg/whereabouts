@@ -64,7 +64,7 @@ func New(config *rest.Config, options Options) (Client, error) {
 	// Init a Mapper if none provided
 	if options.Mapper == nil {
 		var err error
-		options.Mapper, err = apiutil.NewDiscoveryRESTMapper(config)
+		options.Mapper, err = apiutil.NewDynamicRESTMapper(config)
 		if err != nil {
 			return nil, err
 		}
@@ -105,7 +105,7 @@ type client struct {
 }
 
 // resetGroupVersionKind is a helper function to restore and preserve GroupVersionKind on an object.
-// TODO(vincepri): Remove this function and its calls once    controller-runtime dependencies are upgraded to 1.15.
+// TODO(vincepri): Remove this function and its calls once controller-runtime dependencies are upgraded to 1.16?
 func (c *client) resetGroupVersionKind(obj runtime.Object, gvk schema.GroupVersionKind) {
 	if gvk != schema.EmptyObjectKind.GroupVersionKind() {
 		if v, ok := obj.(schema.ObjectKind); ok {
