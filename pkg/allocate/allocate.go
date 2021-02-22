@@ -2,7 +2,7 @@ package allocate
 
 import (
 	"fmt"
-	"math/big"
+	"math"
 	"net"
 
 	"github.com/dougbtv/whereabouts/pkg/logging"
@@ -75,9 +75,106 @@ func removeIdxFromSlice(s []types.IPReservation, i int) []types.IPReservation {
 	return s[:len(s)-1]
 }
 
+// byteSliceAdd adds ar1 to ar2
+// note: ar1/ar2 should be 16-length array
+func byteSliceAdd(ar1, ar2 []byte) ([]byte, error) {
+	if len(ar1) != len(ar2) {
+		return nil, fmt.Errorf("byteSliceAdd: bytes array mismatch: %v != %v", len(ar1), len(ar2))
+	}
+	carry := uint(0)
+
+	sumByte := make([]byte, 16)
+	for n := range ar1 {
+		var sum uint
+		sum = uint(ar1[15-n]) + uint(ar2[15-n]) + carry
+		carry = 0
+		if sum > 255 {
+			carry = 1
+		}
+		sumByte[15-n] = uint8(sum)
+	}
+
+	return sumByte, nil
+}
+
+// byteSliceSub subtracts ar2 from ar1. This function assumes that ar1 > ar2
+// note: ar1/ar2 should be 16-length array
+func byteSliceSub(ar1, ar2 []byte) ([]byte, error) {
+	if len(ar1) != len(ar2) {
+		return nil, fmt.Errorf("byteSliceSub: bytes array mismatch")
+	}
+	carry := int(0)
+
+	sumByte := make([]byte, 16)
+	for n := range ar1 {
+		var sum int
+		sum = int(ar1[15-n]) - int(ar2[15-n]) - carry
+		if sum < 0 {
+			sum = 0x100 - int(ar1[15-n]) - int(ar2[15-n]) - carry
+			carry = 1
+		} else {
+			carry = 0
+		}
+		sumByte[15-n] = uint8(sum)
+	}
+
+	return sumByte, nil
+}
+
+func ipAddrToUint64(ip net.IP) uint64 {
+	num := uint64(0)
+	ipArray := []byte(ip)
+	for n := range ipArray {
+		num = num << 8
+		num = uint64(ipArray[n]) + num
+	}
+	return num
+}
+
+func ipAddrFromUint64(num uint64) net.IP {
+	idxByte := make([]byte, 16)
+	i := num
+	for n := range idxByte {
+		idxByte[15-n] = byte(0xff & i)
+		i = i >> 8
+	}
+	return net.IP(idxByte)
+}
+
+// IPGetOffset gets offset between ip1 and ip2. This assumes ip1 > ip2 (from IP representation point of view)
+func IPGetOffset(ip1, ip2 net.IP) uint64 {
+	if ip1.To4() == nil && ip2.To4() != nil {
+		return 0
+	}
+
+	if ip1.To4() != nil && ip2.To4() == nil {
+		return 0
+	}
+
+	if len([]byte(ip1)) != len([]byte(ip2)) {
+		return 0
+	}
+
+	ipOffset, _ := byteSliceSub([]byte(ip1.To16()), []byte(ip2.To16()))
+	return ipAddrToUint64(ipOffset)
+}
+
+// IPAddOffset show IP address plus given offset
+func IPAddOffset(ip net.IP, offset uint64) net.IP {
+	// Check IPv4 and its offset range
+	if ip.To4() != nil && offset >= math.MaxUint32 {
+		return nil
+	}
+
+	// make pseudo IP variable for offset
+	idxIP := ipAddrFromUint64(offset)
+
+	b, _ := byteSliceAdd([]byte(ip.To16()), []byte(idxIP))
+	return net.IP(b)
+}
+
 // IterateForAssignment iterates given an IP/IPNet and a list of reserved IPs
 func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, reservelist []types.IPReservation, excludeRanges []string, containerID string) (net.IP, []types.IPReservation, error) {
-
 	firstip := rangeStart
 	var lastip net.IP
 	if rangeEnd != nil {
@@ -94,10 +191,10 @@ func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, r
 
 	reserved := make(map[string]bool)
 	for _, r := range reservelist {
-		ip := BigIntToIP(*IPToBigInt(r.IP))
-		reserved[ip.String()] = true
+		reserved[r.IP.String()] = true
 	}
 
+	// excluded,            "192.168.2.229/30", "192.168.1.229/30",
 	excluded := []*net.IPNet{}
 	for _, v := range excludeRanges {
 		_, subnet, _ := net.ParseCIDR(v)
@@ -107,37 +204,29 @@ func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, r
 	// Iterate every IP address in the range
 	var assignedip net.IP
 	performedassignment := false
-MAINITERATION:
-	for i := IPToBigInt(firstip); IPToBigInt(lastip).Cmp(i) == 1 || IPToBigInt(lastip).Cmp(i) == 0; i.Add(i, big.NewInt(1)) {
-
-		assignedip = BigIntToIP(*i)
-		stringip := fmt.Sprint(assignedip)
-		// For each address see if it has been allocated
-		if reserved[stringip] {
-			// Continue if this IP is allocated.
+	endip := IPAddOffset(lastip, uint64(1))
+	for i := firstip; !i.Equal(endip); i = IPAddOffset(i, uint64(1)) {
+		// if already reserved, skip it
+		if reserved[i.String()] {
 			continue
 		}
 
-		// We can try to work with the current IP
-		// However, let's skip 0-based addresses in IPv4
-		ipbytes := i.Bytes()
-		if isIntIPv4(i) {
-			if ipbytes[5] == 0 {
-				continue
+		// Lastly, we need to check if this IP is within the range of excluded subnets
+		isAddrExcluded := false
+		for _, subnet := range excluded {
+			if subnet.Contains(i) {
+				isAddrExcluded = true
 			}
 		}
-
-		// Lastly, we need to check if this IP is within the range of excluded subnets
-		for _, subnet := range excluded {
-			if subnet.Contains(BigIntToIP(*i).To16()) {
-				continue MAINITERATION
-			}
+		if isAddrExcluded {
+			continue
 		}
 
 		// Ok, this one looks like we can assign it!
 		performedassignment = true
 
-		logging.Debugf("Reserving IP: |%v|", stringip+" "+containerID)
+		assignedip = i
+		logging.Debugf("Reserving IP: |%v|", assignedip.String()+" "+containerID)
 		reservelist = append(reservelist, types.IPReservation{IP: assignedip, ContainerID: containerID})
 		break
 	}
@@ -149,12 +238,19 @@ MAINITERATION:
 	return assignedip, reservelist, nil
 }
 
+func mergeIPAddress(net, host []byte) ([]byte, error) {
+	if len(net) != len(host) {
+		return nil, fmt.Errorf("not matched")
+	}
+	addr := append([]byte{}, net...)
+	for i := range net {
+		addr[i] = net[i] | host[i]
+	}
+	return addr, nil
+}
+
 // GetIPRange returns the first and last IP in a range
 func GetIPRange(ip net.IP, ipnet net.IPNet) (net.IP, net.IP, error) {
-
-	// Good hints here: http://networkbit.ch/golang-ip-address-manipulation/
-	// Nice info on bitwise operations: https://yourbasic.org/golang/bitwise-operator-cheat-sheet/
-	// Get info about the mask.
 	mask := ipnet.Mask
 	ones, bits := mask.Size()
 	masklen := bits - ones
@@ -164,87 +260,34 @@ func GetIPRange(ip net.IP, ipnet net.IPNet) (net.IP, net.IP, error) {
 		return nil, nil, fmt.Errorf("Net mask is too short, must be 2 or more: %v", masklen)
 	}
 
-	// Get a long from the current IP address
-	longip := IPToBigInt(ip)
-
-	// Shift out to get the lowest IP value.
-	var lowestiplong big.Int
-	lowestiplong.Rsh(longip, uint(masklen))
-	lowestiplong.Lsh(&lowestiplong, uint(masklen))
-
-	// Get the mask as a long, shift it out
-	var masklong big.Int
-	// We need to generate the largest number...
-	// Let's try to figure out if it's IPv4 or v6
-	var maxval big.Int
-	if len(lowestiplong.Bytes()) == net.IPv6len {
-		// It's v6
-		// Maximum IPv6 value: 0xffffffffffffffffffffffffffffffff
-		maxval.SetString("0xffffffffffffffffffffffffffffffff", 0)
-	} else {
-		// It's v4
-		// Maximum IPv4 value: 4294967295
-		maxval.SetUint64(4294967295)
+	// get network part
+	network := ip.Mask(ipnet.Mask)
+	// get bitmask for host
+	hostMask := net.IPMask(append([]byte{}, ipnet.Mask...))
+	for i, n := range hostMask {
+		hostMask[i] = ^n
 	}
-
-	masklong.Rsh(&maxval, uint(ones))
-
-	// Now figure out the highest value...
-	// We can OR that value...
-	var highestiplong big.Int
-	highestiplong.Or(&lowestiplong, &masklong)
-	// remove network and broadcast address from the  range
-	var incIP big.Int
-	incIP.SetInt64(1)
-	// removes network address
-	lowestiplong.Add(&lowestiplong, &incIP)
-	// remove broadcast address, only when IPv4 (IPv6 doesn't have broadcast addresses)
-	if IsIPv4(ip) {
-		highestiplong.Sub(&highestiplong, &incIP)
+	// get host part of ip
+	first := ip.Mask(net.IPMask(hostMask))
+	// if ip is just same as ipnet.IP, i.e. just network address,
+	// increment it for start ip
+	if ip.Equal(ipnet.IP) {
+		first[len(first)-1] = 0x1
 	}
-
-	// Convert to net.IPs
-	firstip := BigIntToIP(lowestiplong)
-	if lowestiplong.Cmp(longip) < 0 { // if range_start was provided and its greater.
-		firstip = BigIntToIP(*longip)
+	// calculate last byte
+	last := hostMask
+	// if IPv4 case, decrement 1 for broadcasting address
+	if ip.To4() != nil {
+		last[len(last)-1]--
 	}
-	lastip := BigIntToIP(highestiplong)
+	// get first ip and last ip based on network part + host part
+	firstIP, _ := mergeIPAddress([]byte(network), first)
+	lastIP, _ := mergeIPAddress([]byte(network), last)
 
-	return firstip, lastip, nil
-
+	return firstIP, lastIP, nil
 }
 
 // IsIPv4 checks if an IP is v4.
 func IsIPv4(checkip net.IP) bool {
 	return checkip.To4() != nil
-}
-
-func isIntIPv4(checkipint *big.Int) bool {
-	return !(len(checkipint.Bytes()) == net.IPv6len)
-}
-
-// BigIntToIP converts a big.Int to a net.IP
-func BigIntToIP(inipint big.Int) net.IP {
-	var outip net.IP
-	outip = net.IP(make([]byte, net.IPv6len))
-	intbytes := inipint.Bytes()
-	if len(intbytes) == net.IPv6len {
-		// This is an IPv6 address.
-		for i := 0; i < len(intbytes); i++ {
-			outip[i] = intbytes[i]
-		}
-	} else {
-		// It's an IPv4 address.
-		for i := 0; i < len(intbytes); i++ {
-			outip[i+10] = intbytes[i]
-		}
-	}
-	return outip
-}
-
-// IPToBigInt converts a net.IP to a big.Int
-func IPToBigInt(IPv6Addr net.IP) *big.Int {
-	IPv6Int := big.NewInt(0)
-	IPv6Int.SetBytes(IPv6Addr)
-	return IPv6Int
 }
