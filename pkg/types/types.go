@@ -2,7 +2,7 @@ package types
 
 import (
 	"net"
-
+    "fmt"
 	cnitypes "github.com/containernetworking/cni/pkg/types"
 )
 
@@ -79,3 +79,13 @@ const (
 	// Deallocate operation identifier
 	Deallocate = 1
 )
+
+
+// IPNotFoundError represents an error finding a specific IP during the deallocation process for a container.
+type IPNotFoundError struct {
+	ContainerID string
+}
+
+func (e *IPNotFoundError) Error() string {
+	return fmt.Sprintf("Did not find reserved IP for container %v", e.ContainerID)
+}
