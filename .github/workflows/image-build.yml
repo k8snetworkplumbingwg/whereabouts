@@ -37,7 +37,7 @@ jobs:
           tags: dougbtv/whereabouts-ocp
           file: Dockerfile.openshift
 
-  build-amd64:
+  build-arm64:
     name: Image build/arm64
     runs-on: ubuntu-latest
     steps:
