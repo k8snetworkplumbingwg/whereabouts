@@ -23,6 +23,7 @@ func (i IPPool) ParseCIDR() (net.IP, *net.IPNet, error) {
 // IPAllocation represents metadata about the pod/container owner of a specific IP
 type IPAllocation struct {
 	ContainerID string `json:"id"`
+	PodRef      string `json:"podref,omitempty"`
 }
 
 // +kubebuilder:object:root=true
