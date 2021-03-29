@@ -171,10 +171,10 @@ func IPAddOffset(ip net.IP, offset uint64) net.IP {
 
 // IterateForAssignment iterates given an IP/IPNet and a list of reserved IPs
 func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, reservelist []types.IPReservation, excludeRanges []string, containerID string, podRef string) (net.IP, []types.IPReservation, error) {
-	firstip := rangeStart
+	firstip := rangeStart.To16()
 	var lastip net.IP
 	if rangeEnd != nil {
-		lastip = rangeEnd
+		lastip = rangeEnd.To16()
 	} else {
 		var err error
 		firstip, lastip, err = GetIPRange(rangeStart, ipnet)
@@ -277,8 +277,10 @@ func GetIPRange(ip net.IP, ipnet net.IPNet) (net.IP, net.IP, error) {
 		last[len(last)-1]--
 	}
 	// get first ip and last ip based on network part + host part
-	firstIP, _ := mergeIPAddress([]byte(network), first)
-	lastIP, _ := mergeIPAddress([]byte(network), last)
+	firstIPbyte, _ := mergeIPAddress([]byte(network), first)
+	lastIPbyte, _ := mergeIPAddress([]byte(network), last)
+	firstIP := net.IP(firstIPbyte).To16()
+	lastIP := net.IP(lastIPbyte).To16()
 
 	return firstIP, lastIP, nil
 }
