@@ -16,7 +16,7 @@ jobs:
         with:
           context: .
           push: false
-          tags: dougbtv/whereabouts
+          tags: ghcr.io/${{ github.repository }}:latest-amd64
           file: Dockerfile
 
   build-openshift:
@@ -52,5 +52,5 @@ jobs:
         with:
           context: .
           push: false
-          tags: dougbtv/whereabouts:latest-arm64
+          tags: ghcr.io/${{ github.repository }}:latest-arm64
           file: Dockerfile.arm64
