@@ -58,6 +58,7 @@ func AllocateAndReleaseAddressesTest(ipVersion string, ipRange string, ipGateway
 			Netns:       nspath,
 			IfName:      ifname,
 			StdinData:   []byte(conf),
+			Args:        "IgnoreUnknown=1;K8S_POD_NAMESPACE=dummyNS;K8S_POD_NAME=dummyPOD",
 		}
 
 		// Allocate the IP
@@ -158,6 +159,16 @@ var _ = Describe("Whereabouts operations", func() {
 		ipRange = "2001::1/116"
 		ipGateway = "2001::f:1"
 		expectedAddress = "2001::1/116"
+
+		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, []string{expectedAddress}, whereaboutstypes.DatastoreKubernetes)
+	})
+
+	It("allocates and releases an IPv6 address with left-hand zeroes on ADD/DEL with a Kubernetes backend", func() {
+
+		ipVersion := "6"
+		ipRange := "fd::1/116"
+		ipGateway := "fd::f:1"
+		expectedAddress := "fd::1/116"
 
 		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, []string{expectedAddress}, whereaboutstypes.DatastoreKubernetes)
 	})

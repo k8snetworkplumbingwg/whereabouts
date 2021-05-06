@@ -66,7 +66,7 @@ spec:
         effect: NoSchedule
       containers:
       - name: whereabouts
-        image: docker.io/dougbtv/whereabouts:latest
+        image: ghcr.io/k8snetworkplumbingwg/whereabouts:latest-amd64
         env:
         - name: WHEREABOUTS_NAMESPACE
           valueFrom:
