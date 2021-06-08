@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/containernetworking/cni/pkg/skel"
 	cnitypes "github.com/containernetworking/cni/pkg/types"
@@ -38,7 +39,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 	result.Routes = ipamConf.Routes
 
 	logging.Debugf("Beginning IPAM for ContainerID: %v", args.ContainerID)
-	newip, err := storage.IPManagement(types.Allocate, *ipamConf, args.ContainerID)
+	newip, err := storage.IPManagement(types.Allocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
 	if err != nil {
 		logging.Errorf("Error at storage engine: %s", err)
 		return fmt.Errorf("Error at storage engine: %w", err)
@@ -77,10 +78,10 @@ func cmdDel(args *skel.CmdArgs) error {
 	logging.Debugf("DEL - IPAM configuration successfully read: %+v", filterConf(*ipamConf))
 	logging.Debugf("ContainerID: %v", args.ContainerID)
 
-	_, err = storage.IPManagement(types.Deallocate, *ipamConf, args.ContainerID)
+	_, err = storage.IPManagement(types.Deallocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
 	if err != nil {
-		logging.Errorf("Error deallocating IP: %s", err)
-		return fmt.Errorf("Error deallocating IP: %s", err)
+		logging.Verbosef("WARNING: Problem deallocating IP: %s", err)
+		// return fmt.Errorf("Error deallocating IP: %s", err)
 	}
 
 	return nil
@@ -90,4 +91,25 @@ func filterConf(conf types.IPAMConfig) types.IPAMConfig {
 	new := conf
 	new.EtcdPassword = "*********"
 	return new
+}
+
+// GetPodRef constructs the PodRef string from CNI arguments.
+// It returns an empty string, if K8S_POD_NAMESPACE & K8S_POD_NAME arguments are not provided.
+func getPodRef(args string) string {
+	podNs := ""
+	podName := ""
+
+	for _, arg := range strings.Split(args, ";") {
+		if strings.HasPrefix(arg, "K8S_POD_NAMESPACE=") {
+			podNs = strings.TrimPrefix(arg, "K8S_POD_NAMESPACE=")
+		}
+		if strings.HasPrefix(arg, "K8S_POD_NAME=") {
+			podName = strings.TrimPrefix(arg, "K8S_POD_NAME=")
+		}
+	}
+
+	if podNs != "" && podName != "" {
+		return podNs + "/" + podName
+	}
+	return ""
 }

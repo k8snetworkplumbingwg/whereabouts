@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/big"
 	"net"
 	"strconv"
 	"strings"
@@ -72,28 +71,25 @@ type KubernetesIPAM struct {
 
 func toIPReservationList(allocations map[string]whereaboutsv1alpha1.IPAllocation, firstip net.IP) []whereaboutstypes.IPReservation {
 	reservelist := []whereaboutstypes.IPReservation{}
-	i := allocate.IPToBigInt(firstip)
 	for offset, a := range allocations {
-		ipOffset, err := strconv.ParseInt(offset, 10, 64)
+		numOffset, err := strconv.ParseInt(offset, 10, 64)
 		if err != nil {
 			// allocations that are invalid int64s should be ignored
 			// toAllocationMap should be the only writer of offsets, via `fmt.Sprintf("%d", ...)``
 			logging.Errorf("Error decoding ip offset (backend: kubernetes): %v", err)
 			continue
 		}
-		ip := allocate.BigIntToIP(*big.NewInt(0).Add(i, big.NewInt(ipOffset)))
-		reservelist = append(reservelist, whereaboutstypes.IPReservation{IP: ip, ContainerID: a.ContainerID})
+		ip := allocate.IPAddOffset(firstip, uint64(numOffset))
+		reservelist = append(reservelist, whereaboutstypes.IPReservation{IP: ip, ContainerID: a.ContainerID, PodRef: a.PodRef})
 	}
 	return reservelist
 }
 
 func toAllocationMap(reservelist []whereaboutstypes.IPReservation, firstip net.IP) map[string]whereaboutsv1alpha1.IPAllocation {
-	first := allocate.IPToBigInt(firstip)
 	allocations := make(map[string]whereaboutsv1alpha1.IPAllocation)
 	for _, r := range reservelist {
-		currentip := allocate.IPToBigInt(r.IP)
-		index := currentip.Sub(currentip, first).Int64()
-		allocations[fmt.Sprintf("%d", index)] = whereaboutsv1alpha1.IPAllocation{ContainerID: r.ContainerID}
+		index := allocate.IPGetOffset(r.IP, firstip)
+		allocations[fmt.Sprintf("%d", index)] = whereaboutsv1alpha1.IPAllocation{ContainerID: r.ContainerID, PodRef: r.PodRef}
 	}
 	return allocations
 }

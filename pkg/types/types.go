@@ -71,6 +71,7 @@ type Address struct {
 type IPReservation struct {
 	IP          net.IP `json:"ip"`
 	ContainerID string `json:"id"`
+	PodRef      string `json:"podref,omitempty"`
 }
 
 const (
