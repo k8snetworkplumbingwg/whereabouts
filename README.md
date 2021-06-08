@@ -25,7 +25,7 @@ Whereabouts is designed with Kubernetes in mind, but, isn't limited to use in ju
 
 To track which IP addresses are in use between nodes, Whereabouts uses [etcd](https://github.com/etcd-io/etcd) or a Kubernetes [Custom Resource](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/#custom-resources) as a backend. The goal is to make Whereabouts more flexible and to use additional storage backends, we welcome any contributions towards this goal.
 
-Please note that Whereabouts is very new. Any issues and PRs are welcome, some of the known limitations are found at the bottom of the README.
+Issues and PRs are welcome! Some of the known limitations are found at the bottom of the README.
 
 ## Installation
 
@@ -34,7 +34,7 @@ There's two steps to installing Whereabouts:
 * Installing Whereabouts itself (it's just a binary on disk).
 * Creating IPAM CNI configurations.
 
-Optionally, you can use etcd directly as a backend for data storage. In which case, you'll want to install etcd, a suggested method is provided later in the README.
+Further installation options (including etcd usage) and configuration parameters can be found in the [extended configuration document](doc/extended-configuration.md).
 
 ### Installing Whereabouts.
 
@@ -45,13 +45,22 @@ git clone https://github.com/dougbtv/whereabouts && cd whereabouts
 kubectl apply -f ./doc/daemonset-install.yaml -f ./doc/whereabouts.cni.cncf.io_ippools.yaml
 ```
 
-*NOTE*: This daemonset is for use with Kubernetes version 1.16 and later. It may also be useful with previous versions, however you'll need to change the `apiVersion` of the daemonset in the provided yaml, [see the deprecation notice](https://kubernetes.io/blog/2019/07/18/api-deprecations-in-1-16/).
+The daemonset installation requires Kubernetes Version 1.16 or later.
 
-You can compile from this repo (with `./hack/build-go.sh`) and copy the resulting binary onto each node in the `/opt/cni/bin` directory (by default).
+### Installing with helm 3
+You can also install multus and whereabouts with helm 3 (helm 2 is not supported)
 
-Not that we're also including a Custom Resource Definition (CRD) to use the `kubernetes` datastore option. This installs the kubernetes CRD specification for the `ippools.whereabouts.cni.k8s.io/v1alpha1` type.
+```
+git clone https://github.com/k8snetworkplumbingwg/helm-charts.git
+cd helm-charts
+helm upgrade --install multus ./multus  --namespace kube-system
+helm upgrade --install whereabouts ./whereabouts --namespace kube-system
 
-## Example Config
+```
+
+Helm will install the crd as well as the daemonset
+
+## Example IPAM Config
 
 Included here is an entire CNI configuration. Whereabouts only cares about the `ipam` section of the CNI config. In particular this example uses the `macvlan` CNI plugin. (If you decide to copy this block and try it too, make sure that the `master` setting is set to a network interface name that exists on your nodes). Typically, you'll already have a CNI configuration for an existing CNI plugin in your cluster, and you'll just copy the `ipam` section and modify the values there.
 
@@ -64,159 +73,20 @@ Included here is an entire CNI configuration. Whereabouts only cares about the `
       "mode": "bridge",
       "ipam": {
         "type": "whereabouts",
-        "datastore": "kubernetes",
-        "kubernetes": { "kubeconfig": "/etc/cni/net.d/whereabouts.d/whereabouts.kubeconfig" },
         "range": "192.168.2.225/28",
         "exclude": [
            "192.168.2.229/30",
            "192.168.2.236/32"
-        ],
-        "log_file" : "/tmp/whereabouts.log",
-        "log_level" : "debug",
-        "gateway": "192.168.2.1"
+        ]
       }
 }
 ```
 
-### Example etcd datastore configuration
+### An example configuration using a `NetworkAttachmentDefinition`
 
-If you'll use the etcd datastore option, you'll likely want to install etcd first. Follow the instructions to do so in a later section of the README.
+Whereabouts is particularly useful in scenarios where you're using additional network interfaces for Kubernetes. A `NetworkAttachmentDefinition` custom resource can be used with a CNI meta plugin such as [Multus CNI](https://github.com/intel/multus-cni) to attach multiple interfaces to your pods in Kubernetes.
 
-*NOTE*: You'll almost certainly want to change `etcd_host`.
-
-```
-{
-      "cniVersion": "0.3.0",
-      "name": "whereaboutsexample",
-      "type": "macvlan",
-      "master": "eth0",
-      "mode": "bridge",
-      "ipam": {
-        "type": "whereabouts",
-        "etcd_host": "example-etcd-cluster-client.cluster.local:2379",
-        "range": "192.168.2.225/28",
-        "exclude": [
-           "192.168.2.229/30",
-           "192.168.2.236/32"
-        ],
-        "log_file" : "/tmp/whereabouts.log",
-        "log_level" : "debug",
-        "gateway": "192.168.2.1"
-      }
-}
-```
-
-### Example IPv6 Config
-
-The same applies for the usage of IPv6:
-
-```
-{
-      "cniVersion": "0.3.0",
-      "name": "whereaboutsexample",
-      "type": "macvlan",
-      "master": "eth0",
-      "mode": "bridge",
-      "ipam": {
-        "type": "whereabouts",
-        "log_file" : "/tmp/whereabouts.log",
-                "log_level" : "debug",
-        "etcd_host": "example-etcd-cluster-client.cluster.local:2379",
-        "range": "2001::0/116",
-        "gateway": "2001::f:1"
-      }
-}
-```
-
-## Core Parameters
-
-**Required**
-
-Three parameters are required:
-
-* `type`: This should be set to `whereabouts`.
-* `range`: This specifies the range in which IP addresses will be allocated.
-
-In this case the `range` is set to `192.168.2.225/28`, this will allocate IP addresses in the range excluding the first network address and the last broadcast address
-
-If you need a tool to figure out the range of a given CIDR address, try this online tool, [subnet-calculator.com](http://www.subnet-calculator.com/).
-
-**Range end syntax**
-
-Additionally, the `range` parameter can support a CIDR notation that includes the last IP to use. Example: `range: "192.168.2.225-192.168.2.230/28"`.
-
-**Optional**
-
-The following parameters are optional:
-
-* `range_start` : First IP to use when allocating from the `range`. Optional, if unset is inferred from the `range`.
-* `range_end` : Last IP to use when allocating from the `range`. Optional, if unset the last ip within the range is determined.
-* `exclude`: This is a list of CIDRs to be excluded from being allocated. 
-
-In the example, we exclude IP addresses in the range `192.168.2.229/30` from being allocated (in this case it's 3 addresses, `.229, .230, .231`), as well as `192.168.2.236/32` (just a single address).
-
-*Note*: It's up to you to properly set exclusion ranges that are within your subnet, there's no double checking for you (other than that the CIDR notation parses).
-
-Additionally -- you can set the route, gateway and DNS using anything from the configurations for the [static IPAM plugin](https://github.com/containernetworking/plugins/tree/master/plugins/ipam/static) (as well as additional static IP addresses).
-
-### etcd Parameters
-
-**Required:**
-* `etcd_host`: This is a connection string for your etcd hosts. It can take a single address or a list, or any other valid etcd connection string.
-
-**Optional:**
-* `etcd_username`: Basic Auth username to use when accessing the etcd API.
-* `etcd_password`: Basic Auth password to use when accessing the etcd API.
-* `etcd_key_file`: Path to the file containing the etcd private key matching the CNI plugin’s client certificate.
-* `etcd_cert_file`: Path to the file containing the etcd client certificate issued to the CNI plugin.
-* `etcd_ca_cert_file`: Path to the file containing the root certificate of the certificate authority (CA) that issued the etcd server certificate.
-
-### Logging Parameters
-
-There are two optional parameters for logging, they are:
-
-* `log_file`: A file path to a logfile to log to.
-* `log_level`: Set the logging verbosity, from most to least: `debug`,`error`,`panic`
-
-## Flatfile configuration
-
-There is one option for flat file configuration:
-
-* `configuration_path`: A file path to a Whereabouts configuration file.
-
-If you're using [Multus CNI](http://multus-cni.io/) or another meta-plugin, you may wish to reduce the number of parameters you need to specify in the IPAM section by putting commonly used options into a flat file -- primarily to make it simpler to type and to reduce having to copy and paste the same parameters repeatedly.
-
-Whereabouts will look for the configuration in these locations, in this order:
-
-* The location specified by the `configuration_path` option.
-* `/etc/kubernetes/cni/net.d/whereabouts.d/whereabouts.conf`
-* `/etc/cni/net.d/whereabouts.d/whereabouts.conf`
-
-You may specify the `configuration_path` to point to another location should it be desired.
-
-Any options added to the `whereabouts.conf` are overridden by configuration options that are in the primary CNI configuration (e.g. in a custom resource `NetworkAttachmentDefinition` used by Multus CNI or in the first file ASCII-betically in the CNI configuration directory -- which is `/etc/cni/net.d/` by default).
-
-
-### Example flat file configuration
-
-You can reduce the number of parameters used if you need to make more than one Whereabouts configuration (such as if you're using [Multus CNI](http://multus-cni.io/))
-
-Create a file named `/etc/cni/net.d/whereabouts.d/whereabouts.conf`, with the contents:
-
-```
-{
-  "datastore": "kubernetes",
-  "kubernetes": {
-    "kubeconfig": "/etc/cni/net.d/whereabouts.d/whereabouts.kubeconfig"
-  },
-  "log_file": "/tmp/whereabouts.log",
-  "log_level": "debug"
-}
-```
-
-With that in place, you can now create an IPAM configuration that has a lot less options, in this case we'll give an example using a `NetworkAttachmentDefinition` as used with Multus CNI (or other implementations of the [Network Plumbing Working Group specification](https://github.com/k8snetworkplumbingwg/multi-net-spec))
-
-An example configuration using a `NetworkAttachmentDefinition`:
+In short, a `NetworkAttachmentDefinition` contains a CNI configuration packaged into a custom resource. Here's an example of a `NetworkAttachmentDefinition` containing a CNI configuration which uses Whereabouts for IPAM:
 
 ```
 apiVersion: "k8s.cni.cncf.io/v1"
@@ -237,23 +107,55 @@ spec:
     }'
 ```
 
-You'll note that in the `ipam` section there's a lot less parameters than are used in the previous examples.
+### Example IPv6 Config
 
-## Installing etcd. (optional)
-
-etcd installation is optional. By default, we recommend the custom resource backend (given in the first example configuration).
-
-We recommend that you if you're trying it out in a lab, that you use the [etcd-operator](https://github.com/coreos/etcd-operator), the [installation guide](https://github.com/coreos/etcd-operator/blob/master/doc/user/install_guide.md) is just a few steps. 
-
-Once you've got etcd running -- all you'll need to provide Whereabouts is the endpoint(s) for it. In the etcd-operator style installation, you'd find those with:
+The same applies for the usage of IPv6:
 
 ```
-kubectl get svc | grep "etcd-cluster-client"
+{
+      "cniVersion": "0.3.0",
+      "name": "whereaboutsexample",
+      "type": "macvlan",
+      "master": "eth0",
+      "mode": "bridge",
+      "ipam": {
+        "type": "whereabouts",
+        "range": "2001::0/116",
+        "gateway": "2001::f:1"
+      }
+}
 ```
 
-This will give you the service name and the port to use, in this case you'll specify it in the configuration in a `service-name:port` format, the default port for etcd clients is `2379`.
+## Core Parameters
 
-*Note*: It's important to remember that CNI plugins (typically) run directly on the host and not inside pods. This means that if you use the DNS name (which might look something like `example-etcd-cluster-client.default.svc.cluster.local`) for the service (recommended) make sure that you can resolve those hostnames directly from your hosts. You may find some tips regarding that [here](https://blog.heptio.com/configuring-your-linux-host-to-resolve-a-local-kubernetes-clusters-service-urls-a8c7bdb212a7).
+**Required**
+
+These parameters are required:
+
+* `type`: This should be set to `whereabouts`.
+* `range`: This specifies the range in which IP addresses will be allocated.
+
+If for example the `range` is set to `192.168.2.225/28`, this will allocate IP addresses in the range excluding the first network address and the last broadcast address.
+
+If you need a tool to figure out the range of a given CIDR address, try this online tool, [subnet-calculator.com](http://www.subnet-calculator.com/) or an [IPv6 subnet calculator](https://www.vultr.com/resources/subnet-calculator-ipv6/).
+
+**Range end syntax**
+
+Additionally, the `range` parameter can support a CIDR notation that includes the last IP to use. Example: `range: "192.168.2.225-192.168.2.230/28"`.
+
+**Optional**
+
+The following parameters are optional:
+
+* `range_start` : First IP to use when allocating from the `range`. Optional, if unset is inferred from the `range`.
+* `range_end` : Last IP to use when allocating from the `range`. Optional, if unset the last ip within the range is determined.
+* `exclude`: This is a list of CIDRs to be excluded from being allocated. 
+
+In the example, we exclude IP addresses in the range `192.168.2.229/30` from being allocated (in this case it's 3 addresses, `.229, .230, .231`), as well as `192.168.2.236/32` (just a single address).
+
+*Note*: It's up to you to properly set exclusion ranges that are within your subnet, there's no double checking for you (other than that the CIDR notation parses).
+
+Additionally -- you can set the route, gateway and DNS using anything from the configurations for the [static IPAM plugin](https://github.com/containernetworking/plugins/tree/master/plugins/ipam/static) (as well as additional static IP addresses).
 
 ## Building
 

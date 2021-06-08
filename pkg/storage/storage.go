@@ -33,9 +33,9 @@ type Store interface {
 }
 
 // IPManagement manages ip allocation and deallocation from a storage perspective
-func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string) (net.IPNet, net.IP, error) {
+func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string, podRef string) (net.IPNet, net.IP, error) {
 
-	logging.Debugf("IPManagement -- mode: %v / host: %v / containerID: %v", mode, ipamConf.EtcdHost, containerID)
+	logging.Debugf("IPManagement -- mode: %v / host: %v / containerID: %v / podRef: %v", mode, ipamConf.EtcdHost, containerID, podRef)
 
 	var newip net.IPNet
 	var gateway net.IP
@@ -126,7 +126,7 @@ RETRYLOOP:
 		var updatedreservelist []types.IPReservation
 		switch mode {
 		case types.Allocate:
-			newip, updatedreservelist, err = allocate.AssignIP(ipRange, reservelist, containerID)
+			newip, updatedreservelist, err = allocate.AssignIP(ipRange, reservelist, containerID, podRef)
 			if err != nil {
 				logging.Errorf("Error assigning IP: %v", err)
 				return newip, err
