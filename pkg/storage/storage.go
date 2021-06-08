@@ -72,7 +72,7 @@ func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string, podRe
 	for _, ipRange := range ipamConf.Ranges {
 
 		logging.Debugf("try ipRange:%+v", ipRange)
-		newip, err = IPManagementRange(ctx, mode, ipRange, ipam, containerID)
+		newip, err = IPManagementRange(ctx, mode, ipRange, ipam, containerID, podRef)
 		logging.Debugf("result allocate in range %+v IP:%+v err:%v", ipRange, newip, err)
 		if err == nil {
 			gateway = ipRange.Gateway
@@ -98,7 +98,7 @@ func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string, podRe
 	return newip, gateway, err
 }
 
-func IPManagementRange(ctx context.Context, mode int, ipRange types.IPRange, ipam Store, containerID string) (net.IPNet, error) {
+func IPManagementRange(ctx context.Context, mode int, ipRange types.IPRange, ipam Store, containerID string, podRef string) (net.IPNet, error) {
 	var newip net.IPNet
 	var pool IPPool
 	var err error

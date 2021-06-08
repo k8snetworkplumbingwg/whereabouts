@@ -4,11 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net"
-	"strconv"
-	"strings"
-
-	"github.com/dougbtv/whereabouts/pkg/allocate"
 	whereaboutsv1alpha1 "github.com/dougbtv/whereabouts/pkg/api/v1alpha1"
 	whereaboutstypes "github.com/dougbtv/whereabouts/pkg/types"
 	jsonpatch "gomodules.xyz/jsonpatch/v2"
