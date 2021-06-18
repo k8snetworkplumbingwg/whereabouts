@@ -35,6 +35,12 @@ rules:
   - update
   - patch
   - delete
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - '*'
 ---
 apiVersion: apps/v1
 kind: DaemonSet

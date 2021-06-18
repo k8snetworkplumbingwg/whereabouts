@@ -44,13 +44,18 @@ type IPAMConfig struct {
 	Gateway           net.IP
 	Kubernetes        KubernetesConfig `json:"kubernetes,omitempty"`
 	ConfigurationPath string           `json:"configuration_path"`
+	PodName           string
+	PodNamespace      string
 }
 
 // IPAMEnvArgs are the environment vars we expect
 type IPAMEnvArgs struct {
 	cnitypes.CommonArgs
-	IP      cnitypes.UnmarshallableString `json:"ip,omitempty"`
-	GATEWAY cnitypes.UnmarshallableString `json:"gateway,omitempty"`
+	IP                         cnitypes.UnmarshallableString `json:"ip,omitempty"`
+	GATEWAY                    cnitypes.UnmarshallableString `json:"gateway,omitempty"`
+	K8S_POD_NAME               cnitypes.UnmarshallableString //revive:disable-line
+	K8S_POD_NAMESPACE          cnitypes.UnmarshallableString //revive:disable-line
+	K8S_POD_INFRA_CONTAINER_ID cnitypes.UnmarshallableString //revive:disable-line
 }
 
 // KubernetesConfig describes the kubernetes-specific configuration details

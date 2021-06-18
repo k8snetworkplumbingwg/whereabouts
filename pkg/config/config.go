@@ -46,6 +46,8 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 	if err := cnitypes.LoadArgs(envArgs, &args); err != nil {
 		return nil, "", fmt.Errorf("LoadArgs - CNI Args Parsing Error: %s", err)
 	}
+	n.IPAM.PodName = string(args.K8S_POD_NAME)
+	n.IPAM.PodNamespace = string(args.K8S_POD_NAMESPACE)
 
 	// Once we have our basics, let's look for our (optional) configuration file
 	confdirs := []string{"/etc/kubernetes/cni/net.d/whereabouts.d/whereabouts.conf", "/etc/cni/net.d/whereabouts.d/whereabouts.conf"}
