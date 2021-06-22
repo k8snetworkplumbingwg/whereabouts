@@ -1,5 +1,5 @@
 # This dockerfile is used for building for OpenShift
-FROM registry.svc.ci.openshift.org/ocp/builder:rhel-8-golang-1.15-openshift-4.6 as rhel8
+FROM registry.ci.openshift.org/ocp/builder:rhel-8-golang-1.16-openshift-4.9 AS rhel8
 ADD . /go/src/github.com/dougbtv/whereabouts
 WORKDIR /go/src/github.com/dougbtv/whereabouts
 ENV CGO_ENABLED=1
@@ -8,7 +8,7 @@ ENV VERSION=rhel8 COMMIT=unset
 RUN go build -mod vendor -o bin/whereabouts cmd/whereabouts.go
 WORKDIR /
 
-FROM registry.svc.ci.openshift.org/ocp/builder:rhel-7-golang-1.15-openshift-4.6 AS rhel7
+FROM registry.ci.openshift.org/ocp/builder:rhel-7-golang-1.16-openshift-4.9 AS rhel7
 ADD . /go/src/github.com/dougbtv/whereabouts
 WORKDIR /go/src/github.com/dougbtv/whereabouts
 ENV CGO_ENABLED=1
@@ -16,7 +16,7 @@ ENV GO111MODULE=on
 RUN go build -mod vendor -o bin/whereabouts cmd/whereabouts.go
 WORKDIR /
 
-FROM registry.svc.ci.openshift.org/ocp/builder:rhel-8-base-openshift-4.6
+FROM registry.ci.openshift.org/ocp/builder:rhel-8-base-openshift-4.9
 RUN mkdir -p /usr/src/whereabouts/images && \
        mkdir -p /usr/src/whereabouts/bin && \
        mkdir -p /usr/src/whereabouts/rhel7/bin && \
