@@ -109,6 +109,7 @@ RETRYLOOP:
 		if err != nil {
 			logging.Errorf("IPAM error updating pool (attempt: %d): %v", j, err)
 			if e, ok := err.(temporary); ok && e.Temporary() {
+				logging.Errorf("IPAM error is temporary, retrying")
 				continue
 			}
 			break RETRYLOOP
