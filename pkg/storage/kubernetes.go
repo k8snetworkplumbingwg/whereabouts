@@ -62,14 +62,14 @@ func NewKubernetesIPAM(ctx context.Context, containerID string, ipamConf whereab
 	poolLock := &whereaboutsv1alpha1.IPPoolLock{
 		ObjectMeta: metav1.ObjectMeta{Name: getNormalizedIpRangeStr(ipamConf.Range), Namespace: namespace},
 	}
-	// try creating ip pool lock, retry until it succeeds
+	// try creating ip pool lock, retry (if already exists) until it succeeds
 	// this makes serial access to ip pool across cluster wide and this might decrease
 	// the load considerably on k8 api server because of too many update calls, this can
 	// happen due to retries upon status conflict errors
 	for {
 		err = c.Create(ctx, poolLock)
 		if err != nil {
-			if errors.IsConflict(err) {
+			if errors.IsAlreadyExists(err) {
 				interval, _ := rand.Int(rand.Reader, big.NewInt(1000))
 				time.Sleep(time.Duration(interval.Int64()) * time.Millisecond)
 				continue
