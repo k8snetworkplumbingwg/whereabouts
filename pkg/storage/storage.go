@@ -29,7 +29,7 @@ type IPPool interface {
 type Store interface {
 	GetIPPool(ctx context.Context, ipRange string) (IPPool, error)
 	Status(ctx context.Context) error
-	Close() error
+	Close(ctx context.Context) error
 }
 
 // IPManagement manages ip allocation and deallocation from a storage perspective
@@ -45,23 +45,23 @@ func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string, podRe
 		return newip, fmt.Errorf("Got an unknown mode passed to IPManagement: %v", mode)
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
+	defer cancel()
+
 	var ipam Store
 	var pool IPPool
 	var err error
 	switch ipamConf.Datastore {
 	case types.DatastoreETCD:
-		ipam, err = NewETCDIPAM(ipamConf)
+		ipam, err = NewETCDIPAM(ctx, ipamConf)
 	case types.DatastoreKubernetes:
-		ipam, err = NewKubernetesIPAM(containerID, ipamConf)
+		ipam, err = NewKubernetesIPAM(ctx, containerID, ipamConf)
 	}
 	if err != nil {
 		logging.Errorf("IPAM %s client initialization error: %v", ipamConf.Datastore, err)
 		return newip, fmt.Errorf("IPAM %s client initialization error: %v", ipamConf.Datastore, err)
 	}
-	defer ipam.Close()
-
-	ctx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
-	defer cancel()
+	defer ipam.Close(ctx)
 
 	// Check our connectivity first
 	if err := ipam.Status(ctx); err != nil {
@@ -109,6 +109,7 @@ RETRYLOOP:
 		if err != nil {
 			logging.Errorf("IPAM error updating pool (attempt: %d): %v", j, err)
 			if e, ok := err.(temporary); ok && e.Temporary() {
+				logging.Errorf("IPAM error is temporary, retrying")
 				continue
 			}
 			break RETRYLOOP
