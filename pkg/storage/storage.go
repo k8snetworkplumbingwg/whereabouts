@@ -61,7 +61,12 @@ func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string, podRe
 		logging.Errorf("IPAM %s client initialization error: %v", ipamConf.Datastore, err)
 		return newip, fmt.Errorf("IPAM %s client initialization error: %v", ipamConf.Datastore, err)
 	}
-	defer ipam.Close(ctx)
+	defer func() {
+		err = ipam.Close(ctx)
+		if err != nil {
+			logging.Errorf("error in closing ipam pool %v", err)
+		}
+	}()
 
 	// Check our connectivity first
 	if err := ipam.Status(ctx); err != nil {

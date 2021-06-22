@@ -60,8 +60,12 @@ func NewKubernetesIPAM(ctx context.Context, containerID string, ipamConf whereab
 	}
 
 	poolLock := &whereaboutsv1alpha1.IPPoolLock{
-		ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%s/%s", whereaboutsPrefix, ipamConf.Range), Namespace: namespace},
+		ObjectMeta: metav1.ObjectMeta{Name: getNormalizedIpRangeStr(ipamConf.Range), Namespace: namespace},
 	}
+	// try creating ip pool lock, retry until it succeeds
+	// this makes serial access to ip pool across cluster wide and this might decrease
+	// the load considerably on k8 api server because of too many update calls, this can
+	// happen due to retries upon status conflict errors
 	for {
 		err = c.Create(ctx, poolLock)
 		if err != nil {
@@ -70,6 +74,8 @@ func NewKubernetesIPAM(ctx context.Context, containerID string, ipamConf whereab
 				time.Sleep(time.Duration(interval.Int64()) * time.Millisecond)
 				continue
 			}
+			return nil, err
+		} else {
 			break
 		}
 	}
@@ -111,14 +117,18 @@ func toAllocationMap(reservelist []whereaboutstypes.IPReservation, firstip net.I
 	return allocations
 }
 
-// GetIPPool returns a storage.IPPool for the given range
-func (i *KubernetesIPAM) GetIPPool(ctx context.Context, ipRange string) (IPPool, error) {
+func getNormalizedIpRangeStr(ipRange string) string {
 	// v6 filter
 	normalized := strings.ReplaceAll(ipRange, ":", "-")
 	// replace subnet cidr slash
 	normalized = strings.ReplaceAll(normalized, "/", "-")
 
-	pool, err := i.getPool(ctx, normalized, ipRange)
+	return normalized
+}
+
+// GetIPPool returns a storage.IPPool for the given range
+func (i *KubernetesIPAM) GetIPPool(ctx context.Context, ipRange string) (IPPool, error) {
+	pool, err := i.getPool(ctx, getNormalizedIpRangeStr(ipRange), ipRange)
 	if err != nil {
 		return nil, err
 	}
@@ -162,10 +172,10 @@ func (i *KubernetesIPAM) Status(ctx context.Context) error {
 	return err
 }
 
-// Close partially implements the Store interface
+// Close remove ip pool lock to allow other cni execution to access the pool
 func (i *KubernetesIPAM) Close(ctx context.Context) error {
 	poolLock := &whereaboutsv1alpha1.IPPoolLock{
-		ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%s/%s", whereaboutsPrefix, i.config.Range), Namespace: i.namespace},
+		ObjectMeta: metav1.ObjectMeta{Name: getNormalizedIpRangeStr(i.config.Range), Namespace: i.namespace},
 	}
 	return i.client.Delete(ctx, poolLock)
 }
