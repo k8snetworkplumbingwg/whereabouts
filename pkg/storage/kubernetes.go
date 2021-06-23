@@ -58,9 +58,9 @@ func NewKubernetesIPAM(ctx context.Context, containerID string, ipamConf whereab
 	if err != nil {
 		return nil, err
 	}
-
+	lockName := getNormalizedIpRangeStr(ipamConf.Range)
 	poolLock := &whereaboutsv1alpha1.IPPoolLock{
-		ObjectMeta: metav1.ObjectMeta{Name: getNormalizedIpRangeStr(ipamConf.Range), Namespace: namespace},
+		ObjectMeta: metav1.ObjectMeta{Name: lockName, Namespace: namespace},
 	}
 	// try creating ip pool lock, retry (if already exists) until it succeeds
 	// this makes serial access to ip pool across cluster wide and this might decrease
@@ -72,8 +72,10 @@ func NewKubernetesIPAM(ctx context.Context, containerID string, ipamConf whereab
 			if errors.IsAlreadyExists(err) {
 				interval, _ := rand.Int(rand.Reader, big.NewInt(1000))
 				time.Sleep(time.Duration(interval.Int64()) * time.Millisecond)
+				logging.Errorf("ip pool lock %s is held by someone, retry to acquire it", lockName)
 				continue
 			}
+			logging.Errorf("ip pool lock acquire failed error reason: %v ", errors.ReasonForError(err))
 			return nil, err
 		} else {
 			break

@@ -12,6 +12,10 @@ import (
 )
 
 var (
+
+	// LockRequestTimeout defines how long the context timesout in
+	LockRequestTimeout = 30 * time.Second
+
 	// RequestTimeout defines how long the context timesout in
 	RequestTimeout = 10 * time.Second
 
@@ -45,7 +49,7 @@ func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string, podRe
 		return newip, fmt.Errorf("Got an unknown mode passed to IPManagement: %v", mode)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), LockRequestTimeout)
 	defer cancel()
 
 	var ipam Store
@@ -62,11 +66,16 @@ func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string, podRe
 		return newip, fmt.Errorf("IPAM %s client initialization error: %v", ipamConf.Datastore, err)
 	}
 	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), LockRequestTimeout)
+		defer cancel()
 		err = ipam.Close(ctx)
 		if err != nil {
 			logging.Errorf("error in closing ipam pool %v", err)
 		}
 	}()
+
+	ctx, cancel = context.WithTimeout(context.Background(), RequestTimeout)
+	defer cancel()
 
 	// Check our connectivity first
 	if err := ipam.Status(ctx); err != nil {
