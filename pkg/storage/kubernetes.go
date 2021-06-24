@@ -242,7 +242,7 @@ type temporary interface {
 
 // newLeaderElector creates a new leaderelection.LeaderElector and associated
 // channels by which to observe elections and depositions.
-func newLeaderElector(clientset *kubernetes.Clientset, namespace string, podNamespace string, podID string) (*leaderelection.LeaderElector, chan struct{}, chan struct{}) {
+func newLeaderElector(clientset *kubernetes.Clientset, namespace string, podNamespace string, podID string, leaseDuration int, renewDeadline int, retryPeriod int) (*leaderelection.LeaderElector, chan struct{}, chan struct{}) {
 	//log.WithField("context", "leaderelection")
 	// leaderOK will block gRPC startup until it's closed.
 	leaderOK := make(chan struct{})
@@ -262,11 +262,12 @@ func newLeaderElector(clientset *kubernetes.Clientset, namespace string, podName
 	}
 
 	// Make the leader elector, ready to be used in the Workgroup.
+	// !bang
 	le, err := leaderelection.NewLeaderElector(leaderelection.LeaderElectionConfig{
 		Lock:          rl,
-		LeaseDuration: 1500 * time.Millisecond,
-		RenewDeadline: 1000 * time.Millisecond,
-		RetryPeriod:   500 * time.Millisecond,
+		LeaseDuration: time.Duration(leaseDuration) * time.Millisecond,
+		RenewDeadline: time.Duration(renewDeadline) * time.Millisecond,
+		RetryPeriod:   time.Duration(retryPeriod) * time.Millisecond,
 		Callbacks: leaderelection.LeaderCallbacks{
 			OnStartedLeading: func(_ context.Context) {
 				logging.Debugf("OnStartedLeading() called")
@@ -287,9 +288,7 @@ func newLeaderElector(clientset *kubernetes.Clientset, namespace string, podName
 	return le, leaderOK, deposed
 }
 
-/*
- */
-// IPManagement manages ip allocation and deallocation from a storage perspective
+// IPManagementKubernetes manages ip allocation and deallocation from a storage perspective
 func IPManagementKubernetes(mode int, ipamConf whereaboutstypes.IPAMConfig, containerID string, podRef string) (net.IPNet, error) {
 	var newip net.IPNet
 
@@ -304,7 +303,7 @@ func IPManagementKubernetes(mode int, ipamConf whereaboutstypes.IPAMConfig, cont
 	}
 
 	// setup leader election
-	le, leader, deposed := newLeaderElector(ipam.clientSet, ipam.namespace, ipamConf.PodNamespace, ipamConf.PodName)
+	le, leader, deposed := newLeaderElector(ipam.clientSet, ipam.namespace, ipamConf.PodNamespace, ipamConf.PodName, ipamConf.LeaderLeaseDuration, ipamConf.LeaderRenewDeadline, ipamConf.LeaderRetryPeriod)
 	var wg sync.WaitGroup
 	wg.Add(2)
 
@@ -357,13 +356,9 @@ func IPManagementKubernetes(mode int, ipamConf whereaboutstypes.IPAMConfig, cont
 	return newip, err
 }
 
+// IPManagementKubernetesUpdate manages k8s updates
 func IPManagementKubernetesUpdate(mode int, ipam *KubernetesIPAM, ipamConf whereaboutstypes.IPAMConfig, containerID string, podRef string) (net.IPNet, error) {
 	logging.Debugf("IPManagement -- mode: %v / containerID: %v / podRef: %v", mode, containerID, podRef)
-
-	//XXX
-	logging.Debugf("XXX wait for 10 sec")
-	time.Sleep(time.Second * 10)
-	now := time.Now()
 
 	var newip net.IPNet
 	// Skip invalid modes
@@ -432,7 +427,5 @@ RETRYLOOP:
 		break RETRYLOOP
 	}
 
-	//XXX
-	logging.Debugf("Took: %vms\n", time.Since(now).Milliseconds())
 	return newip, err
 }
