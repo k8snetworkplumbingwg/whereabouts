@@ -178,15 +178,12 @@ func IPManagementEtcd(mode int, ipamConf types.IPAMConfig, containerID string, p
 	var ipam Store
 	var pool IPPool
 	var err error
-	switch ipamConf.Datastore {
-	case types.DatastoreETCD:
-		ipam, err = NewETCDIPAM(ipamConf)
-	case types.DatastoreKubernetes:
-		ipam, err = NewKubernetesIPAM(containerID, ipamConf)
+	if ipamConf.Datastore != types.DatastoreETCD {
+		return net.IPNet{}, logging.Errorf("wrong 'datastore' value in IPAM config: %s", ipamConf.Datastore)
 	}
+	ipam, err = NewETCDIPAM(ipamConf)
 	if err != nil {
-		logging.Errorf("IPAM %s client initialization error: %v", ipamConf.Datastore, err)
-		return newip, fmt.Errorf("IPAM %s client initialization error: %v", ipamConf.Datastore, err)
+		return newip, logging.Errorf("IPAM %s client initialization error: %v", ipamConf.Datastore, err)
 	}
 	defer ipam.Close()
 
@@ -212,7 +209,7 @@ RETRYLOOP:
 		pool, err = ipam.GetIPPool(ctx, ipamConf.Range)
 		if err != nil {
 			logging.Errorf("IPAM error reading pool allocations (attempt: %d): %v", j, err)
-			if e, ok := err.(temporary); ok && e.Temporary() {
+			if e, ok := err.(Temporary); ok && e.Temporary() {
 				continue
 			}
 			return newip, err
@@ -238,7 +235,7 @@ RETRYLOOP:
 		err = pool.Update(ctx, updatedreservelist)
 		if err != nil {
 			logging.Errorf("IPAM error updating pool (attempt: %d): %v", j, err)
-			if e, ok := err.(temporary); ok && e.Temporary() {
+			if e, ok := err.(Temporary); ok && e.Temporary() {
 				continue
 			}
 			break RETRYLOOP

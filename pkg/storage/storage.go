@@ -35,3 +35,7 @@ type OverlappingRangeStore interface {
 	IsAllocatedInOverlappingRange(ctx context.Context, ip net.IP) (bool, error)
 	UpdateOverlappingRangeAllocation(ctx context.Context, mode int, ip net.IP, containerID string, podRef string) error
 }
+
+type Temporary interface {
+	Temporary() bool
+}

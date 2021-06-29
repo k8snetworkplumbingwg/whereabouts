@@ -1,4 +1,6 @@
 package main
 
-const kubeconfigNotFound = iota + 1
-
+const (
+	kubeconfigNotFound = iota + 1
+	couldNotConnectToKubernetes
+)
