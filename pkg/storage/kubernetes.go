@@ -68,17 +68,27 @@ func NewKubernetesIPAM(containerID string, ipamConf whereaboutstypes.IPAMConfig)
 	if err != nil {
 		return nil, err
 	}
-	return &KubernetesIPAM{c, clientSet, ipamConf, containerID, namespace, DatastoreRetries}, nil
+
+	k8sIPAM := &KubernetesIPAM{config: ipamConf, containerID: containerID, namespace: namespace}
+	k8sIPAM.client = c
+	k8sIPAM.clientSet = clientSet
+	k8sIPAM.retries = DatastoreRetries
+	return k8sIPAM, nil
+}
+
+// KubernetesClient has info on how to connect to the kubernetes cluster
+type KubernetesClient struct {
+	client      client.Client
+	clientSet   *kubernetes.Clientset
+	retries     int
 }
 
 // KubernetesIPAM manages ip blocks in an kubernetes CRD backend
 type KubernetesIPAM struct {
-	client      client.Client
-	clientSet   *kubernetes.Clientset
+	KubernetesClient
 	config      whereaboutstypes.IPAMConfig
 	containerID string
 	namespace   string
-	retries     int
 }
 
 func toIPReservationList(allocations map[string]whereaboutsv1alpha1.IPAllocation, firstip net.IP) []whereaboutstypes.IPReservation {
