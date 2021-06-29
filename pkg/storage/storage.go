@@ -12,9 +12,6 @@ import (
 )
 
 var (
-	// RequestTimeout defines how long the context timesout in
-	RequestTimeout = 10 * time.Second
-
 	// DatastoreRetries defines how many retries are attempted when updating the Pool
 	DatastoreRetries = 100
 )
@@ -60,7 +57,7 @@ func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string, podRe
 	}
 	defer ipam.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(ipamConf.RequestTimeout)*time.Second)
 	defer cancel()
 
 	// Check our connectivity first

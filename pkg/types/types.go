@@ -44,6 +44,7 @@ type IPAMConfig struct {
 	Gateway           net.IP
 	Kubernetes        KubernetesConfig `json:"kubernetes,omitempty"`
 	ConfigurationPath string           `json:"configuration_path"`
+	RequestTimeout    int              `json:"request_timeout"`
 }
 
 // IPAMEnvArgs are the environment vars we expect
