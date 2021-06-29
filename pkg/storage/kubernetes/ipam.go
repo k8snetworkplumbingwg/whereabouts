@@ -48,7 +48,6 @@ func NewKubernetesIPAM(containerID string, ipamConf whereaboutstypes.IPAMConfig)
 
 func newKubernetesIPAM(containerID string, ipamConf whereaboutstypes.IPAMConfig, namespace string, kubernetesClient Client) *KubernetesIPAM {
 	return &KubernetesIPAM{
-
 		config:      ipamConf,
 		containerID: containerID,
 		namespace:   namespace,
