@@ -13,12 +13,6 @@ import (
 
 var (
 
-	// LockRequestTimeout defines how long the context timesout in
-	LockRequestTimeout = 30 * time.Second
-
-	// RequestTimeout defines how long the context timesout in
-	RequestTimeout = 10 * time.Second
-
 	// DatastoreRetries defines how many retries are attempted when updating the Pool
 	DatastoreRetries = 100
 )
@@ -49,7 +43,7 @@ func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string, podRe
 		return newip, fmt.Errorf("Got an unknown mode passed to IPManagement: %v", mode)
 	}
 
-	ctx, acquireCancel := context.WithTimeout(context.Background(), LockRequestTimeout)
+	ctx, acquireCancel := context.WithTimeout(context.Background(), time.Duration(ipamConf.LockRequestTimeout)*time.Second)
 	defer acquireCancel()
 
 	var ipam Store
@@ -66,7 +60,7 @@ func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string, podRe
 		return newip, fmt.Errorf("IPAM %s client initialization error: %v", ipamConf.Datastore, err)
 	}
 	defer func() {
-		ctx, releaseCancel := context.WithTimeout(context.Background(), LockRequestTimeout)
+		ctx, releaseCancel := context.WithTimeout(context.Background(), time.Duration(ipamConf.LockRequestTimeout)*time.Second)
 		err = ipam.Close(ctx)
 		if err != nil {
 			logging.Errorf("error in closing ipam pool %v", err)
@@ -74,7 +68,7 @@ func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string, podRe
 		releaseCancel()
 	}()
 
-	ctx, ipPoolOpCancel := context.WithTimeout(context.Background(), RequestTimeout)
+	ctx, ipPoolOpCancel := context.WithTimeout(context.Background(), time.Duration(ipamConf.RequestTimeout)*time.Second)
 	defer ipPoolOpCancel()
 
 	// Check our connectivity first

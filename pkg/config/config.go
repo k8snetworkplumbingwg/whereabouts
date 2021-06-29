@@ -132,6 +132,16 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 		n.IPAM.Datastore = types.DatastoreETCD
 	}
 
+	if n.IPAM.RequestTimeout == 0 {
+		// default to 10s
+		n.IPAM.RequestTimeout = 10
+	}
+
+	if n.IPAM.LockRequestTimeout == 0 {
+		// default to 30s
+		n.IPAM.LockRequestTimeout = 30
+	}
+
 	var err error
 	storageError := "You have not configured the storage engine (looks like you're using an invalid `%s` parameter in your config)"
 	switch n.IPAM.Datastore {
