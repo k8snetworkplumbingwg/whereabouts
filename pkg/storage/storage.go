@@ -74,7 +74,9 @@ RETRYLOOP:
 	for j := 0; j < DatastoreRetries; j++ {
 		select {
 		case <-ctx.Done():
-			return newip, nil
+			// return last available newip and err
+			logging.Errorf("context is done for ip pool %s, returning last ip %s: error %v", ipamConf.Range, newip.String(), err)
+			return newip, err
 		default:
 			// retry the IPAM loop if the context has not been cancelled
 		}
@@ -107,9 +109,9 @@ RETRYLOOP:
 
 		err = pool.Update(ctx, updatedreservelist)
 		if err != nil {
-			logging.Errorf("IPAM error updating pool (attempt: %d): %v", j, err)
+			logging.Errorf("IPAM error updating pool %s (attempt: %d): %v", ipamConf.Range, j, err)
 			if e, ok := err.(temporary); ok && e.Temporary() {
-				logging.Errorf("IPAM error is temporary, retrying")
+				logging.Errorf("IPAM error is temporary for pool %s: %v, retrying", ipamConf.Range, err)
 				continue
 			}
 			break RETRYLOOP
