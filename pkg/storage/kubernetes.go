@@ -75,9 +75,10 @@ func NewKubernetesIPAM(ctx context.Context, containerID string, ipamConf whereab
 				logging.Errorf("ip pool lock %s is held by someone, retry to acquire it", lockName)
 				continue
 			}
-			logging.Errorf("ip pool lock acquire failed error reason: %v ", errors.ReasonForError(err))
+			logging.Errorf("ip pool lock acquire failed reason: %v ", errors.ReasonForError(err))
 			return nil, err
 		} else {
+			logging.Errorf("acquire ip pool lock %s done", lockName)
 			break
 		}
 	}
@@ -176,10 +177,18 @@ func (i *KubernetesIPAM) Status(ctx context.Context) error {
 
 // Close remove ip pool lock to allow other cni execution to access the pool
 func (i *KubernetesIPAM) Close(ctx context.Context) error {
+	lockName := getNormalizedIpRangeStr(i.config.Range)
 	poolLock := &whereaboutsv1alpha1.IPPoolLock{
-		ObjectMeta: metav1.ObjectMeta{Name: getNormalizedIpRangeStr(i.config.Range), Namespace: i.namespace},
+		ObjectMeta: metav1.ObjectMeta{Name: lockName, Namespace: i.namespace},
 	}
-	return i.client.Delete(ctx, poolLock)
+	logging.Errorf("releasing ip pool lock %s", lockName)
+	err := i.client.Delete(ctx, poolLock)
+	if err != nil {
+		logging.Errorf("error releasing ip pool lock %s: %v", lockName, err)
+	} else {
+		logging.Errorf("release ip pool lock %s done", lockName)
+	}
+	return err
 }
 
 // KubernetesIPPool represents an IPPool resource and its parsed set of allocations

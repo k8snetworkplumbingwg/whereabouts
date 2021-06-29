@@ -49,8 +49,8 @@ func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string, podRe
 		return newip, fmt.Errorf("Got an unknown mode passed to IPManagement: %v", mode)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), LockRequestTimeout)
-	defer cancel()
+	ctx, acquireCancel := context.WithTimeout(context.Background(), LockRequestTimeout)
+	defer acquireCancel()
 
 	var ipam Store
 	var pool IPPool
@@ -66,16 +66,16 @@ func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string, podRe
 		return newip, fmt.Errorf("IPAM %s client initialization error: %v", ipamConf.Datastore, err)
 	}
 	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), LockRequestTimeout)
-		defer cancel()
+		ctx, releaseCancel := context.WithTimeout(context.Background(), LockRequestTimeout)
 		err = ipam.Close(ctx)
 		if err != nil {
 			logging.Errorf("error in closing ipam pool %v", err)
 		}
+		releaseCancel()
 	}()
 
-	ctx, cancel = context.WithTimeout(context.Background(), RequestTimeout)
-	defer cancel()
+	ctx, ipPoolOpCancel := context.WithTimeout(context.Background(), RequestTimeout)
+	defer ipPoolOpCancel()
 
 	// Check our connectivity first
 	if err := ipam.Status(ctx); err != nil {
@@ -88,7 +88,9 @@ RETRYLOOP:
 	for j := 0; j < DatastoreRetries; j++ {
 		select {
 		case <-ctx.Done():
-			return newip, nil
+			// return last available newip and err
+			logging.Errorf("context is done for ip pool %s, returning last ip %s: error %v", ipamConf.Range, newip.String(), err)
+			return newip, err
 		default:
 			// retry the IPAM loop if the context has not been cancelled
 		}
@@ -121,9 +123,9 @@ RETRYLOOP:
 
 		err = pool.Update(ctx, updatedreservelist)
 		if err != nil {
-			logging.Errorf("IPAM error updating pool (attempt: %d): %v", j, err)
+			logging.Errorf("IPAM error updating pool %s (attempt: %d): %v", ipamConf.Range, j, err)
 			if e, ok := err.(temporary); ok && e.Temporary() {
-				logging.Errorf("IPAM error is temporary, retrying")
+				logging.Errorf("IPAM error is temporary for pool %s: %v, retrying", ipamConf.Range, err)
 				continue
 			}
 			break RETRYLOOP
