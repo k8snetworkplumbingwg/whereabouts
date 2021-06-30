@@ -1,6 +1,7 @@
 package types
 
 import (
+	"fmt"
 	"net"
 
 	cnitypes "github.com/containernetworking/cni/pkg/types"
@@ -85,6 +86,10 @@ type IPReservation struct {
 	ContainerID string `json:"id"`
 	PodRef      string `json:"podref,omitempty"`
 	IsAllocated bool
+}
+
+func (ir IPReservation) String() string {
+	return fmt.Sprintf("IP: %s is reserved for pod: %s", ir.IP.String(), ir.PodRef)
 }
 
 const (
