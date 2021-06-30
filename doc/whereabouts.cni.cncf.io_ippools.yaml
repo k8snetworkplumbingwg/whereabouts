@@ -40,6 +40,8 @@ spec:
                     properties:
                       id:
                         type: string
+                      podref:
+                        type: string
                     required:
                     - id
                     type: object
