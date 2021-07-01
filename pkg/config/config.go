@@ -101,38 +101,20 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 		logging.Debugf("Used defaults from parsed flat file config @ %s", foundflatfile)
 	}
 
-	if r := strings.SplitN(n.IPAM.Range, "-", 2); len(r) == 2 {
-		firstip := net.ParseIP(r[0])
-		if firstip == nil {
-			return nil, "", fmt.Errorf("invalid range start IP: %s", r[0])
-		}
-		lastip, ipNet, err := net.ParseCIDR(r[1])
-		if err != nil {
-			return nil, "", fmt.Errorf("invalid CIDR (do you have the 'range' parameter set for Whereabouts?) '%s': %s", r[1], err)
-		}
-		if !ipNet.Contains(firstip) {
-			return nil, "", fmt.Errorf("invalid range start for CIDR %s: %s", ipNet.String(), firstip)
-		}
-		n.IPAM.Range = ipNet.String()
-		n.IPAM.RangeStart = firstip
-		n.IPAM.RangeEnd = lastip
-	} else {
-		firstip, ipNet, err := net.ParseCIDR(n.IPAM.Range)
-		if err != nil {
-			return nil, "", fmt.Errorf("invalid CIDR %s: %s", n.IPAM.Range, err)
-		}
-		n.IPAM.Range = ipNet.String()
-		if n.IPAM.RangeStart == nil {
-			firstip = net.ParseIP(firstip.Mask(ipNet.Mask).String()) // if range_start is not net then pick the first network address
-			n.IPAM.RangeStart = firstip
-		}
+	ipRangeSet, err := getIPRangeSet(n.IPAM.Range, n.IPAM.GatewayStr, n.IPAM.RangeStart, n.IPAM.RangeEnd)
+	if err != nil {
+		return nil, "", err
+	}
+	n.IPAM.Ranges = append([]types.RangeSet{*ipRangeSet}, n.IPAM.Ranges...)
+
+	if len(n.IPAM.Ranges) == 0 {
+		return nil, "", fmt.Errorf("no IP ranges specified")
 	}
 
 	if n.IPAM.Datastore == "" {
 		n.IPAM.Datastore = types.DatastoreETCD
 	}
 
-	var err error
 	storageError := "You have not configured the storage engine (looks like you're using an invalid `%s` parameter in your config)"
 	switch n.IPAM.Datastore {
 	case types.DatastoreKubernetes:
@@ -150,14 +132,6 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 		return nil, "", err
 	}
 
-	if n.IPAM.GatewayStr != "" {
-		gwip := net.ParseIP(n.IPAM.GatewayStr)
-		if gwip == nil {
-			return nil, "", fmt.Errorf("Couldn't parse gateway IP: %s", n.IPAM.GatewayStr)
-		}
-		n.IPAM.Gateway = gwip
-	}
-
 	for i := range n.IPAM.OmitRanges {
 		_, _, err := net.ParseCIDR(n.IPAM.OmitRanges[i])
 		if err != nil {
@@ -173,6 +147,47 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 	n.IPAM.Name = n.Name
 
 	return n.IPAM, n.CNIVersion, nil
+}
+
+func getIPRangeSet(ipRange, gateway string, rangeStart, rangeEnd net.IP) (*types.RangeSet, error) {
+	ipRangeSet := types.RangeSet{}
+	if r := strings.SplitN(ipRange, "-", 2); len(r) == 2 {
+		firstip := net.ParseIP(r[0])
+		if firstip == nil {
+			return nil, fmt.Errorf("invalid range start IP: %s", r[0])
+		}
+		lastip, ipNet, err := net.ParseCIDR(r[1])
+		if err != nil {
+			return nil, fmt.Errorf("invalid CIDR (do you have the 'range' parameter set for Whereabouts?) '%s': %s", r[1], err)
+		}
+		if !ipNet.Contains(firstip) {
+			return nil, fmt.Errorf("invalid range start for CIDR %s: %s", ipNet.String(), firstip)
+		}
+		ipRangeSet.Range = ipNet.String()
+		ipRangeSet.RangeStart = firstip
+		ipRangeSet.RangeEnd = lastip
+	} else {
+		firstip, ipNet, err := net.ParseCIDR(ipRange)
+		if err != nil {
+			return nil, fmt.Errorf("invalid CIDR %s: %s", ipRange, err)
+		}
+		ipRangeSet.Range = ipNet.String()
+		if rangeStart == nil {
+			firstip = net.ParseIP(firstip.Mask(ipNet.Mask).String()) // if range_start is not net then pick the first network address
+			ipRangeSet.RangeStart = firstip
+		}
+	}
+	if ipRangeSet.RangeEnd == nil {
+		ipRangeSet.RangeEnd = rangeEnd
+	}
+	if gateway != "" {
+		gwip := net.ParseIP(gateway)
+		if gwip == nil {
+			return nil, fmt.Errorf("couldn't parse gateway IP: %s", gateway)
+		}
+		ipRangeSet.Gateway = gwip
+	}
+	return &ipRangeSet, nil
 }
 
 func pathExists(path string) bool {

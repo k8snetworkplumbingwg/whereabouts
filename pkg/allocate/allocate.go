@@ -21,12 +21,12 @@ func (a AssignmentError) Error() string {
 }
 
 // AssignIP assigns an IP using a range and a reserve list.
-func AssignIP(ipamConf types.IPAMConfig, reservelist []types.IPReservation, containerID string, podRef string) (net.IPNet, []types.IPReservation, error) {
+func AssignIP(ipamConf types.IPAMConfig, ipRange string, rangeStart, rangeEnd net.IP, reservelist []types.IPReservation, containerID string, podRef string) (net.IPNet, []types.IPReservation, error) {
 
 	// Setup the basics here.
-	_, ipnet, _ := net.ParseCIDR(ipamConf.Range)
+	_, ipnet, _ := net.ParseCIDR(ipRange)
 
-	newip, updatedreservelist, err := IterateForAssignment(*ipnet, ipamConf.RangeStart, ipamConf.RangeEnd, reservelist, ipamConf.OmitRanges, containerID, podRef)
+	newip, updatedreservelist, err := IterateForAssignment(*ipnet, rangeStart, rangeEnd, reservelist, ipamConf.OmitRanges, containerID, podRef)
 	if err != nil {
 		return net.IPNet{}, nil, err
 	}

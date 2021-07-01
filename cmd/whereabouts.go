@@ -39,24 +39,26 @@ func cmdAdd(args *skel.CmdArgs) error {
 	result.Routes = ipamConf.Routes
 
 	logging.Debugf("Beginning IPAM for ContainerID: %v", args.ContainerID)
-	newip, err := storage.IPManagement(types.Allocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
+	newips, err := storage.IPManagement(types.Allocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
 	if err != nil {
 		logging.Errorf("Error at storage engine: %s", err)
 		return fmt.Errorf("Error at storage engine: %w", err)
 	}
 
-	// Determine if v4 or v6.
-	var useVersion string
-	if allocate.IsIPv4(newip.IP) {
-		useVersion = "4"
-	} else {
-		useVersion = "6"
-	}
+	for _, newip := range newips {
+		// Determine if v4 or v6.
+		var useVersion string
+		if allocate.IsIPv4(newip.IP.IP) {
+			useVersion = "4"
+		} else {
+			useVersion = "6"
+		}
 
-	result.IPs = append(result.IPs, &current.IPConfig{
-		Version: useVersion,
-		Address: newip,
-		Gateway: ipamConf.Gateway})
+		result.IPs = append(result.IPs, &current.IPConfig{
+			Version: useVersion,
+			Address: newip.IP,
+			Gateway: newip.Gateway})
+	}
 
 	// Assign all the static IP elements.
 	for _, v := range ipamConf.Addresses {
