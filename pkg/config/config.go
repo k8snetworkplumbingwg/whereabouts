@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"sort"
 	"strings"
 
 	cnitypes "github.com/containernetworking/cni/pkg/types"
@@ -110,6 +111,13 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 	if len(n.IPAM.Ranges) == 0 {
 		return nil, "", fmt.Errorf("no IP ranges specified")
 	}
+
+	// sort ranges slice because range string is used afterwards in storage modules
+	// for acquiring distributed lock. so sorting on range string would maintain
+	// lock order and avoid deadlock scenarios across different ip range
+	sort.Slice(n.IPAM.Ranges, func(i, j int) bool {
+		return n.IPAM.Ranges[i].Range < n.IPAM.Ranges[j].Range
+	})
 
 	if n.IPAM.Datastore == "" {
 		n.IPAM.Datastore = types.DatastoreETCD

@@ -50,15 +50,17 @@ func NewETCDIPAM(ipamConf types.IPAMConfig) (*ETCDIPAM, error) {
 		return nil, err
 	}
 
+	// acquire range locks.
 	var mutexes []*concurrency.Mutex
 	for _, ipConfig := range ipamConf.Ranges {
 		mutex := concurrency.NewMutex(session, fmt.Sprintf("%s/%s", whereaboutsPrefix, ipConfig.Range))
-
-		// acquire our locks.
-		// TODO: acquiring locks across different ip ranges at once might cause deadlock.
-		// create IPAM instance for every ip range ?
 		if err := mutex.Lock(context.Background()); err != nil {
-			//TODO: release previously acquired locks
+			// release previously acquired range locks
+			for _, mutex := range mutexes {
+				if err := mutex.Unlock(context.Background()); err != nil {
+					continue
+				}
+			}
 			return nil, err
 		}
 		mutexes = append(mutexes, mutex)
