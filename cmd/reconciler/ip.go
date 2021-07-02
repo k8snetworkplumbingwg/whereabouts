@@ -34,6 +34,7 @@ func main() {
 	}
 	if len(cleanedUpIps) > 0 {
 		logging.Debugf("successfully cleanup IPs: %+v", cleanedUpIps)
+	} else {
+		logging.Debugf("no IP addresses to cleanup")
 	}
-	logging.Debugf("no IP addresses to cleanup")
 }
