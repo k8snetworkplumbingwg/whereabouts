@@ -42,6 +42,11 @@ rules:
   - leases
   verbs:
   - '*'
+- apiGroups: [""]
+  resources:
+  - pods
+  verbs:
+  - list
 ---
 apiVersion: apps/v1
 kind: DaemonSet
