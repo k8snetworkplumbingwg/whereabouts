@@ -74,7 +74,9 @@ RETRYLOOP:
 	for j := 0; j < DatastoreRetries; j++ {
 		select {
 		case <-ctx.Done():
-			return newip, nil
+			// when context is canceled due to request timeout, then return err as temporary error.
+			// would this be also potential fix for https://github.com/k8snetworkplumbingwg/whereabouts/issues/110 ?
+			return newip, &TemporaryError{err}
 		default:
 			// retry the IPAM loop if the context has not been cancelled
 		}
@@ -82,7 +84,7 @@ RETRYLOOP:
 		pool, err = ipam.GetIPPool(ctx, ipamConf.Range)
 		if err != nil {
 			logging.Errorf("IPAM error reading pool allocations (attempt: %d): %v", j, err)
-			if e, ok := err.(temporary); ok && e.Temporary() {
+			if e, ok := err.(Temporary); ok && e.Temporary() {
 				continue
 			}
 			return newip, err
@@ -108,7 +110,7 @@ RETRYLOOP:
 		err = pool.Update(ctx, updatedreservelist)
 		if err != nil {
 			logging.Errorf("IPAM error updating pool (attempt: %d): %v", j, err)
-			if e, ok := err.(temporary); ok && e.Temporary() {
+			if e, ok := err.(Temporary); ok && e.Temporary() {
 				continue
 			}
 			break RETRYLOOP
@@ -117,4 +119,21 @@ RETRYLOOP:
 	}
 
 	return newip, err
+}
+
+type TemporaryError struct {
+	error
+}
+
+func (t *TemporaryError) Temporary() bool {
+	return true
+}
+
+func (t *TemporaryError) GetCause() error {
+	return t.error
+}
+
+type Temporary interface {
+	Temporary() bool
+	GetCause() error
 }

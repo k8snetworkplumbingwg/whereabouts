@@ -125,13 +125,13 @@ func (i *KubernetesIPAM) getPool(ctx context.Context, name string, iprange strin
 		pool.Spec.Allocations = make(map[string]whereaboutsv1alpha1.IPAllocation)
 		if err := i.client.Create(ctx, pool); errors.IsAlreadyExists(err) {
 			// the pool was just created -- allow retry
-			return nil, &temporaryError{err}
+			return nil, &TemporaryError{err}
 		} else if err != nil {
 			return nil, fmt.Errorf("k8s create error: %s", err)
 		}
 		// if the pool was created for the first time, trigger another retry of the allocation loop
 		// so all of the metadata / resourceVersions are populated as necessary by the `client.Get` call
-		return nil, &temporaryError{fmt.Errorf("k8s pool initialized")}
+		return nil, &TemporaryError{fmt.Errorf("k8s pool initialized")}
 	} else if err != nil {
 		return nil, fmt.Errorf("k8s get error: %s", err)
 	}
@@ -208,22 +208,10 @@ func (p *KubernetesIPPool) Update(ctx context.Context, reservations []whereabout
 	if err != nil {
 		if errors.IsInvalid(err) {
 			// expect "invalid" errors if any of the jsonpatch "test" Operations fail
-			return &temporaryError{err}
+			return &TemporaryError{err}
 		}
 		return err
 	}
 
 	return nil
-}
-
-type temporaryError struct {
-	error
-}
-
-func (t *temporaryError) Temporary() bool {
-	return true
-}
-
-type temporary interface {
-	Temporary() bool
 }
