@@ -71,9 +71,8 @@ RETRYLOOP:
 	for j := 0; j < DatastoreRetries; j++ {
 		select {
 		case <-ctx.Done():
-			// return last available newip and err
-			logging.Errorf("context is done for ip pool %s, returning last ip %s: error %v", ipamConf.Range, newip.String(), err)
-			return newip, err
+			// return last available newip and context.DeadlineExceeded error
+			return newip, context.DeadlineExceeded
 		default:
 			// retry the IPAM loop if the context has not been cancelled
 		}
