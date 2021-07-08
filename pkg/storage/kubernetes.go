@@ -513,7 +513,7 @@ RETRYLOOP:
 			}
 
 		case whereaboutstypes.Deallocate:
-			updatedreservelist, ipforoverlappingrangeupdate, err = allocate.DeallocateIP(ipamConf, ipamConf.Range, reservelist, containerID)
+			updatedreservelist, ipforoverlappingrangeupdate, err = allocate.DeallocateIP(reservelist, containerID)
 			if err != nil {
 				logging.Errorf("Error deallocating IP: %v", err)
 				return newip, err
