@@ -32,6 +32,7 @@ type IPAMConfig struct {
 	Range             string            `json:"range"`
 	RangeStart        net.IP            `json:"range_start,omitempty"`
 	RangeEnd          net.IP            `json:"range_end,omitempty"`
+	Ranges            []RangeSet        `json:"ranges"`
 	GatewayStr        string            `json:"gateway"`
 	EtcdHost          string            `json:"etcd_host,omitempty"`
 	EtcdUsername      string            `json:"etcd_username,omitempty"`
@@ -67,11 +68,24 @@ type Address struct {
 	Version    string
 }
 
+// AssignedIP contains ip address and its gatway assigned by allocator
+type AssignedIP struct {
+	IP      net.IPNet
+	Gateway net.IP
+}
+
 // IPReservation is an address that has been reserved by this plugin
 type IPReservation struct {
 	IP          net.IP `json:"ip"`
 	ContainerID string `json:"id"`
 	PodRef      string `json:"podref,omitempty"`
+}
+
+type RangeSet struct {
+	Range      string `json:"range"`
+	RangeStart net.IP `json:"range_start,omitempty"`
+	RangeEnd   net.IP `json:"range_end,omitempty"`
+	Gateway    net.IP `json:"gateway,omitempty"`
 }
 
 const (

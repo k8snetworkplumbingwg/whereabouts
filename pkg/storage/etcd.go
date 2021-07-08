@@ -49,14 +49,24 @@ func NewETCDIPAM(ipamConf types.IPAMConfig) (*ETCDIPAM, error) {
 	if err != nil {
 		return nil, err
 	}
-	mutex := concurrency.NewMutex(session, fmt.Sprintf("%s/%s", whereaboutsPrefix, ipamConf.Range))
 
-	// acquire our lock
-	if err := mutex.Lock(context.Background()); err != nil {
-		return nil, err
+	// acquire range locks.
+	var mutexes []*concurrency.Mutex
+	for _, ipConfig := range ipamConf.Ranges {
+		mutex := concurrency.NewMutex(session, fmt.Sprintf("%s/%s", whereaboutsPrefix, ipConfig.Range))
+		if err := mutex.Lock(context.Background()); err != nil {
+			// release previously acquired range locks
+			for _, mutex := range mutexes {
+				if err := mutex.Unlock(context.Background()); err != nil {
+					continue
+				}
+			}
+			return nil, err
+		}
+		mutexes = append(mutexes, mutex)
 	}
 
-	return &ETCDIPAM{client, clientv3.NewKV(client), mutex, session}, nil
+	return &ETCDIPAM{client, clientv3.NewKV(client), mutexes, session}, nil
 }
 
 // ETCDIPAM manages ip blocks in an etcd backend
@@ -64,7 +74,7 @@ type ETCDIPAM struct {
 	client *clientv3.Client
 	kv     clientv3.KV
 
-	mutex   *concurrency.Mutex
+	mutexes []*concurrency.Mutex
 	session *concurrency.Session
 }
 
@@ -78,7 +88,13 @@ func (i *ETCDIPAM) Status(ctx context.Context) error {
 func (i *ETCDIPAM) Close() error {
 	defer i.client.Close()
 	defer i.session.Close()
-	return i.mutex.Unlock(context.Background())
+	var err error
+	for _, mutex := range i.mutexes {
+		if err := mutex.Unlock(context.Background()); err != nil {
+			continue
+		}
+	}
+	return err
 }
 
 // GetIPPool returns a storage.IPPool for the given range
