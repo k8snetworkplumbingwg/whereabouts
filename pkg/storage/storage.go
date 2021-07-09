@@ -2,8 +2,11 @@ package storage
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
+	"math/big"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/dougbtv/whereabouts/pkg/allocate"
@@ -12,9 +15,6 @@ import (
 )
 
 var (
-	// RequestTimeout defines how long the context timesout in
-	RequestTimeout = 10 * time.Second
-
 	// DatastoreRetries defines how many retries are attempted when updating the Pool
 	DatastoreRetries = 100
 )
@@ -60,8 +60,16 @@ func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string, podRe
 	}
 	defer ipam.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
-	defer cancel()
+	var ctx context.Context
+	var cancel context.CancelFunc
+	switch mode {
+	case types.Allocate:
+		ctx, cancel = context.WithTimeout(context.Background(), time.Duration(ipamConf.AllocateRequestTimeout)*time.Second)
+		defer cancel()
+	case types.Deallocate:
+		ctx, cancel = context.WithTimeout(context.Background(), time.Duration(ipamConf.DeAllocateRequestTimeout)*time.Second)
+		defer cancel()
+	}
 
 	// Check our connectivity first
 	if err := ipam.Status(ctx); err != nil {
@@ -69,12 +77,14 @@ func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string, podRe
 		return newip, err
 	}
 
+	var step int
 	// handle the ip add/del until successful
 RETRYLOOP:
-	for j := 0; j < DatastoreRetries; j++ {
+	for j := 1; j < DatastoreRetries+1; j++ {
 		select {
 		case <-ctx.Done():
-			return newip, nil
+			// return last available newip and context.DeadlineExceeded error
+			return newip, context.DeadlineExceeded
 		default:
 			// retry the IPAM loop if the context has not been cancelled
 		}
@@ -83,6 +93,13 @@ RETRYLOOP:
 		if err != nil {
 			logging.Errorf("IPAM error reading pool allocations (attempt: %d): %v", j, err)
 			if e, ok := err.(temporary); ok && e.Temporary() {
+				interval, _ := rand.Int(rand.Reader, big.NewInt(1000))
+				if strings.EqualFold(ipamConf.BackOffRetryScheme, "exponential") {
+					time.Sleep(time.Duration(int(interval.Int64())*(2^j)) * time.Millisecond)
+				} else {
+					time.Sleep(time.Duration(int(interval.Int64())+step) * time.Millisecond)
+					step += ipamConf.BackoffLinearStep
+				}
 				continue
 			}
 			return newip, err
@@ -107,8 +124,16 @@ RETRYLOOP:
 
 		err = pool.Update(ctx, updatedreservelist)
 		if err != nil {
-			logging.Errorf("IPAM error updating pool (attempt: %d): %v", j, err)
+			logging.Errorf("IPAM error updating pool %s (attempt: %d): %v", ipamConf.Range, j, err)
 			if e, ok := err.(temporary); ok && e.Temporary() {
+				logging.Errorf("IPAM error is temporary for pool %s: %v, retrying", ipamConf.Range, err)
+				interval, _ := rand.Int(rand.Reader, big.NewInt(1000))
+				if strings.EqualFold(ipamConf.BackOffRetryScheme, "exponential") {
+					time.Sleep(time.Duration(int(interval.Int64())*(2^j)) * time.Millisecond)
+				} else {
+					time.Sleep(time.Duration(int(interval.Int64())+step) * time.Millisecond)
+					step += ipamConf.BackoffLinearStep
+				}
 				continue
 			}
 			break RETRYLOOP
