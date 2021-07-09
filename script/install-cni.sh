@@ -20,7 +20,6 @@ mkdir -p $CNI_CONF_DIR/whereabouts.d
 WHEREABOUTS_KUBECONFIG=$CNI_CONF_DIR/whereabouts.d/whereabouts.kubeconfig
 WHEREABOUTS_FLATFILE=$CNI_CONF_DIR/whereabouts.d/whereabouts.conf
 WHEREABOUTS_KUBECONFIG_LITERAL=$(echo "$WHEREABOUTS_KUBECONFIG" | sed -e s'|/host||')
-WHEREABOUTS_REQUEST_TIMEOUT=10
 
 # ------------------------------- Generate a "kube-config"
 SERVICE_ACCOUNT_PATH=/var/run/secrets/kubernetes.io/serviceaccount
@@ -101,7 +100,6 @@ EOF
   cat > $WHEREABOUTS_FLATFILE <<EOF
 {
   "datastore": "kubernetes",
-  "request_timeout": $WHEREABOUTS_REQUEST_TIMEOUT,
   "kubernetes": {
     "kubeconfig": "${WHEREABOUTS_KUBECONFIG_LITERAL}"
   }
