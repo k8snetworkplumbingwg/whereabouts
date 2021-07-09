@@ -21,7 +21,7 @@ var (
 )
 
 // NewETCDIPAM returns a new IPAM Client configured to an etcd backend
-func NewETCDIPAM(ipamConf types.IPAMConfig) (*ETCDIPAM, error) {
+func NewETCDIPAM(ctx context.Context, ipamConf types.IPAMConfig) (*ETCDIPAM, error) {
 	cfg := clientv3.Config{
 		DialTimeout: DialTimeout,
 		Endpoints:   []string{ipamConf.EtcdHost},
@@ -52,7 +52,7 @@ func NewETCDIPAM(ipamConf types.IPAMConfig) (*ETCDIPAM, error) {
 	mutex := concurrency.NewMutex(session, fmt.Sprintf("%s/%s", whereaboutsPrefix, ipamConf.Range))
 
 	// acquire our lock
-	if err := mutex.Lock(context.Background()); err != nil {
+	if err := mutex.Lock(ctx); err != nil {
 		return nil, err
 	}
 
@@ -75,10 +75,10 @@ func (i *ETCDIPAM) Status(ctx context.Context) error {
 }
 
 // Close shuts down the clients etcd connections
-func (i *ETCDIPAM) Close() error {
+func (i *ETCDIPAM) Close(ctx context.Context) error {
 	defer i.client.Close()
 	defer i.session.Close()
-	return i.mutex.Unlock(context.Background())
+	return i.mutex.Unlock(ctx)
 }
 
 // GetIPPool returns a storage.IPPool for the given range

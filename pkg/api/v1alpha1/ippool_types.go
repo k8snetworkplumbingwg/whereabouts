@@ -45,6 +45,24 @@ type IPPoolList struct {
 	Items           []IPPool `json:"items"`
 }
 
+// +kubebuilder:object:root=true
+
+// IPPoolLock is the Schema for the ippoollocks API
+type IPPoolLock struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+
+// IPPoolLockList contains a list of IPPool
+type IPPoolLockList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []IPPoolLock `json:"items"`
+}
+
 func init() {
 	SchemeBuilder.Register(&IPPool{}, &IPPoolList{})
+	SchemeBuilder.Register(&IPPoolLock{}, &IPPoolLockList{})
 }

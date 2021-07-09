@@ -2,17 +2,18 @@ package storage
 
 import (
 	"context"
-	"encoding/json"
+	"crypto/rand"
 	"fmt"
+	"math/big"
 	"net"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/dougbtv/whereabouts/pkg/allocate"
 	whereaboutsv1alpha1 "github.com/dougbtv/whereabouts/pkg/api/v1alpha1"
 	"github.com/dougbtv/whereabouts/pkg/logging"
 	whereaboutstypes "github.com/dougbtv/whereabouts/pkg/types"
-	jsonpatch "gomodules.xyz/jsonpatch/v2"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -24,7 +25,7 @@ import (
 )
 
 // NewKubernetesIPAM returns a new KubernetesIPAM Client configured to a kubernetes CRD backend
-func NewKubernetesIPAM(containerID string, ipamConf whereaboutstypes.IPAMConfig) (*KubernetesIPAM, error) {
+func NewKubernetesIPAM(ctx context.Context, containerID string, ipamConf whereaboutstypes.IPAMConfig) (*KubernetesIPAM, error) {
 	scheme := runtime.NewScheme()
 	_ = whereaboutsv1alpha1.AddToScheme(scheme)
 
@@ -44,8 +45,8 @@ func NewKubernetesIPAM(containerID string, ipamConf whereaboutstypes.IPAMConfig)
 	var namespace string
 	if cfg, err := clientcmd.LoadFromFile(ipamConf.Kubernetes.KubeConfigPath); err != nil {
 		return nil, err
-	} else if ctx, ok := cfg.Contexts[cfg.CurrentContext]; ok && ctx != nil {
-		namespace = ctx.Namespace
+	} else if apiCtx, ok := cfg.Contexts[cfg.CurrentContext]; ok && apiCtx != nil {
+		namespace = apiCtx.Namespace
 	} else {
 		return nil, fmt.Errorf("k8s config: namespace not present in context")
 	}
@@ -57,6 +58,39 @@ func NewKubernetesIPAM(containerID string, ipamConf whereaboutstypes.IPAMConfig)
 	if err != nil {
 		return nil, err
 	}
+	lockName := getNormalizedIpRangeStr(ipamConf.Range)
+	poolLock := &whereaboutsv1alpha1.IPPoolLock{
+		ObjectMeta: metav1.ObjectMeta{Name: lockName, Namespace: namespace},
+	}
+	// try creating ip pool lock, retry (if already exists) until it succeeds
+	// this makes serial access to ip pool across cluster wide and this might decrease
+	// the load considerably on k8 api server because of too many update calls, this can
+	// happen due to retries upon status conflict errors
+	var attempt int
+	var step int
+	for {
+		err = c.Create(ctx, poolLock)
+		if err != nil {
+			if errors.IsAlreadyExists(err) {
+				attempt++
+				interval, _ := rand.Int(rand.Reader, big.NewInt(1000))
+				if strings.EqualFold(ipamConf.BackOffRetryScheme, "exponential") {
+					time.Sleep(time.Duration(int(interval.Int64())*(2^attempt)) * time.Millisecond)
+				} else {
+					time.Sleep(time.Duration(int(interval.Int64())+step) * time.Millisecond)
+					step += ipamConf.BackoffLinearStep
+				}
+				logging.Errorf("ip pool lock %s is held by someone, retry to acquire it", lockName)
+				continue
+			}
+			logging.Errorf("ip pool lock acquire failed reason: %v ", errors.ReasonForError(err))
+			return nil, err
+		} else {
+			logging.Errorf("acquire ip pool lock %s done", lockName)
+			break
+		}
+	}
+
 	return &KubernetesIPAM{c, ipamConf, containerID, namespace, DatastoreRetries}, nil
 }
 
@@ -94,14 +128,18 @@ func toAllocationMap(reservelist []whereaboutstypes.IPReservation, firstip net.I
 	return allocations
 }
 
-// GetIPPool returns a storage.IPPool for the given range
-func (i *KubernetesIPAM) GetIPPool(ctx context.Context, ipRange string) (IPPool, error) {
+func getNormalizedIpRangeStr(ipRange string) string {
 	// v6 filter
 	normalized := strings.ReplaceAll(ipRange, ":", "-")
 	// replace subnet cidr slash
 	normalized = strings.ReplaceAll(normalized, "/", "-")
 
-	pool, err := i.getPool(ctx, normalized, ipRange)
+	return normalized
+}
+
+// GetIPPool returns a storage.IPPool for the given range
+func (i *KubernetesIPAM) GetIPPool(ctx context.Context, ipRange string) (IPPool, error) {
+	pool, err := i.getPool(ctx, getNormalizedIpRangeStr(ipRange), ipRange)
 	if err != nil {
 		return nil, err
 	}
@@ -145,9 +183,20 @@ func (i *KubernetesIPAM) Status(ctx context.Context) error {
 	return err
 }
 
-// Close partially implements the Store interface
-func (i *KubernetesIPAM) Close() error {
-	return nil
+// Close remove ip pool lock to allow other cni execution to access the pool
+func (i *KubernetesIPAM) Close(ctx context.Context) error {
+	lockName := getNormalizedIpRangeStr(i.config.Range)
+	poolLock := &whereaboutsv1alpha1.IPPoolLock{
+		ObjectMeta: metav1.ObjectMeta{Name: lockName, Namespace: i.namespace},
+	}
+	logging.Errorf("releasing ip pool lock %s", lockName)
+	err := i.client.Delete(ctx, poolLock)
+	if err != nil {
+		logging.Errorf("error releasing ip pool lock %s: %v", lockName, err)
+	} else {
+		logging.Errorf("release ip pool lock %s done", lockName)
+	}
+	return err
 }
 
 // KubernetesIPPool represents an IPPool resource and its parsed set of allocations
@@ -165,49 +214,11 @@ func (p *KubernetesIPPool) Allocations() []whereaboutstypes.IPReservation {
 
 // Update sets the pool allocated IP list to the given IP reservations
 func (p *KubernetesIPPool) Update(ctx context.Context, reservations []whereaboutstypes.IPReservation) error {
-	// marshal the current pool to serve as the base for the patch creation
-	orig := p.pool.DeepCopy()
-	origBytes, err := json.Marshal(orig)
-	if err != nil {
-		return err
-	}
-
-	// update the pool before marshalling once again
+	// update the pool with new ip allocations
 	p.pool.Spec.Allocations = toAllocationMap(reservations, p.firstIP)
-	modBytes, err := json.Marshal(p.pool)
+	err := p.client.Update(ctx, p.pool)
 	if err != nil {
-		return err
-	}
-
-	// create the patch
-	patch, err := jsonpatch.CreatePatch(origBytes, modBytes)
-	if err != nil {
-		return err
-	}
-
-	// add additional tests to the patch
-	ops := []jsonpatch.Operation{
-		// ensure patch is applied to appropriate resource version only
-		{Operation: "test", Path: "/metadata/resourceVersion", Value: orig.ObjectMeta.ResourceVersion},
-	}
-	for _, o := range patch {
-		// safeguard add ops -- "add" will update existing paths, this "test" ensures the path is empty
-		if o.Operation == "add" {
-			var m map[string]interface{}
-			ops = append(ops, jsonpatch.Operation{Operation: "test", Path: o.Path, Value: m})
-		}
-	}
-	ops = append(ops, patch...)
-	patchData, err := json.Marshal(ops)
-	if err != nil {
-		return err
-	}
-
-	// apply the patch
-	err = p.client.Patch(ctx, orig, client.ConstantPatch(types.JSONPatchType, patchData))
-	if err != nil {
-		if errors.IsInvalid(err) {
-			// expect "invalid" errors if any of the jsonpatch "test" Operations fail
+		if errors.IsConflict(err) {
 			return &temporaryError{err}
 		}
 		return err

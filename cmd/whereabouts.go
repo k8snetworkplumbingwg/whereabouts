@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -81,6 +82,10 @@ func cmdDel(args *skel.CmdArgs) error {
 	_, err = storage.IPManagement(types.Deallocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
 	if err != nil {
 		logging.Verbosef("WARNING: Problem deallocating IP: %s", err)
+		// ok to return context deadline error. this makes kubelet/cni would retry for deallocate.
+		if err == context.DeadlineExceeded || strings.Contains(err.Error(), "context deadline exceeded") {
+			return err
+		}
 		// return fmt.Errorf("Error deallocating IP: %s", err)
 	}
 

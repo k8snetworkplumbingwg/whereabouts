@@ -2,8 +2,11 @@ package storage
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
+	"math/big"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/dougbtv/whereabouts/pkg/allocate"
@@ -12,8 +15,6 @@ import (
 )
 
 var (
-	// RequestTimeout defines how long the context timesout in
-	RequestTimeout = 10 * time.Second
 
 	// DatastoreRetries defines how many retries are attempted when updating the Pool
 	DatastoreRetries = 100
@@ -29,7 +30,7 @@ type IPPool interface {
 type Store interface {
 	GetIPPool(ctx context.Context, ipRange string) (IPPool, error)
 	Status(ctx context.Context) error
-	Close() error
+	Close(ctx context.Context) error
 }
 
 // IPManagement manages ip allocation and deallocation from a storage perspective
@@ -45,23 +46,55 @@ func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string, podRe
 		return newip, fmt.Errorf("Got an unknown mode passed to IPManagement: %v", mode)
 	}
 
+	var ctx context.Context
+	var acquireCancel context.CancelFunc
+	switch mode {
+	case types.Allocate:
+		ctx, acquireCancel = context.WithTimeout(context.Background(), time.Duration(ipamConf.AllocateLockRequestTimeout)*time.Second)
+		defer acquireCancel()
+	case types.Deallocate:
+		ctx, acquireCancel = context.WithTimeout(context.Background(), time.Duration(ipamConf.DeAllocateLockRequestTimeout)*time.Second)
+		defer acquireCancel()
+	}
+
 	var ipam Store
 	var pool IPPool
 	var err error
 	switch ipamConf.Datastore {
 	case types.DatastoreETCD:
-		ipam, err = NewETCDIPAM(ipamConf)
+		ipam, err = NewETCDIPAM(ctx, ipamConf)
 	case types.DatastoreKubernetes:
-		ipam, err = NewKubernetesIPAM(containerID, ipamConf)
+		ipam, err = NewKubernetesIPAM(ctx, containerID, ipamConf)
 	}
 	if err != nil {
 		logging.Errorf("IPAM %s client initialization error: %v", ipamConf.Datastore, err)
 		return newip, fmt.Errorf("IPAM %s client initialization error: %v", ipamConf.Datastore, err)
 	}
-	defer ipam.Close()
+	defer func() {
+		var ctx context.Context
+		var releaseCancel context.CancelFunc
+		switch mode {
+		case types.Allocate:
+			ctx, releaseCancel = context.WithTimeout(context.Background(), time.Duration(ipamConf.AllocateLockRequestTimeout)*time.Second)
+		case types.Deallocate:
+			ctx, releaseCancel = context.WithTimeout(context.Background(), time.Duration(ipamConf.DeAllocateLockRequestTimeout)*time.Second)
+		}
+		err = ipam.Close(ctx)
+		if err != nil {
+			logging.Errorf("error in closing ipam pool %v", err)
+		}
+		releaseCancel()
+	}()
 
-	ctx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
-	defer cancel()
+	var ipPoolOpCancel context.CancelFunc
+	switch mode {
+	case types.Allocate:
+		ctx, ipPoolOpCancel = context.WithTimeout(context.Background(), time.Duration(ipamConf.AllocateRequestTimeout)*time.Second)
+		defer ipPoolOpCancel()
+	case types.Deallocate:
+		ctx, ipPoolOpCancel = context.WithTimeout(context.Background(), time.Duration(ipamConf.DeAllocateRequestTimeout)*time.Second)
+		defer ipPoolOpCancel()
+	}
 
 	// Check our connectivity first
 	if err := ipam.Status(ctx); err != nil {
@@ -69,12 +102,14 @@ func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string, podRe
 		return newip, err
 	}
 
+	var step int
 	// handle the ip add/del until successful
 RETRYLOOP:
-	for j := 0; j < DatastoreRetries; j++ {
+	for j := 1; j < DatastoreRetries+1; j++ {
 		select {
 		case <-ctx.Done():
-			return newip, nil
+			// return last available newip and context.DeadlineExceeded error
+			return newip, context.DeadlineExceeded
 		default:
 			// retry the IPAM loop if the context has not been cancelled
 		}
@@ -83,6 +118,14 @@ RETRYLOOP:
 		if err != nil {
 			logging.Errorf("IPAM error reading pool allocations (attempt: %d): %v", j, err)
 			if e, ok := err.(temporary); ok && e.Temporary() {
+				// this block might never get executed due to ip pool lock.
+				interval, _ := rand.Int(rand.Reader, big.NewInt(1000))
+				if strings.EqualFold(ipamConf.BackOffRetryScheme, "exponential") {
+					time.Sleep(time.Duration(int(interval.Int64())*(2^j)) * time.Millisecond)
+				} else {
+					time.Sleep(time.Duration(int(interval.Int64())+step) * time.Millisecond)
+					step += ipamConf.BackoffLinearStep
+				}
 				continue
 			}
 			return newip, err
@@ -107,8 +150,17 @@ RETRYLOOP:
 
 		err = pool.Update(ctx, updatedreservelist)
 		if err != nil {
-			logging.Errorf("IPAM error updating pool (attempt: %d): %v", j, err)
+			logging.Errorf("IPAM error updating pool %s (attempt: %d): %v", ipamConf.Range, j, err)
 			if e, ok := err.(temporary); ok && e.Temporary() {
+				logging.Errorf("IPAM error is temporary for pool %s: %v, retrying", ipamConf.Range, err)
+				// this block might never get executed due to ip pool lock.
+				interval, _ := rand.Int(rand.Reader, big.NewInt(1000))
+				if strings.EqualFold(ipamConf.BackOffRetryScheme, "exponential") {
+					time.Sleep(time.Duration(int(interval.Int64())*(2^j)) * time.Millisecond)
+				} else {
+					time.Sleep(time.Duration(int(interval.Int64())+step) * time.Millisecond)
+					step += ipamConf.BackoffLinearStep
+				}
 				continue
 			}
 			break RETRYLOOP
