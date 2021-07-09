@@ -2,8 +2,11 @@ package storage
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
+	"math/big"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/dougbtv/whereabouts/pkg/allocate"
@@ -43,8 +46,16 @@ func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string, podRe
 		return newip, fmt.Errorf("Got an unknown mode passed to IPManagement: %v", mode)
 	}
 
-	ctx, acquireCancel := context.WithTimeout(context.Background(), time.Duration(ipamConf.LockRequestTimeout)*time.Second)
-	defer acquireCancel()
+	var ctx context.Context
+	var acquireCancel context.CancelFunc
+	switch mode {
+	case types.Allocate:
+		ctx, acquireCancel = context.WithTimeout(context.Background(), time.Duration(ipamConf.AllocateLockRequestTimeout)*time.Second)
+		defer acquireCancel()
+	case types.Deallocate:
+		ctx, acquireCancel = context.WithTimeout(context.Background(), time.Duration(ipamConf.DeAllocateLockRequestTimeout)*time.Second)
+		defer acquireCancel()
+	}
 
 	var ipam Store
 	var pool IPPool
@@ -60,7 +71,14 @@ func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string, podRe
 		return newip, fmt.Errorf("IPAM %s client initialization error: %v", ipamConf.Datastore, err)
 	}
 	defer func() {
-		ctx, releaseCancel := context.WithTimeout(context.Background(), time.Duration(ipamConf.LockRequestTimeout)*time.Second)
+		var ctx context.Context
+		var releaseCancel context.CancelFunc
+		switch mode {
+		case types.Allocate:
+			ctx, releaseCancel = context.WithTimeout(context.Background(), time.Duration(ipamConf.AllocateLockRequestTimeout)*time.Second)
+		case types.Deallocate:
+			ctx, releaseCancel = context.WithTimeout(context.Background(), time.Duration(ipamConf.DeAllocateLockRequestTimeout)*time.Second)
+		}
 		err = ipam.Close(ctx)
 		if err != nil {
 			logging.Errorf("error in closing ipam pool %v", err)
@@ -68,8 +86,15 @@ func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string, podRe
 		releaseCancel()
 	}()
 
-	ctx, ipPoolOpCancel := context.WithTimeout(context.Background(), time.Duration(ipamConf.RequestTimeout)*time.Second)
-	defer ipPoolOpCancel()
+	var ipPoolOpCancel context.CancelFunc
+	switch mode {
+	case types.Allocate:
+		ctx, ipPoolOpCancel = context.WithTimeout(context.Background(), time.Duration(ipamConf.AllocateRequestTimeout)*time.Second)
+		defer ipPoolOpCancel()
+	case types.Deallocate:
+		ctx, ipPoolOpCancel = context.WithTimeout(context.Background(), time.Duration(ipamConf.DeAllocateRequestTimeout)*time.Second)
+		defer ipPoolOpCancel()
+	}
 
 	// Check our connectivity first
 	if err := ipam.Status(ctx); err != nil {
@@ -77,9 +102,10 @@ func IPManagement(mode int, ipamConf types.IPAMConfig, containerID string, podRe
 		return newip, err
 	}
 
+	var step int
 	// handle the ip add/del until successful
 RETRYLOOP:
-	for j := 0; j < DatastoreRetries; j++ {
+	for j := 1; j < DatastoreRetries+1; j++ {
 		select {
 		case <-ctx.Done():
 			// return last available newip and context.DeadlineExceeded error
@@ -92,6 +118,14 @@ RETRYLOOP:
 		if err != nil {
 			logging.Errorf("IPAM error reading pool allocations (attempt: %d): %v", j, err)
 			if e, ok := err.(temporary); ok && e.Temporary() {
+				// this block might never get executed due to ip pool lock.
+				interval, _ := rand.Int(rand.Reader, big.NewInt(1000))
+				if strings.EqualFold(ipamConf.BackOffRetryScheme, "exponential") {
+					time.Sleep(time.Duration(int(interval.Int64())*(2^j)) * time.Millisecond)
+				} else {
+					time.Sleep(time.Duration(int(interval.Int64())+step) * time.Millisecond)
+					step += ipamConf.BackoffLinearStep
+				}
 				continue
 			}
 			return newip, err
@@ -119,6 +153,14 @@ RETRYLOOP:
 			logging.Errorf("IPAM error updating pool %s (attempt: %d): %v", ipamConf.Range, j, err)
 			if e, ok := err.(temporary); ok && e.Temporary() {
 				logging.Errorf("IPAM error is temporary for pool %s: %v, retrying", ipamConf.Range, err)
+				// this block might never get executed due to ip pool lock.
+				interval, _ := rand.Int(rand.Reader, big.NewInt(1000))
+				if strings.EqualFold(ipamConf.BackOffRetryScheme, "exponential") {
+					time.Sleep(time.Duration(int(interval.Int64())*(2^j)) * time.Millisecond)
+				} else {
+					time.Sleep(time.Duration(int(interval.Int64())+step) * time.Millisecond)
+					step += ipamConf.BackoffLinearStep
+				}
 				continue
 			}
 			break RETRYLOOP

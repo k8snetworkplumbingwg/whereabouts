@@ -66,12 +66,20 @@ func NewKubernetesIPAM(ctx context.Context, containerID string, ipamConf whereab
 	// this makes serial access to ip pool across cluster wide and this might decrease
 	// the load considerably on k8 api server because of too many update calls, this can
 	// happen due to retries upon status conflict errors
+	var attempt int
+	var step int
 	for {
 		err = c.Create(ctx, poolLock)
 		if err != nil {
 			if errors.IsAlreadyExists(err) {
+				attempt++
 				interval, _ := rand.Int(rand.Reader, big.NewInt(1000))
-				time.Sleep(time.Duration(interval.Int64()) * time.Millisecond)
+				if strings.EqualFold(ipamConf.BackOffRetryScheme, "exponential") {
+					time.Sleep(time.Duration(int(interval.Int64())*(2^attempt)) * time.Millisecond)
+				} else {
+					time.Sleep(time.Duration(int(interval.Int64())+step) * time.Millisecond)
+					step += ipamConf.BackoffLinearStep
+				}
 				logging.Errorf("ip pool lock %s is held by someone, retry to acquire it", lockName)
 				continue
 			}

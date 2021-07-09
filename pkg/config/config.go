@@ -132,14 +132,31 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 		n.IPAM.Datastore = types.DatastoreETCD
 	}
 
-	if n.IPAM.RequestTimeout == 0 {
+	if n.IPAM.AllocateRequestTimeout == 0 {
 		// default to 10s
-		n.IPAM.RequestTimeout = 10
+		n.IPAM.AllocateRequestTimeout = 10
 	}
 
-	if n.IPAM.LockRequestTimeout == 0 {
+	if n.IPAM.DeAllocateRequestTimeout == 0 {
+		// default to 10s
+		n.IPAM.DeAllocateRequestTimeout = 10
+	}
+
+	if n.IPAM.AllocateLockRequestTimeout == 0 {
 		// default to 30s
-		n.IPAM.LockRequestTimeout = 30
+		n.IPAM.AllocateLockRequestTimeout = 30
+	}
+
+	if n.IPAM.DeAllocateLockRequestTimeout == 0 {
+		// default to 30s
+		n.IPAM.DeAllocateLockRequestTimeout = 30
+	}
+
+	if !strings.EqualFold(n.IPAM.BackOffRetryScheme, "exponential") {
+		if n.IPAM.BackoffLinearStep == 0 {
+			// set backoff step to 500 ms
+			n.IPAM.BackoffLinearStep = 500
+		}
 	}
 
 	var err error
