@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -42,7 +43,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 	newip, err := storage.IPManagement(types.Allocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
 	if err != nil {
 		logging.Errorf("Error at storage engine: %s", err)
-		return fmt.Errorf("Error at storage engine: %w", err)
+		return fmt.Errorf("error at storage engine: %w", err)
 	}
 
 	// Determine if v4 or v6.
@@ -81,7 +82,10 @@ func cmdDel(args *skel.CmdArgs) error {
 	_, err = storage.IPManagement(types.Deallocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
 	if err != nil {
 		logging.Verbosef("WARNING: Problem deallocating IP: %s", err)
-		// return fmt.Errorf("Error deallocating IP: %s", err)
+		// ok to return context deadline error. this makes kubelet/cni would retry for deallocate.
+		if err == context.DeadlineExceeded || strings.Contains(err.Error(), "context deadline exceeded") {
+			return err
+		}
 	}
 
 	return nil
