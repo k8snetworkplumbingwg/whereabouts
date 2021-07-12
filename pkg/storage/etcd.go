@@ -93,7 +93,7 @@ func (i *EtcdOverlappingRangeStore) IsAllocatedInOverlappingRange(ctx context.Co
 }
 
 // UpdateOverlappingRangeAllocation updates our clusterwide allocation for overlapping ranges.
-func (i *EtcdOverlappingRangeStore) UpdateOverlappingRangeAllocation(ctx context.Context, mode int, ip net.IP, containerID string) error {
+func (i *EtcdOverlappingRangeStore) UpdateOverlappingRangeAllocation(ctx context.Context, mode int, ip net.IP, containerID string, podRef string) error {
 	logging.Debugf("ETCD UpdateOverlappingRangeWide is NOT IMPLEMENTED!!!! TODO")
 	return nil
 }

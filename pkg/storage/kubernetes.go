@@ -202,7 +202,7 @@ func (c *KubernetesOverlappingRangeStore) IsAllocatedInOverlappingRange(ctx cont
 }
 
 // UpdateOverlappingRangeAllocation updates clusterwide allocation for overlapping ranges.
-func (c *KubernetesOverlappingRangeStore) UpdateOverlappingRangeAllocation(ctx context.Context, mode int, ip net.IP, containerID string) error {
+func (c *KubernetesOverlappingRangeStore) UpdateOverlappingRangeAllocation(ctx context.Context, mode int, ip net.IP, containerID string, podRef string) error {
 	// Normalize the IP
 	normalizedip := strings.ReplaceAll(fmt.Sprint(ip), ":", "-")
 
@@ -219,6 +219,7 @@ func (c *KubernetesOverlappingRangeStore) UpdateOverlappingRangeAllocation(ctx c
 
 		clusteripres.Spec = whereaboutsv1alpha1.OverlappingRangeIPReservationSpec{
 			ContainerID: containerID,
+			PodRef:      podRef,
 		}
 
 		err = c.client.Create(ctx, clusteripres)
@@ -540,7 +541,7 @@ RETRYLOOP:
 	}
 
 	if ipamConf.OverlappingRanges {
-		err = overlappingrangestore.UpdateOverlappingRangeAllocation(ctx, mode, ipforoverlappingrangeupdate, containerID)
+		err = overlappingrangestore.UpdateOverlappingRangeAllocation(ctx, mode, ipforoverlappingrangeupdate, containerID, podRef)
 		if err != nil {
 			logging.Errorf("Error performing UpdateOverlappingRangeAllocation: %v", err)
 			return newip, err
