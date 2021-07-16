@@ -37,8 +37,8 @@ var _ = Describe("IPReconciler", func() {
 
 	newIPReconciler := func(orphanedIPs ...OrphanedIPReservations) *ReconcileLooper {
 		reconciler := &ReconcileLooper{
-			cancelFunc: func() {},
-			ctx: context.TODO(),
+			cancelFunc:  func() {},
+			ctx:         context.TODO(),
 			orphanedIPs: orphanedIPs,
 		}
 
@@ -143,7 +143,7 @@ func generateIPPool(cidr string, podRefs ...string) whereaboutsv1alpha1.IPPool {
 
 	return whereaboutsv1alpha1.IPPool{
 		Spec: whereaboutsv1alpha1.IPPoolSpec{
-			Range: cidr,
+			Range:       cidr,
 			Allocations: allocations,
 		},
 	}

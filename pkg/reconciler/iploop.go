@@ -9,12 +9,13 @@ import (
 	"github.com/dougbtv/whereabouts/pkg/storage"
 	"github.com/dougbtv/whereabouts/pkg/storage/kubernetes"
 	"github.com/dougbtv/whereabouts/pkg/types"
+	v1 "k8s.io/api/core/v1"
 )
 
 type ReconcileLooper struct {
 	ctx         context.Context
 	k8sClient   kubernetes.Client
-	livePodRefs []string
+	livePods    map[string]podWrapper
 	orphanedIPs []OrphanedIPReservations
 }
 
@@ -31,34 +32,21 @@ func NewReconcileLooper(kubeConfigPath string, ctx context.Context) (*ReconcileL
 	}
 	logging.Debugf("successfully read the kubernetes configuration file located at: %s", kubeConfigPath)
 
-	podRefs, err := getPodRefs(*k8sClient)
+	pods, err := k8sClient.ListPods()
 	if err != nil {
 		return nil, err
 	}
 
 	looper := &ReconcileLooper{
-		ctx:         ctx,
-		k8sClient:   *k8sClient,
-		livePodRefs: podRefs,
+		ctx:       ctx,
+		k8sClient: *k8sClient,
+		livePods:  indexPods(pods),
 	}
 
 	if err := looper.findOrphanedIPsPerPool(); err != nil {
 		return nil, err
 	}
 	return looper, nil
-}
-
-func getPodRefs(k8sClient kubernetes.Client) ([]string, error) {
-	pods, err := k8sClient.ListPods()
-	if err != nil {
-		return nil, err
-	}
-
-	var podRefs []string
-	for _, pod := range pods {
-		podRefs = append(podRefs, fmt.Sprintf("%s/%s", pod.GetNamespace(), pod.GetName()))
-	}
-	return podRefs, err
 }
 
 func (rl *ReconcileLooper) findOrphanedIPsPerPool() error {
@@ -71,15 +59,15 @@ func (rl *ReconcileLooper) findOrphanedIPsPerPool() error {
 		orphanIP := OrphanedIPReservations{
 			Pool: pool,
 		}
-		for _, allocation := range pool.Allocations() {
-			logging.Debugf("the IP reservation: %s", allocation)
-			if allocation.PodRef == "" {
-				_ = logging.Errorf("pod ref missing for Allocations: %s", allocation)
+		for _, ipReservation := range pool.Allocations() {
+			logging.Debugf("the IP reservation: %s", ipReservation)
+			if ipReservation.PodRef == "" {
+				_ = logging.Errorf("pod ref missing for Allocations: %s", ipReservation)
 				continue
 			}
-			if !rl.isPodAlive(allocation.PodRef) {
-				logging.Debugf("pod ref %s is not listed in the live pods list", allocation.PodRef)
-				orphanIP.Allocations = append(orphanIP.Allocations, allocation)
+			if !rl.isPodAlive(ipReservation) {
+				logging.Debugf("pod ref %s is not listed in the live pods list", ipReservation.PodRef)
+				orphanIP.Allocations = append(orphanIP.Allocations, ipReservation)
 			}
 		}
 		if len(orphanIP.Allocations) > 0 {
@@ -90,13 +78,24 @@ func (rl *ReconcileLooper) findOrphanedIPsPerPool() error {
 	return nil
 }
 
-func (rl ReconcileLooper) isPodAlive(podRef string) bool {
-	for _, livePodRef := range rl.livePodRefs {
-		if podRef == livePodRef {
-			return true
+func (rl ReconcileLooper) isPodAlive(allocation types.IPReservation) bool {
+	for livePodRef, livePod := range rl.livePods {
+		if allocation.PodRef == livePodRef {
+			livePodIPs := livePod.ips
+			logging.Debugf(
+				"pod reference %s matches allocation; Allocation IP: %s; PodIPs: %s",
+				livePodRef,
+				allocation.IP.String(),
+				livePodIPs)
+			_, isFound := livePodIPs[allocation.IP.String()]
+			return isFound
 		}
 	}
 	return false
+}
+
+func composePodRef(pod v1.Pod) string {
+	return fmt.Sprintf("%s/%s", pod.GetNamespace(), pod.GetName())
 }
 
 func (rl ReconcileLooper) ReconcileIPPools() ([]types.IPReservation, error) {

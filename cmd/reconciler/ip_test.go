@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/dougbtv/whereabouts/pkg/api/v1alpha1"
 	"github.com/dougbtv/whereabouts/pkg/reconciler"
 	"github.com/dougbtv/whereabouts/pkg/types"
+	multusv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,10 +22,11 @@ import (
 
 var _ = Describe("Whereabouts IP reconciler", func() {
 	const (
-		ipRange     = "10.10.10.0/16"
-		namespace   = "testns"
-		networkName = "net1"
-		podName     = "pod1"
+		firstIPInRange = "10.10.10.1"
+		ipRange        = "10.10.10.0/16"
+		namespace      = "testns"
+		networkName    = "net1"
+		podName        = "pod1"
 	)
 
 	var (
@@ -35,7 +38,8 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 
 		BeforeEach(func() {
 			var err error
-			pod, err = k8sClientSet.CoreV1().Pods(namespace).Create(generatePod(namespace, podName, networkName))
+			pod, err = k8sClientSet.CoreV1().Pods(namespace).Create(
+				generatePod(namespace, podName, ipInNetwork{ip: firstIPInRange, networkName: networkName}))
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -88,16 +92,21 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 
 	Context("multiple pods", func() {
 		const (
-			deadPodIndex = 0
-			livePodIndex = 1
-			numberOfPods = 2
+			deadPodIndex    = 0
+			livePodIndex    = 1
+			numberOfPods    = 2
+			secondIPInRange = "10.10.10.2"
 		)
 
 		var pods []v1.Pod
 
 		BeforeEach(func() {
+			ips := []string{firstIPInRange, secondIPInRange}
 			for i := 0; i < numberOfPods; i++ {
-				pod := generatePod(namespace, fmt.Sprintf("pod%d", i+1), networkName)
+				pod := generatePod(namespace, fmt.Sprintf("pod%d", i+1), ipInNetwork{
+					ip:          ips[i],
+					networkName: networkName,
+				})
 				if i == livePodIndex {
 					_, err := k8sClientSet.CoreV1().Pods(namespace).Create(pod)
 					Expect(err).NotTo(HaveOccurred())
@@ -183,13 +192,17 @@ func generateIPPoolSpec(ipRange string, namespace string, poolName string, podNa
 	}
 }
 
-func generatePod(namespace string, podName string, networks ...string) *v1.Pod {
-	networkAnnotations := map[string]string{"k8s.v1.cni.cncf.io/networks": strings.Join(networks, ",")}
+type ipInNetwork struct {
+	ip          string
+	networkName string
+}
+
+func generatePod(namespace string, podName string, ipNetworks ...ipInNetwork) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        podName,
 			Namespace:   namespace,
-			Annotations: networkAnnotations,
+			Annotations: generatePodAnnotations(ipNetworks...),
 		},
 		Spec: v1.PodSpec{
 			Containers: []v1.Container{
@@ -201,4 +214,33 @@ func generatePod(namespace string, podName string, networks ...string) *v1.Pod {
 			},
 		},
 	}
+}
+
+func generatePodAnnotations(ipNetworks ...ipInNetwork) map[string]string {
+	var networks []string
+	for _, ipNetworkInfo := range ipNetworks {
+		networks = append(networks, ipNetworkInfo.networkName)
+	}
+	networkAnnotations := map[string]string{
+		reconciler.MultusNetworkAnnotation:       strings.Join(networks, ","),
+		reconciler.MultusNetworkStatusAnnotation: generatePodNetworkStatusAnnotation(ipNetworks...),
+	}
+	return networkAnnotations
+}
+
+func generatePodNetworkStatusAnnotation(ipNetworks ...ipInNetwork) string {
+	var networkStatus []multusv1.NetworkStatus
+	for i, ipNetworkInfo := range ipNetworks {
+		networkStatus = append(networkStatus, multusv1.NetworkStatus{
+			Name:      ipNetworkInfo.networkName,
+			Interface: fmt.Sprintf("net%d", i+1),
+			IPs:       []string{ipNetworkInfo.ip},
+		})
+	}
+	networkStatusStr, err := json.Marshal(networkStatus)
+	if err != nil {
+		return ""
+	}
+
+	return string(networkStatusStr)
 }
