@@ -2,6 +2,19 @@
 
 Should you need to further configure Whereabouts, you might find these options valuable.
 
+## IP Reconciliation
+
+Whereabouts includes a tool which is intended be run as a k8s `CronJob`. This
+utility scans the currently allocated IP addresses, and reconciles them against
+the currently running pods, and deallocates IP addresses which have been left
+stranded.
+Stranded IP addresses can occur due to node failures (e.g. a sudden power off /
+reboot event) or potentially from pods that have been force deleted
+(e.g. `kubectl delete pod foo --grace-period=0 --force`)
+
+A reference deployment of this tool is available in the
+`/docs/ip-reconcilier-job.yaml` file.
+
 ## Installation options
 
 The daemonset installation as shown on the README is for use with Kubernetes version 1.16 and later. It may also be useful with previous versions, however you'll need to change the `apiVersion` of the daemonset in the provided yaml, [see the deprecation notice](https://kubernetes.io/blog/2019/07/18/api-deprecations-in-1-16/).
