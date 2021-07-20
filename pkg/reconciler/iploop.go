@@ -6,18 +6,21 @@ import (
 	"net"
 
 	"github.com/dougbtv/whereabouts/pkg/allocate"
+	whereaboutsv1alpha1 "github.com/dougbtv/whereabouts/pkg/api/v1alpha1"
 	"github.com/dougbtv/whereabouts/pkg/logging"
 	"github.com/dougbtv/whereabouts/pkg/storage"
 	"github.com/dougbtv/whereabouts/pkg/storage/kubernetes"
 	"github.com/dougbtv/whereabouts/pkg/types"
+
 	v1 "k8s.io/api/core/v1"
 )
 
 type ReconcileLooper struct {
-	ctx         context.Context
-	k8sClient   kubernetes.Client
-	livePods    map[string]podWrapper
-	orphanedIPs []OrphanedIPReservations
+	ctx                    context.Context
+	k8sClient              kubernetes.Client
+	livePods               map[string]podWrapper
+	orphanedIPs            []OrphanedIPReservations
+	orphanedClusterWideIPs []whereaboutsv1alpha1.OverlappingRangeIPReservation
 }
 
 type OrphanedIPReservations struct {
@@ -47,6 +50,10 @@ func NewReconcileLooper(kubeConfigPath string, ctx context.Context) (*ReconcileL
 	if err := looper.findOrphanedIPsPerPool(); err != nil {
 		return nil, err
 	}
+
+	if err := looper.findClusterWideIPReservations(); err != nil {
+		return nil, err
+	}
 	return looper, nil
 }
 
@@ -66,7 +73,7 @@ func (rl *ReconcileLooper) findOrphanedIPsPerPool() error {
 				_ = logging.Errorf("pod ref missing for Allocations: %s", ipReservation)
 				continue
 			}
-			if !rl.isPodAlive(ipReservation) {
+			if !rl.isPodAlive(ipReservation.PodRef, ipReservation.IP.String()) {
 				logging.Debugf("pod ref %s is not listed in the live pods list", ipReservation.PodRef)
 				orphanIP.Allocations = append(orphanIP.Allocations, ipReservation)
 			}
@@ -79,16 +86,16 @@ func (rl *ReconcileLooper) findOrphanedIPsPerPool() error {
 	return nil
 }
 
-func (rl ReconcileLooper) isPodAlive(allocation types.IPReservation) bool {
+func (rl ReconcileLooper) isPodAlive(podRef string, ip string) bool {
 	for livePodRef, livePod := range rl.livePods {
-		if allocation.PodRef == livePodRef {
+		if podRef == livePodRef {
 			livePodIPs := livePod.ips
 			logging.Debugf(
 				"pod reference %s matches allocation; Allocation IP: %s; PodIPs: %s",
 				livePodRef,
-				allocation.IP.String(),
+				ip,
 				livePodIPs)
-			_, isFound := livePodIPs[allocation.IP.String()]
+			_, isFound := livePodIPs[ip]
 			return isFound
 		}
 	}
@@ -131,6 +138,42 @@ func (rl ReconcileLooper) ReconcileIPPools() ([]net.IP, error) {
 	}
 
 	return totalCleanedUpIps, nil
+}
+
+func (rl *ReconcileLooper) findClusterWideIPReservations() error {
+	clusterWideIPReservations, err := rl.k8sClient.ListOverlappingIPs(rl.ctx)
+	if err != nil {
+		return logging.Errorf("failed to list all OverLappingIPs: %v", err)
+	}
+
+	for _, clusterWideIPReservation := range clusterWideIPReservations {
+		ip := clusterWideIPReservation.GetName()
+		podRef := clusterWideIPReservation.Spec.PodRef
+
+		if !rl.isPodAlive(podRef, ip) {
+			logging.Debugf("pod ref %s is not listed in the live pods list", podRef)
+			rl.orphanedClusterWideIPs = append(rl.orphanedClusterWideIPs, clusterWideIPReservation)
+		}
+	}
+
+	return nil
+}
+
+func (rl ReconcileLooper) ReconcileOverlappingIPAddresses() error {
+	var failedReconciledClusterWideIPs []string
+	for _, overlappingIPStruct := range rl.orphanedClusterWideIPs {
+		if err := rl.k8sClient.DeleteOverlappingIP(rl.ctx, &overlappingIPStruct); err != nil {
+			logging.Errorf("failed to remove cluster wide IP: %s", overlappingIPStruct.GetName())
+			failedReconciledClusterWideIPs = append(failedReconciledClusterWideIPs, overlappingIPStruct.GetName())
+			continue
+		}
+		logging.Debugf("removed stale overlappingIP allocation [%s]", overlappingIPStruct.GetName())
+	}
+
+	if len(failedReconciledClusterWideIPs) != 0 {
+		return logging.Errorf("could not reconcile cluster wide IPs: %v", failedReconciledClusterWideIPs)
+	}
+	return nil
 }
 
 func findOutPodRefsToDeallocateIPsFrom(orphanedIP OrphanedIPReservations) []string {

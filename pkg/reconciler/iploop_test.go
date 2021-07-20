@@ -37,7 +37,6 @@ var _ = Describe("IPReconciler", func() {
 
 	newIPReconciler := func(orphanedIPs ...OrphanedIPReservations) *ReconcileLooper {
 		reconciler := &ReconcileLooper{
-			cancelFunc:  func() {},
 			ctx:         context.TODO(),
 			orphanedIPs: orphanedIPs,
 		}

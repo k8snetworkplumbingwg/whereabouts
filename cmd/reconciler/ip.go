@@ -30,11 +30,15 @@ func main() {
 	cleanedUpIps, err := ipReconcileLoop.ReconcileIPPools()
 	if err != nil {
 		_ = logging.Errorf("failed to clean up IP for allocations: %v", err)
-		os.Exit(failedToReconcile)
+		os.Exit(failedToReconcileIPPools)
 	}
 	if len(cleanedUpIps) > 0 {
 		logging.Debugf("successfully cleanup IPs: %+v", cleanedUpIps)
 	} else {
 		logging.Debugf("no IP addresses to cleanup")
+	}
+
+	if err := ipReconcileLoop.ReconcileOverlappingIPAddresses(); err != nil {
+		os.Exit(failedToReconcileClusterWideIPs)
 	}
 }

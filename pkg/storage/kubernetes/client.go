@@ -91,3 +91,20 @@ func (i *Client) ListPods() ([]v1.Pod, error) {
 	}
 	return podEntries, nil
 }
+
+func (i *Client) ListOverlappingIPs(ctx context.Context) ([]whereaboutsv1alpha1.OverlappingRangeIPReservation, error) {
+	overlappingIPsList := whereaboutsv1alpha1.OverlappingRangeIPReservationList{}
+	if err := i.client.List(ctx, &overlappingIPsList, &client.ListOptions{}); err != nil {
+		return nil, err
+	}
+
+	var clusterWiderReservations []whereaboutsv1alpha1.OverlappingRangeIPReservation
+	for _, reservationInfo := range overlappingIPsList.Items {
+		clusterWiderReservations = append(clusterWiderReservations, reservationInfo)
+	}
+	return clusterWiderReservations, nil
+}
+
+func (i *Client) DeleteOverlappingIP(ctx context.Context, clusterWideIP *whereaboutsv1alpha1.OverlappingRangeIPReservation) error {
+	return i.client.Delete(ctx, clusterWideIP)
+}
