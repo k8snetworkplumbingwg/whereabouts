@@ -3,6 +3,7 @@ package reconciler
 import (
 	"context"
 	"fmt"
+	"net"
 
 	"github.com/dougbtv/whereabouts/pkg/allocate"
 	"github.com/dougbtv/whereabouts/pkg/logging"
@@ -98,7 +99,7 @@ func composePodRef(pod v1.Pod) string {
 	return fmt.Sprintf("%s/%s", pod.GetNamespace(), pod.GetName())
 }
 
-func (rl ReconcileLooper) ReconcileIPPools() ([]types.IPReservation, error) {
+func (rl ReconcileLooper) ReconcileIPPools() ([]net.IP, error) {
 	matchByPodRef := func(reservations []types.IPReservation, podRef string) int {
 		foundidx := -1
 		for idx, v := range reservations {
@@ -110,13 +111,13 @@ func (rl ReconcileLooper) ReconcileIPPools() ([]types.IPReservation, error) {
 	}
 
 	var err error
-	var totalCleanedUpIps []types.IPReservation
+	var totalCleanedUpIps []net.IP
 	for _, orphanedIP := range rl.orphanedIPs {
-		originalIPReservations := orphanedIP.Pool.Allocations()
 		currentIPReservations := orphanedIP.Pool.Allocations()
 		podRefsToDeallocate := findOutPodRefsToDeallocateIPsFrom(orphanedIP)
+		var deallocatedIP net.IP
 		for _, podRef := range podRefsToDeallocate {
-			currentIPReservations, _, err = allocate.IterateForDeallocation(currentIPReservations, podRef, matchByPodRef)
+			currentIPReservations, deallocatedIP, err = allocate.IterateForDeallocation(currentIPReservations, podRef, matchByPodRef)
 			if err != nil {
 				return nil, err
 			}
@@ -126,24 +127,10 @@ func (rl ReconcileLooper) ReconcileIPPools() ([]types.IPReservation, error) {
 		if err := orphanedIP.Pool.Update(rl.ctx, currentIPReservations); err != nil {
 			return nil, logging.Errorf("failed to update the reservation list: %v", err)
 		}
-		totalCleanedUpIps = append(totalCleanedUpIps, computeCleanedUpIPs(originalIPReservations, currentIPReservations)...)
+		totalCleanedUpIps = append(totalCleanedUpIps, deallocatedIP)
 	}
 
 	return totalCleanedUpIps, nil
-}
-
-func computeCleanedUpIPs(oldIPReservations []types.IPReservation, newIPReservations []types.IPReservation) []types.IPReservation {
-	var deletedReservations []types.IPReservation
-	ledger := make(map[string]bool)
-	for _, reservation := range newIPReservations {
-		ledger[reservation.IP.String()] = true
-	}
-	for _, reservation := range oldIPReservations {
-		if _, found := ledger[reservation.IP.String()]; !found {
-			deletedReservations = append(deletedReservations, reservation)
-		}
-	}
-	return deletedReservations
 }
 
 func findOutPodRefsToDeallocateIPsFrom(orphanedIP OrphanedIPReservations) []string {

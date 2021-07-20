@@ -81,9 +81,7 @@ var _ = Describe("IPReconciler", func() {
 		It("does delete the orphaned IP address", func() {
 			reconciledIPs, err := ipReconciler.ReconcileIPPools()
 			Expect(err).NotTo(HaveOccurred())
-
-			reapedIPAddr := types.IPReservation{IP: net.ParseIP(firstIPInRange), PodRef: generatePodRef(namespace, podName)}
-			Expect(reconciledIPs).To(ConsistOf(reapedIPAddr))
+			Expect(reconciledIPs).To(Equal([]net.IP{net.ParseIP(firstIPInRange)}))
 		})
 
 		Context("and they are actually multiple IPs", func() {
@@ -103,9 +101,7 @@ var _ = Describe("IPReconciler", func() {
 			It("does delete *only the orphaned* the IP address", func() {
 				reconciledIPs, err := ipReconciler.ReconcileIPPools()
 				Expect(err).NotTo(HaveOccurred())
-
-				reapedIPAddr := types.IPReservation{IP: net.ParseIP("192.168.14.2"), PodRef: generatePodRef(namespace, "pod2")}
-				Expect(reconciledIPs).To(ConsistOf(reapedIPAddr))
+				Expect(reconciledIPs).To(ConsistOf([]net.IP{net.ParseIP("192.168.14.2")}))
 			})
 		})
 

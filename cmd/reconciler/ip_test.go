@@ -12,7 +12,6 @@ import (
 
 	"github.com/dougbtv/whereabouts/pkg/api/v1alpha1"
 	"github.com/dougbtv/whereabouts/pkg/reconciler"
-	"github.com/dougbtv/whereabouts/pkg/types"
 	multusv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 
 	v1 "k8s.io/api/core/v1"
@@ -70,11 +69,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 					})
 
 					It("should report the deleted IP reservation", func() {
-						expectedIPReservation := types.IPReservation{
-							IP:     net.ParseIP("10.10.10.1"),
-							PodRef: fmt.Sprintf("%s/%s", namespace, podName),
-						}
-						Expect(reconcileLooper.ReconcileIPPools()).To(ConsistOf(expectedIPReservation))
+						Expect(reconcileLooper.ReconcileIPPools()).To(Equal([]net.IP{net.ParseIP("10.10.10.1")}))
 					})
 
 					It("the pool's orphaned IP should be deleted after the reconcile loop", func() {
@@ -92,7 +87,6 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 
 	Context("multiple pods", func() {
 		const (
-			deadPodIndex    = 0
 			livePodIndex    = 1
 			numberOfPods    = 2
 			secondIPInRange = "10.10.10.2"
@@ -146,13 +140,9 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 				})
 
 				It("should report the dead pod's IP address as deleted", func() {
-					expectedReservation := types.IPReservation{
-						IP:     net.ParseIP("10.10.10.1"),
-						PodRef: fmt.Sprintf("%s/%s", namespace, pods[deadPodIndex].Name),
-					}
 					deletedIPAddrs, err := reconcileLooper.ReconcileIPPools()
 					Expect(err).NotTo(HaveOccurred())
-					Expect(deletedIPAddrs).To(ConsistOf(expectedReservation))
+					Expect(deletedIPAddrs).To(Equal([]net.IP{net.ParseIP("10.10.10.1")}))
 				})
 
 				It("the IPPool should have only the IP reservation of the live pod", func() {
