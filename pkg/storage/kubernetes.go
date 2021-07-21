@@ -7,6 +7,12 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
+
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/leaderelection"
+	"k8s.io/client-go/tools/leaderelection/resourcelock"
 
 	"github.com/dougbtv/whereabouts/pkg/allocate"
 	whereaboutsv1alpha1 "github.com/dougbtv/whereabouts/pkg/api/v1alpha1"
@@ -41,6 +47,11 @@ func NewKubernetesIPAM(containerID string, ipamConf whereaboutstypes.IPAMConfig)
 		return nil, err
 	}
 
+	clientSet, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return nil, err
+	}
+
 	var namespace string
 	if cfg, err := clientcmd.LoadFromFile(ipamConf.Kubernetes.KubeConfigPath); err != nil {
 		return nil, err
@@ -57,12 +68,13 @@ func NewKubernetesIPAM(containerID string, ipamConf whereaboutstypes.IPAMConfig)
 	if err != nil {
 		return nil, err
 	}
-	return &KubernetesIPAM{c, ipamConf, containerID, namespace, DatastoreRetries}, nil
+	return &KubernetesIPAM{c, clientSet, ipamConf, containerID, namespace, DatastoreRetries}, nil
 }
 
 // KubernetesIPAM manages ip blocks in an kubernetes CRD backend
 type KubernetesIPAM struct {
 	client      client.Client
+	clientSet   *kubernetes.Clientset
 	config      whereaboutstypes.IPAMConfig
 	containerID string
 	namespace   string
@@ -226,4 +238,194 @@ func (t *temporaryError) Temporary() bool {
 
 type temporary interface {
 	Temporary() bool
+}
+
+// newLeaderElector creates a new leaderelection.LeaderElector and associated
+// channels by which to observe elections and depositions.
+func newLeaderElector(clientset *kubernetes.Clientset, namespace string, podNamespace string, podID string, leaseDuration int, renewDeadline int, retryPeriod int) (*leaderelection.LeaderElector, chan struct{}, chan struct{}) {
+	//log.WithField("context", "leaderelection")
+	// leaderOK will block gRPC startup until it's closed.
+	leaderOK := make(chan struct{})
+	// deposed is closed by the leader election callback when
+	// we are deposed as leader so that we can clean up.
+	deposed := make(chan struct{})
+
+	var rl = &resourcelock.LeaseLock{
+		LeaseMeta: metav1.ObjectMeta{
+			Name:      "whereabouts",
+			Namespace: namespace,
+		},
+		Client: clientset.CoordinationV1(),
+		LockConfig: resourcelock.ResourceLockConfig{
+			Identity: fmt.Sprintf("%s/%s", podNamespace, podID),
+		},
+	}
+
+	// Make the leader elector, ready to be used in the Workgroup.
+	// !bang
+	le, err := leaderelection.NewLeaderElector(leaderelection.LeaderElectionConfig{
+		Lock:          rl,
+		LeaseDuration: time.Duration(leaseDuration) * time.Millisecond,
+		RenewDeadline: time.Duration(renewDeadline) * time.Millisecond,
+		RetryPeriod:   time.Duration(retryPeriod) * time.Millisecond,
+		Callbacks: leaderelection.LeaderCallbacks{
+			OnStartedLeading: func(_ context.Context) {
+				logging.Debugf("OnStartedLeading() called")
+				close(leaderOK)
+			},
+			OnStoppedLeading: func() {
+				logging.Debugf("OnStoppedLeading() called")
+				// The context being canceled will trigger a handler that will
+				// deal with being deposed.
+				close(deposed)
+			},
+		},
+	})
+	if err != nil {
+		logging.Errorf("Failed to create leader elector: %v", err)
+		return nil, leaderOK, deposed
+	}
+	return le, leaderOK, deposed
+}
+
+// IPManagementKubernetes manages ip allocation and deallocation from a storage perspective
+func IPManagementKubernetes(mode int, ipamConf whereaboutstypes.IPAMConfig, containerID string, podRef string) (net.IPNet, error) {
+	var newip net.IPNet
+
+	ipam, err := NewKubernetesIPAM(containerID, ipamConf)
+	if err != nil {
+		return newip, logging.Errorf("IPAM %s client initialization error: %v", ipamConf.Datastore, err)
+	}
+	defer ipam.Close()
+
+	if ipamConf.PodName == "" {
+		return newip, fmt.Errorf("IPAM %s client initialization error: no pod name", ipamConf.Datastore)
+	}
+
+	// setup leader election
+	le, leader, deposed := newLeaderElector(ipam.clientSet, ipam.namespace, ipamConf.PodNamespace, ipamConf.PodName, ipamConf.LeaderLeaseDuration, ipamConf.LeaderRenewDeadline, ipamConf.LeaderRetryPeriod)
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	stopM := make(chan struct{})
+	result := make(chan error, 2)
+
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-stopM:
+				logging.Debugf("Stopped leader election")
+				result <- nil
+				return
+			case <-leader:
+				logging.Debugf("Elected as leader, do processing")
+				newip, err = IPManagementKubernetesUpdate(mode, ipam, ipamConf, containerID, podRef)
+				stopM <- struct{}{}
+				return
+			case <-deposed:
+				logging.Debugf("Deposed as leader, shutting down")
+				result <- nil
+				return
+			}
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		ctx, cancel := context.WithCancel(context.Background())
+		res := make(chan error)
+
+		go func() {
+			logging.Debugf("Started leader election")
+			le.Run(ctx)
+			logging.Debugf("Finished leader election")
+			res <- nil
+		}()
+
+		// wait for stop
+		<-stopM
+		// cancel fn(ctx)
+		cancel()
+		result <- (<-res)
+	}()
+
+	wg.Wait()
+	close(stopM)
+	logging.Debugf("IPManagementKubernetes: %v, %v", newip, err)
+	return newip, err
+}
+
+// IPManagementKubernetesUpdate manages k8s updates
+func IPManagementKubernetesUpdate(mode int, ipam *KubernetesIPAM, ipamConf whereaboutstypes.IPAMConfig, containerID string, podRef string) (net.IPNet, error) {
+	logging.Debugf("IPManagement -- mode: %v / containerID: %v / podRef: %v", mode, containerID, podRef)
+
+	var newip net.IPNet
+	// Skip invalid modes
+	switch mode {
+	case whereaboutstypes.Allocate, whereaboutstypes.Deallocate:
+	default:
+		return newip, fmt.Errorf("Got an unknown mode passed to IPManagement: %v", mode)
+	}
+
+	var pool IPPool
+	var err error
+
+	ctx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
+	defer cancel()
+
+	// Check our connectivity first
+	if err := ipam.Status(ctx); err != nil {
+		logging.Errorf("IPAM connectivity error: %v", err)
+		return newip, err
+	}
+
+	// handle the ip add/del until successful
+RETRYLOOP:
+	for j := 0; j < DatastoreRetries; j++ {
+		select {
+		case <-ctx.Done():
+			return newip, nil
+		default:
+			// retry the IPAM loop if the context has not been cancelled
+		}
+
+		pool, err = ipam.GetIPPool(ctx, ipamConf.Range)
+		if err != nil {
+			logging.Errorf("IPAM error reading pool allocations (attempt: %d): %v", j, err)
+			if e, ok := err.(temporary); ok && e.Temporary() {
+				continue
+			}
+			return newip, err
+		}
+
+		reservelist := pool.Allocations()
+		var updatedreservelist []whereaboutstypes.IPReservation
+		switch mode {
+		case whereaboutstypes.Allocate:
+			newip, updatedreservelist, err = allocate.AssignIP(ipamConf, reservelist, containerID, podRef)
+			if err != nil {
+				logging.Errorf("Error assigning IP: %v", err)
+				return newip, err
+			}
+		case whereaboutstypes.Deallocate:
+			updatedreservelist, err = allocate.DeallocateIP(ipamConf.Range, reservelist, containerID)
+			if err != nil {
+				logging.Errorf("Error deallocating IP: %v", err)
+				return newip, err
+			}
+		}
+
+		err = pool.Update(ctx, updatedreservelist)
+		if err != nil {
+			logging.Errorf("IPAM error updating pool (attempt: %d): %v", j, err)
+			if e, ok := err.(temporary); ok && e.Temporary() {
+				continue
+			}
+			break RETRYLOOP
+		}
+		break RETRYLOOP
+	}
+
+	return newip, err
 }
