@@ -32,7 +32,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 		reconcileLooper *reconciler.ReconcileLooper
 	)
 
-	Context("a single running pod", func() {
+	Context("reconciling IP pools with a single running pod", func() {
 		var pod *v1.Pod
 
 		BeforeEach(func() {
@@ -85,7 +85,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 		})
 	})
 
-	Context("multiple pods", func() {
+	Context("reconciling an IP pool with multiple pods attached", func() {
 		const (
 			livePodIndex    = 1
 			numberOfPods    = 2
@@ -164,6 +164,92 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 			})
 		})
 	})
+
+	Context("reconciling cluster wide IPs - overlapping IPs", func() {
+		const (
+			numberOfPods       = 3
+			firstNetworkName   = "network1"
+			firstNetworkRange  = "10.10.10.0/16"
+			firstPoolName      = "pool1"
+			podIndexToRemove   = 0
+			secondIPInRange    = "10.10.10.2"
+			secondNetworkName  = "network2"
+			secondNetworkRange = "10.10.10.0/24" // overlaps w/ firstNetworkRange
+			secondPoolName     = "pool2"
+			thirdIPInRange     = "10.10.10.3"
+		)
+
+		var pods []v1.Pod
+		var pools []v1alpha1.IPPool
+		var clusterWideIPs []v1alpha1.OverlappingRangeIPReservation
+
+		BeforeEach(func() {
+			ips := []string{firstIPInRange, secondIPInRange, thirdIPInRange}
+			networks := []string{firstNetworkName, secondNetworkName}
+			for i := 0; i < numberOfPods; i++ {
+				pod := generatePod(namespace, fmt.Sprintf("pod%d", i+1), ipInNetwork{
+					ip:          ips[i],
+					networkName: networks[i%2], // pod1 and pod3 connected to network1; pod2 connected to network2
+				})
+				_, err := k8sClientSet.CoreV1().Pods(namespace).Create(pod)
+				Expect(err).NotTo(HaveOccurred())
+				pods = append(pods, *pod)
+			}
+		})
+
+		BeforeEach(func() {
+			firstPool := generateIPPoolSpec(firstNetworkRange, namespace, firstPoolName, pods[0].GetName(), pods[2].GetName())
+			secondPool := generateIPPoolSpec(secondNetworkRange, namespace, secondPoolName, pods[1].GetName())
+			Expect(k8sClient.Create(context.Background(), firstPool)).NotTo(HaveOccurred())
+			Expect(k8sClient.Create(context.Background(), secondPool)).NotTo(HaveOccurred())
+			pools = append(pools, *firstPool, *secondPool)
+		})
+
+		BeforeEach(func() {
+			podIPs := []string{firstIPInRange, secondIPInRange, thirdIPInRange}
+			for i := 0; i < numberOfPods; i++ {
+				var clusterWideIP v1alpha1.OverlappingRangeIPReservation
+				ownerPodRef := fmt.Sprintf("%s/%s", namespace, pods[i].GetName())
+				Expect(k8sClient.Create(context.TODO(), generateClusterWideIPReservation(namespace, podIPs[i], ownerPodRef))).To(Succeed())
+				clusterWideIPs = append(clusterWideIPs, clusterWideIP)
+			}
+		})
+
+		AfterEach(func() {
+			podIPs := []string{firstIPInRange, secondIPInRange, thirdIPInRange}
+			for i := podIndexToRemove + 1; i < numberOfPods; i++ {
+				ownerPodRef := fmt.Sprintf("%s/%s", namespace, pods[i].GetName())
+				Expect(k8sClient.Delete(context.TODO(), generateClusterWideIPReservation(namespace, podIPs[i], ownerPodRef))).To(Succeed())
+			}
+			clusterWideIPs = nil
+		})
+
+		AfterEach(func() {
+			for i := podIndexToRemove + 1; i < numberOfPods; i++ {
+				Expect(k8sClientSet.CoreV1().Pods(namespace).Delete(pods[i].Name, &metav1.DeleteOptions{})).NotTo(HaveOccurred())
+			}
+			pods = nil
+		})
+
+		AfterEach(func() {
+			for i := range pools {
+				Expect(k8sClient.Delete(context.Background(), &pools[i])).NotTo(HaveOccurred())
+			}
+			pools = nil
+		})
+
+		It("will delete an orphaned IP address", func() {
+			Expect(k8sClientSet.CoreV1().Pods(namespace).Delete(pods[podIndexToRemove].Name, &metav1.DeleteOptions{})).NotTo(HaveOccurred())
+			newReconciler, err := reconciler.NewReconcileLooper(kubeConfigPath, context.TODO())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(newReconciler.ReconcileOverlappingIPAddresses()).To(Succeed())
+
+			expectedClusterWideIPs := 2
+			var clusterWideIPAllocations v1alpha1.OverlappingRangeIPReservationList
+			Expect(k8sClient.List(context.TODO(), &clusterWideIPAllocations)).To(Succeed())
+			Expect(clusterWideIPAllocations.Items).To(HaveLen(expectedClusterWideIPs))
+		})
+	})
 })
 
 func generateIPPoolSpec(ipRange string, namespace string, poolName string, podNames ...string) *v1alpha1.IPPool {
@@ -178,6 +264,15 @@ func generateIPPoolSpec(ipRange string, namespace string, poolName string, podNa
 		Spec: v1alpha1.IPPoolSpec{
 			Range:       ipRange,
 			Allocations: allocations,
+		},
+	}
+}
+
+func generateClusterWideIPReservation(namespace string, ip string, ownerPodRef string) *v1alpha1.OverlappingRangeIPReservation {
+	return &v1alpha1.OverlappingRangeIPReservation{
+		ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: ip},
+		Spec: v1alpha1.OverlappingRangeIPReservationSpec{
+			PodRef: ownerPodRef,
 		},
 	}
 }
