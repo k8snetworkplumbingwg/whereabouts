@@ -84,7 +84,7 @@ func cmdDel(args *skel.CmdArgs) error {
 		return err
 	}
 	logging.Debugf("DEL - IPAM configuration successfully read: %+v", filterConf(*ipamConf))
-	logging.Debugf("ContainerID: %v", args.ContainerID)
+	logging.Debugf("Beginning delete for ContainerID: %v", args.ContainerID)
 
 	switch ipamConf.Datastore {
 	case types.DatastoreETCD:

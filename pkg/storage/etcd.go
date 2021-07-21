@@ -76,6 +76,28 @@ func (i *ETCDIPAM) Status(ctx context.Context) error {
 	return err
 }
 
+// EtcdOverlappingRangeStore represents a set of cluster wide resources
+type EtcdOverlappingRangeStore struct {
+	client *clientv3.Client
+}
+
+// GetOverlappingRangeStore returns an OverlappingRangeStore interface
+func (i *ETCDIPAM) GetOverlappingRangeStore() (OverlappingRangeStore, error) {
+	return &EtcdOverlappingRangeStore{i.client}, nil
+}
+
+// IsAllocatedInOverlappingRange checks to see if the IP is allocated across the whole cluster (and not just the current range)
+func (i *EtcdOverlappingRangeStore) IsAllocatedInOverlappingRange(ctx context.Context, ip net.IP) (bool, error) {
+	logging.Debugf("ETCD IsAllocatedInOverlappingRange is NOT IMPLEMENTED!!!! TODO")
+	return false, nil
+}
+
+// UpdateOverlappingRangeAllocation updates our clusterwide allocation for overlapping ranges.
+func (i *EtcdOverlappingRangeStore) UpdateOverlappingRangeAllocation(ctx context.Context, mode int, ip net.IP, containerID string, podRef string) error {
+	logging.Debugf("ETCD UpdateOverlappingRangeWide is NOT IMPLEMENTED!!!! TODO")
+	return nil
+}
+
 // Close shuts down the clients etcd connections
 func (i *ETCDIPAM) Close() error {
 	defer i.client.Close()
@@ -206,7 +228,7 @@ RETRYLOOP:
 				return newip, err
 			}
 		case types.Deallocate:
-			updatedreservelist, err = allocate.DeallocateIP(ipamConf.Range, reservelist, containerID)
+			updatedreservelist, _, err = allocate.DeallocateIP(reservelist, containerID)
 			if err != nil {
 				logging.Errorf("Error deallocating IP: %v", err)
 				return newip, err

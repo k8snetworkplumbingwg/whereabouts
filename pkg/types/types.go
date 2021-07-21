@@ -47,6 +47,7 @@ type IPAMConfig struct {
 	LeaderRetryPeriod   int               `json:"leader_retry_period,omitempty"`
 	LogFile             string            `json:"log_file"`
 	LogLevel            string            `json:"log_level"`
+	OverlappingRanges   bool              `json:"enable_overlapping_ranges,omitempty"`
 	Gateway             net.IP
 	Kubernetes          KubernetesConfig `json:"kubernetes,omitempty"`
 	ConfigurationPath   string           `json:"configuration_path"`
@@ -83,6 +84,7 @@ type IPReservation struct {
 	IP          net.IP `json:"ip"`
 	ContainerID string `json:"id"`
 	PodRef      string `json:"podref,omitempty"`
+	IsAllocated bool
 }
 
 const (

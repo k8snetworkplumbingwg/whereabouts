@@ -162,6 +162,81 @@ func (i *KubernetesIPAM) Close() error {
 	return nil
 }
 
+// KubernetesOverlappingRangeStore represents a OverlappingRangeStore interface
+type KubernetesOverlappingRangeStore struct {
+	client      client.Client
+	containerID string
+	namespace   string
+}
+
+// GetOverlappingRangeStore returns a clusterstore interface
+func (i *KubernetesIPAM) GetOverlappingRangeStore() (OverlappingRangeStore, error) {
+	return &KubernetesOverlappingRangeStore{i.client, i.containerID, i.namespace}, nil
+}
+
+// IsAllocatedInOverlappingRange checks for IP addresses to see if they're allocated cluster wide, for overlapping ranges
+func (c *KubernetesOverlappingRangeStore) IsAllocatedInOverlappingRange(ctx context.Context, ip net.IP) (bool, error) {
+
+	// IPv6 doesn't make for valid CR names, so normalize it.
+	normalizedip := strings.ReplaceAll(fmt.Sprint(ip), ":", "-")
+
+	logging.Debugf("OverlappingRangewide allocation check for IP: %v", normalizedip)
+
+	// clusteripres := &whereaboutsv1alpha1.OverlappingRangeIPReservation{
+	// 	ObjectMeta: metav1.ObjectMeta{Name: normalizedip, Namespace: i.namespace},
+	// }
+	clusteripres := &whereaboutsv1alpha1.OverlappingRangeIPReservation{
+		ObjectMeta: metav1.ObjectMeta{Name: normalizedip, Namespace: c.namespace},
+	}
+	if err := c.client.Get(ctx, types.NamespacedName{Name: normalizedip, Namespace: c.namespace}, clusteripres); errors.IsNotFound(err) {
+		// cluster ip reservation does not exist, this appears to be good news.
+		// logging.Debugf("IP %v is not reserved cluster wide, allowing.", ip)
+		return false, nil
+	} else if err != nil {
+		logging.Errorf("k8s get OverlappingRangeIPReservation error: %s", err)
+		return false, fmt.Errorf("k8s get OverlappingRangeIPReservation error: %s", err)
+	}
+
+	logging.Debugf("IP %v is reserved cluster wide.", ip)
+	return true, nil
+}
+
+// UpdateOverlappingRangeAllocation updates clusterwide allocation for overlapping ranges.
+func (c *KubernetesOverlappingRangeStore) UpdateOverlappingRangeAllocation(ctx context.Context, mode int, ip net.IP, containerID string, podRef string) error {
+	// Normalize the IP
+	normalizedip := strings.ReplaceAll(fmt.Sprint(ip), ":", "-")
+
+	clusteripres := &whereaboutsv1alpha1.OverlappingRangeIPReservation{
+		ObjectMeta: metav1.ObjectMeta{Name: normalizedip, Namespace: c.namespace},
+	}
+
+	var err error
+	var verb string
+	switch mode {
+	case whereaboutstypes.Allocate:
+		// Put together our cluster ip reservation
+		verb = "allocate"
+
+		clusteripres.Spec = whereaboutsv1alpha1.OverlappingRangeIPReservationSpec{
+			ContainerID: containerID,
+			PodRef:      podRef,
+		}
+
+		err = c.client.Create(ctx, clusteripres)
+
+	case whereaboutstypes.Deallocate:
+		verb = "deallocate"
+		err = c.client.Delete(ctx, clusteripres)
+	}
+
+	if err != nil {
+		return err
+	}
+
+	logging.Debugf("K8s UpdateOverlappingRangeAllocation success on %v: %+v", verb, clusteripres)
+	return nil
+}
+
 // KubernetesIPPool represents an IPPool resource and its parsed set of allocations
 type KubernetesIPPool struct {
 	client      client.Client
@@ -368,6 +443,7 @@ func IPManagementKubernetesUpdate(mode int, ipam *KubernetesIPAM, ipamConf where
 		return newip, fmt.Errorf("Got an unknown mode passed to IPManagement: %v", mode)
 	}
 
+	var overlappingrangestore OverlappingRangeStore
 	var pool IPPool
 	var err error
 
@@ -381,6 +457,8 @@ func IPManagementKubernetesUpdate(mode int, ipam *KubernetesIPAM, ipamConf where
 	}
 
 	// handle the ip add/del until successful
+	var overlappingrangeallocations []whereaboutstypes.IPReservation
+	var ipforoverlappingrangeupdate net.IP
 RETRYLOOP:
 	for j := 0; j < DatastoreRetries; j++ {
 		select {
@@ -388,6 +466,12 @@ RETRYLOOP:
 			return newip, nil
 		default:
 			// retry the IPAM loop if the context has not been cancelled
+		}
+
+		overlappingrangestore, err = ipam.GetOverlappingRangeStore()
+		if err != nil {
+			logging.Errorf("IPAM error getting OverlappingRangeStore: %v", err)
+			return newip, err
 		}
 
 		pool, err = ipam.GetIPPool(ctx, ipamConf.Range)
@@ -400,6 +484,7 @@ RETRYLOOP:
 		}
 
 		reservelist := pool.Allocations()
+		reservelist = append(reservelist, overlappingrangeallocations...)
 		var updatedreservelist []whereaboutstypes.IPReservation
 		switch mode {
 		case whereaboutstypes.Allocate:
@@ -408,15 +493,43 @@ RETRYLOOP:
 				logging.Errorf("Error assigning IP: %v", err)
 				return newip, err
 			}
+			// Now check if this is allocated overlappingrange wide
+			// When it's allocated overlappingrange wide, we add it to a local reserved list
+			// And we try again.
+			if ipamConf.OverlappingRanges {
+				isallocated, err := overlappingrangestore.IsAllocatedInOverlappingRange(ctx, newip.IP)
+				if err != nil {
+					logging.Errorf("Error checking overlappingrange allocation: %v", err)
+					return newip, err
+				}
+
+				if isallocated {
+					logging.Debugf("Continuing loop, IP is already allocated (possibly from another range): %v", newip)
+					// We create "dummy" records here for evaluation, but, we need to filter those out later.
+					overlappingrangeallocations = append(overlappingrangeallocations, whereaboutstypes.IPReservation{IP: newip.IP, IsAllocated: true})
+					continue
+				}
+
+				ipforoverlappingrangeupdate = newip.IP
+			}
+
 		case whereaboutstypes.Deallocate:
-			updatedreservelist, err = allocate.DeallocateIP(ipamConf.Range, reservelist, containerID)
+			updatedreservelist, ipforoverlappingrangeupdate, err = allocate.DeallocateIP(reservelist, containerID)
 			if err != nil {
 				logging.Errorf("Error deallocating IP: %v", err)
 				return newip, err
 			}
 		}
 
-		err = pool.Update(ctx, updatedreservelist)
+		// Clean out any dummy records from the reservelist...
+		var usereservelist []whereaboutstypes.IPReservation
+		for _, rl := range updatedreservelist {
+			if rl.IsAllocated != true {
+				usereservelist = append(usereservelist, rl)
+			}
+		}
+
+		err = pool.Update(ctx, usereservelist)
 		if err != nil {
 			logging.Errorf("IPAM error updating pool (attempt: %d): %v", j, err)
 			if e, ok := err.(temporary); ok && e.Temporary() {
@@ -425,6 +538,14 @@ RETRYLOOP:
 			break RETRYLOOP
 		}
 		break RETRYLOOP
+	}
+
+	if ipamConf.OverlappingRanges {
+		err = overlappingrangestore.UpdateOverlappingRangeAllocation(ctx, mode, ipforoverlappingrangeupdate, containerID, podRef)
+		if err != nil {
+			logging.Errorf("Error performing UpdateOverlappingRangeAllocation: %v", err)
+			return newip, err
+		}
 	}
 
 	return newip, err
