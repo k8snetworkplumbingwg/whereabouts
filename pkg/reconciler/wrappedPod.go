@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/dougbtv/whereabouts/pkg/logging"
+	"github.com/dougbtv/whereabouts/pkg/storage"
 	k8snetworkplumbingwgv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 
 	v1 "k8s.io/api/core/v1"
@@ -28,13 +29,27 @@ func wrapPod(pod v1.Pod) *podWrapper {
 	}
 }
 
-func indexPods(podList []v1.Pod) map[string]podWrapper {
+func getPodRefsServedByWhereabouts(ipPools []storage.IPPool) map[string]void {
+	whereaboutsPodRefs := map[string]void{}
+	for _, pool := range ipPools {
+		for _, ipReservation := range pool.Allocations() {
+			whereaboutsPodRefs[ipReservation.PodRef] = void{}
+		}
+	}
+	return whereaboutsPodRefs
+}
+
+func indexPods(livePodList []v1.Pod, whereaboutsPodNames map[string]void) map[string]podWrapper {
 	podMap := map[string]podWrapper{}
 
-	for _, pod := range podList {
+	for _, pod := range livePodList {
+		podRef := composePodRef(pod)
+		if _, isWhereaboutsPod := whereaboutsPodNames[podRef]; !isWhereaboutsPod {
+			continue
+		}
 		wrappedPod := wrapPod(pod)
 		if wrappedPod != nil {
-			podMap[composePodRef(pod)] = *wrappedPod
+			podMap[podRef] = *wrappedPod
 		}
 	}
 	return podMap

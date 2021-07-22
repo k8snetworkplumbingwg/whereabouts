@@ -18,7 +18,7 @@ import (
 type ReconcileLooper struct {
 	ctx                    context.Context
 	k8sClient              kubernetes.Client
-	livePods               map[string]podWrapper
+	liveWhereaboutsPods    map[string]podWrapper
 	orphanedIPs            []OrphanedIPReservations
 	orphanedClusterWideIPs []whereaboutsv1alpha1.OverlappingRangeIPReservation
 }
@@ -41,13 +41,19 @@ func NewReconcileLooper(kubeConfigPath string, ctx context.Context) (*ReconcileL
 		return nil, err
 	}
 
-	looper := &ReconcileLooper{
-		ctx:       ctx,
-		k8sClient: *k8sClient,
-		livePods:  indexPods(pods),
+	ipPools, err := k8sClient.ListIPPools(ctx)
+	if err != nil {
+		return nil, logging.Errorf("failed to retrieve all IP pools: %v", err)
 	}
 
-	if err := looper.findOrphanedIPsPerPool(); err != nil {
+	whereaboutsPodRefs := getPodRefsServedByWhereabouts(ipPools)
+	looper := &ReconcileLooper{
+		ctx:                 ctx,
+		k8sClient:           *k8sClient,
+		liveWhereaboutsPods: indexPods(pods, whereaboutsPodRefs),
+	}
+
+	if err := looper.findOrphanedIPsPerPool(ipPools); err != nil {
 		return nil, err
 	}
 
@@ -57,12 +63,7 @@ func NewReconcileLooper(kubeConfigPath string, ctx context.Context) (*ReconcileL
 	return looper, nil
 }
 
-func (rl *ReconcileLooper) findOrphanedIPsPerPool() error {
-	ipPools, err := rl.k8sClient.ListIPPools(rl.ctx)
-	if err != nil {
-		return logging.Errorf("failed to retrieve all IP pools: %v", err)
-	}
-
+func (rl *ReconcileLooper) findOrphanedIPsPerPool(ipPools []storage.IPPool) error {
 	for _, pool := range ipPools {
 		orphanIP := OrphanedIPReservations{
 			Pool: pool,
@@ -87,7 +88,7 @@ func (rl *ReconcileLooper) findOrphanedIPsPerPool() error {
 }
 
 func (rl ReconcileLooper) isPodAlive(podRef string, ip string) bool {
-	for livePodRef, livePod := range rl.livePods {
+	for livePodRef, livePod := range rl.liveWhereaboutsPods {
 		if podRef == livePodRef {
 			livePodIPs := livePod.ips
 			logging.Debugf(

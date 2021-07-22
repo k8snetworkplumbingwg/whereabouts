@@ -126,10 +126,12 @@ var _ = Describe("Pod Wrapper operations", func() {
 
 		table.DescribeTable("", func(podsInfo ...podInfo) {
 			var pods []v1.Pod
+			whereaboutsPods := map[string]void{}
+
 			for _, info := range podsInfo {
-				pods = append(
-					pods,
-					generatePodSpecWithNameAndNamespace(info.name, info.namespace, info.ips...))
+				newPod := generatePodSpecWithNameAndNamespace(info.name, info.namespace, info.ips...)
+				pods = append(pods, newPod)
+				whereaboutsPods[composePodRef(newPod)] = void{}
 			}
 			expectedPodWrapper := map[string]podWrapper{}
 			for _, info := range podsInfo {
@@ -140,7 +142,7 @@ var _ = Describe("Pod Wrapper operations", func() {
 				expectedPodWrapper[fmt.Sprintf("%s/%s", info.namespace, info.name)] = podWrapper{ips: indexedPodIPs}
 			}
 
-			Expect(indexPods(pods)).To(Equal(expectedPodWrapper))
+			Expect(indexPods(pods, whereaboutsPods)).To(Equal(expectedPodWrapper))
 		},
 			table.Entry("when no pods are passed"),
 			table.Entry("when a pod is passed", podInfo{
