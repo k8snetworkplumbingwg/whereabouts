@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
 
-controller-gen object crd:trivialVersions=true paths="./..." output:crd:artifacts:config=doc
+controller-gen object crd:crdVersions=v1,trivialVersions=false paths="./..." output:crd:artifacts:config=doc
