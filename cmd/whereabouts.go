@@ -13,6 +13,7 @@ import (
 	"github.com/dougbtv/whereabouts/pkg/config"
 	"github.com/dougbtv/whereabouts/pkg/logging"
 	"github.com/dougbtv/whereabouts/pkg/storage"
+	"github.com/dougbtv/whereabouts/pkg/storage/kubernetes"
 	"github.com/dougbtv/whereabouts/pkg/types"
 )
 
@@ -46,7 +47,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 	case types.DatastoreETCD:
 		newip, err = storage.IPManagementEtcd(types.Allocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
 	case types.DatastoreKubernetes:
-		newip, err = storage.IPManagementKubernetes(types.Allocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
+		newip, err = kubernetes.IPManagement(types.Allocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
 	}
 	if err != nil {
 		logging.Errorf("Error at storage engine: %s", err)
@@ -90,7 +91,7 @@ func cmdDel(args *skel.CmdArgs) error {
 	case types.DatastoreETCD:
 		_, err = storage.IPManagementEtcd(types.Deallocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
 	case types.DatastoreKubernetes:
-		_, err = storage.IPManagementKubernetes(types.Deallocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
+		_, err = kubernetes.IPManagement(types.Deallocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
 	}
 	if err != nil {
 		logging.Verbosef("WARNING: Problem deallocating IP: %s", err)
