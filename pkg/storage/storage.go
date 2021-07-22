@@ -5,7 +5,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/dougbtv/whereabouts/pkg/types"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 )
 
 var (
