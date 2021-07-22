@@ -23,7 +23,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 	const (
 		firstIPInRange = "10.10.10.1"
 		ipRange        = "10.10.10.0/16"
-		namespace      = "testns"
+		namespace      = "default"
 		networkName    = "net1"
 		podName        = "pod1"
 	)
@@ -38,7 +38,9 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 		BeforeEach(func() {
 			var err error
 			pod, err = k8sClientSet.CoreV1().Pods(namespace).Create(
-				generatePod(namespace, podName, ipInNetwork{ip: firstIPInRange, networkName: networkName}))
+				context.TODO(),
+				generatePod(namespace, podName, ipInNetwork{ip: firstIPInRange, networkName: networkName}),
+				metav1.CreateOptions{})
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -58,7 +60,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 
 			Context("the pod dies", func() {
 				BeforeEach(func() {
-					Expect(k8sClientSet.CoreV1().Pods(namespace).Delete(pod.Name, &metav1.DeleteOptions{})).NotTo(HaveOccurred())
+					Expect(k8sClientSet.CoreV1().Pods(namespace).Delete(context.TODO(), pod.Name, metav1.DeleteOptions{})).NotTo(HaveOccurred())
 				})
 
 				Context("reconciling the IPPool", func() {
@@ -102,7 +104,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 					networkName: networkName,
 				})
 				if i == livePodIndex {
-					_, err := k8sClientSet.CoreV1().Pods(namespace).Create(pod)
+					_, err := k8sClientSet.CoreV1().Pods(namespace).Create(context.TODO(), pod, metav1.CreateOptions{})
 					Expect(err).NotTo(HaveOccurred())
 				}
 				pods = append(pods, *pod)
@@ -110,7 +112,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 		})
 
 		AfterEach(func() {
-			Expect(k8sClientSet.CoreV1().Pods(namespace).Delete(pods[livePodIndex].Name, &metav1.DeleteOptions{})).NotTo(HaveOccurred())
+			Expect(k8sClientSet.CoreV1().Pods(namespace).Delete(context.TODO(), pods[livePodIndex].Name, metav1.DeleteOptions{})).NotTo(HaveOccurred())
 			pods = nil
 		})
 
@@ -191,7 +193,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 					ip:          ips[i],
 					networkName: networks[i%2], // pod1 and pod3 connected to network1; pod2 connected to network2
 				})
-				_, err := k8sClientSet.CoreV1().Pods(namespace).Create(pod)
+				_, err := k8sClientSet.CoreV1().Pods(namespace).Create(context.TODO(), pod, metav1.CreateOptions{})
 				Expect(err).NotTo(HaveOccurred())
 				pods = append(pods, *pod)
 			}
@@ -226,7 +228,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 
 		AfterEach(func() {
 			for i := podIndexToRemove + 1; i < numberOfPods; i++ {
-				Expect(k8sClientSet.CoreV1().Pods(namespace).Delete(pods[i].Name, &metav1.DeleteOptions{})).NotTo(HaveOccurred())
+				Expect(k8sClientSet.CoreV1().Pods(namespace).Delete(context.TODO(), pods[i].Name, metav1.DeleteOptions{})).NotTo(HaveOccurred())
 			}
 			pods = nil
 		})
@@ -239,7 +241,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 		})
 
 		It("will delete an orphaned IP address", func() {
-			Expect(k8sClientSet.CoreV1().Pods(namespace).Delete(pods[podIndexToRemove].Name, &metav1.DeleteOptions{})).NotTo(HaveOccurred())
+			Expect(k8sClientSet.CoreV1().Pods(namespace).Delete(context.TODO(), pods[podIndexToRemove].Name, metav1.DeleteOptions{})).NotTo(HaveOccurred())
 			newReconciler, err := reconciler.NewReconcileLooper(kubeConfigPath, context.TODO())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(newReconciler.ReconcileOverlappingIPAddresses()).To(Succeed())

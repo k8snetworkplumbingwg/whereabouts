@@ -80,7 +80,7 @@ func (i *Client) ListIPPools(ctx context.Context) ([]storage.IPPool, error) {
 }
 
 func (i *Client) ListPods() ([]v1.Pod, error) {
-	podList, err := i.clientSet.CoreV1().Pods(metav1.NamespaceAll).List(metav1.ListOptions{})
+	podList, err := i.clientSet.CoreV1().Pods(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}

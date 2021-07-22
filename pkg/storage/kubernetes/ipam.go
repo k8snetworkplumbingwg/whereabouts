@@ -273,7 +273,7 @@ func (p *KubernetesIPPool) Update(ctx context.Context, reservations []whereabout
 	}
 
 	// apply the patch
-	err = p.client.Patch(ctx, orig, client.ConstantPatch(types.JSONPatchType, patchData))
+	err = p.client.Patch(ctx, orig, client.RawPatch(types.JSONPatchType, patchData))
 	if err != nil {
 		if errors.IsInvalid(err) {
 			// expect "invalid" errors if any of the jsonpatch "test" Operations fail
