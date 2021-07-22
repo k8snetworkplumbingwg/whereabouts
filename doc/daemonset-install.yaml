@@ -36,6 +36,17 @@ rules:
   - update
   - patch
   - delete
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - '*'
+- apiGroups: [""]
+  resources:
+  - pods
+  verbs:
+  - list
 ---
 apiVersion: apps/v1
 kind: DaemonSet
@@ -67,7 +78,7 @@ spec:
         effect: NoSchedule
       containers:
       - name: whereabouts
-        image: dougbtv/whereabouts:latest
+        image: ghcr.io/k8snetworkplumbingwg/whereabouts:latest-amd64
         env:
         - name: WHEREABOUTS_NAMESPACE
           valueFrom:
