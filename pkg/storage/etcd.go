@@ -10,6 +10,7 @@ import (
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/clientv3/concurrency"
 	"github.com/coreos/etcd/pkg/transport"
+	"github.com/dougbtv/whereabouts/pkg/allocate"
 	"github.com/dougbtv/whereabouts/pkg/logging"
 	"github.com/dougbtv/whereabouts/pkg/types"
 )
@@ -92,7 +93,7 @@ func (i *EtcdOverlappingRangeStore) IsAllocatedInOverlappingRange(ctx context.Co
 }
 
 // UpdateOverlappingRangeAllocation updates our clusterwide allocation for overlapping ranges.
-func (i *EtcdOverlappingRangeStore) UpdateOverlappingRangeAllocation(ctx context.Context, mode int, ip net.IP, containerID string) error {
+func (i *EtcdOverlappingRangeStore) UpdateOverlappingRangeAllocation(ctx context.Context, mode int, ip net.IP, containerID string, podRef string) error {
 	logging.Debugf("ETCD UpdateOverlappingRangeWide is NOT IMPLEMENTED!!!! TODO")
 	return nil
 }
@@ -159,4 +160,88 @@ func (p *ETCDIPPool) Update(ctx context.Context, reservations []types.IPReservat
 	}
 	_, err := p.kv.Put(ctx, fmt.Sprintf("%s/%s", whereaboutsPrefix, p.ipRange), strings.Join(raw, "\n"))
 	return err
+}
+
+// IPManagement manages ip allocation and deallocation from a storage perspective
+func IPManagementEtcd(mode int, ipamConf types.IPAMConfig, containerID string, podRef string) (net.IPNet, error) {
+
+	logging.Debugf("IPManagement -- mode: %v / host: %v / containerID: %v / podRef: %v", mode, ipamConf.EtcdHost, containerID, podRef)
+
+	var newip net.IPNet
+	// Skip invalid modes
+	switch mode {
+	case types.Allocate, types.Deallocate:
+	default:
+		return newip, fmt.Errorf("Got an unknown mode passed to IPManagement: %v", mode)
+	}
+
+	var ipam Store
+	var pool IPPool
+	var err error
+	if ipamConf.Datastore != types.DatastoreETCD {
+		return net.IPNet{}, logging.Errorf("wrong 'datastore' value in IPAM config: %s", ipamConf.Datastore)
+	}
+	ipam, err = NewETCDIPAM(ipamConf)
+	if err != nil {
+		return newip, logging.Errorf("IPAM %s client initialization error: %v", ipamConf.Datastore, err)
+	}
+	defer ipam.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
+	defer cancel()
+
+	// Check our connectivity first
+	if err := ipam.Status(ctx); err != nil {
+		logging.Errorf("IPAM connectivity error: %v", err)
+		return newip, err
+	}
+
+	// handle the ip add/del until successful
+RETRYLOOP:
+	for j := 0; j < DatastoreRetries; j++ {
+		select {
+		case <-ctx.Done():
+			return newip, nil
+		default:
+			// retry the IPAM loop if the context has not been cancelled
+		}
+
+		pool, err = ipam.GetIPPool(ctx, ipamConf.Range)
+		if err != nil {
+			logging.Errorf("IPAM error reading pool allocations (attempt: %d): %v", j, err)
+			if e, ok := err.(Temporary); ok && e.Temporary() {
+				continue
+			}
+			return newip, err
+		}
+
+		reservelist := pool.Allocations()
+		var updatedreservelist []types.IPReservation
+		switch mode {
+		case types.Allocate:
+			newip, updatedreservelist, err = allocate.AssignIP(ipamConf, reservelist, containerID, podRef)
+			if err != nil {
+				logging.Errorf("Error assigning IP: %v", err)
+				return newip, err
+			}
+		case types.Deallocate:
+			updatedreservelist, _, err = allocate.DeallocateIP(reservelist, containerID)
+			if err != nil {
+				logging.Errorf("Error deallocating IP: %v", err)
+				return newip, err
+			}
+		}
+
+		err = pool.Update(ctx, updatedreservelist)
+		if err != nil {
+			logging.Errorf("IPAM error updating pool (attempt: %d): %v", j, err)
+			if e, ok := err.(Temporary); ok && e.Temporary() {
+				continue
+			}
+			break RETRYLOOP
+		}
+		break RETRYLOOP
+	}
+
+	return newip, err
 }
