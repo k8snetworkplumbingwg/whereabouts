@@ -175,16 +175,12 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 		return nil, "", err
 	}
 
-	if n.IPAM.LeaderLeaseDuration == 0 {
-		n.IPAM.LeaderLeaseDuration = types.DefaultLeaderLeaseDuration
+	if n.IPAM.LeaseDuration == 0 {
+		n.IPAM.LeaseDuration = types.DefaultLeaseDuration
 	}
 
-	if n.IPAM.LeaderRenewDeadline == 0 {
-		n.IPAM.LeaderRenewDeadline = types.DefaultLeaderRenewDeadline
-	}
-
-	if n.IPAM.LeaderRetryPeriod == 0 {
-		n.IPAM.LeaderRetryPeriod = types.DefaultLeaderRetryPeriod
+	if n.IPAM.Backoff == 0 {
+		n.IPAM.Backoff = types.DefaultBackoff
 	}
 
 	// Copy net name into IPAM so not to drag Net struct around

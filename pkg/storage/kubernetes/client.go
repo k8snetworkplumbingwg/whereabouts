@@ -5,6 +5,7 @@ import (
 	whereaboutsv1alpha1 "github.com/dougbtv/whereabouts/pkg/api/v1alpha1"
 	"github.com/dougbtv/whereabouts/pkg/logging"
 	"github.com/dougbtv/whereabouts/pkg/storage"
+	coordinationv1 "k8s.io/api/coordination/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -25,6 +26,7 @@ type Client struct {
 func NewClient(kubeconfigPath string) (*Client, error) {
 	scheme := runtime.NewScheme()
 	_ = whereaboutsv1alpha1.AddToScheme(scheme)
+	coordinationv1.AddToScheme(scheme)
 
 	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		&clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeconfigPath},
@@ -32,6 +34,8 @@ func NewClient(kubeconfigPath string) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
+	config.QPS = 50.0
+	config.Burst = 50
 
 	clientSet, err := kubernetes.NewForConfig(config)
 	if err != nil {

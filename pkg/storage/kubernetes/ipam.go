@@ -2,17 +2,14 @@ package kubernetes
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"net"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
-
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/leaderelection"
-	"k8s.io/client-go/tools/leaderelection/resourcelock"
 
 	"github.com/dougbtv/whereabouts/pkg/allocate"
 	whereaboutsv1alpha1 "github.com/dougbtv/whereabouts/pkg/api/v1alpha1"
@@ -20,11 +17,16 @@ import (
 	"github.com/dougbtv/whereabouts/pkg/storage"
 	whereaboutstypes "github.com/dougbtv/whereabouts/pkg/types"
 	jsonpatch "gomodules.xyz/jsonpatch/v2"
+	coordinationv1 "k8s.io/api/coordination/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+const (
+	leasePrefix = "whereabouts"
 )
 
 // NewKubernetesIPAM returns a new KubernetesIPAM Client configured to a kubernetes CRD backend
@@ -141,6 +143,158 @@ func (i *KubernetesIPAM) Status(ctx context.Context) error {
 
 // Close partially implements the Store interface
 func (i *KubernetesIPAM) Close() error {
+	return i.releaseLease(&i.config)
+}
+
+func leaseKey(namespace string, name string) types.NamespacedName {
+	return client.ObjectKey{
+		Name:      fmt.Sprintf("%s-%s", leasePrefix, name),
+		Namespace: namespace}
+}
+
+func leaseName(iprange string) string {
+	name := strings.ReplaceAll(iprange, ":", "-")
+	return strings.ReplaceAll(name, "/", "-")
+}
+
+func isLeaseExpired(lease *coordinationv1.Lease) bool {
+	acquireTime := lease.Spec.AcquireTime
+	leaseDuration := *lease.Spec.LeaseDurationSeconds
+
+	if int32(time.Since(acquireTime.Time).Seconds()) >= leaseDuration {
+		logging.Debugf("lease %s held by %s expired, acquireTime: %v",
+			lease.Name, *lease.Spec.HolderIdentity, acquireTime)
+		return true
+	}
+	return false
+}
+
+func isLeaseValid(lease *coordinationv1.Lease) bool {
+	return lease.Spec.HolderIdentity != nil && !isLeaseExpired(lease)
+}
+
+func isLeaseOwnedBy(lease *coordinationv1.Lease, holderIdentity string) bool {
+	return lease.Spec.HolderIdentity != nil && *lease.Spec.HolderIdentity == holderIdentity
+}
+
+func updateLease(ctx context.Context,
+	c client.Client,
+	lease *coordinationv1.Lease,
+	holderIdentity *string) error {
+
+	lease.Spec.HolderIdentity = holderIdentity
+	if holderIdentity != nil {
+		lease.Spec.AcquireTime = &metav1.MicroTime{Time: time.Now()}
+		*lease.Spec.LeaseTransitions = *lease.Spec.LeaseTransitions + 1
+	} else {
+		lease.Spec.AcquireTime = nil
+	}
+
+	return c.Update(ctx, lease)
+}
+
+func (ipam *KubernetesIPAM) getLease(ctx context.Context, leaseName string) (*coordinationv1.Lease, error) {
+	lease := &coordinationv1.Lease{}
+	c := ipam.client
+
+	leaseTimeout := int32(ipam.config.LeaseDuration)
+	key := leaseKey(ipam.namespace, leaseName)
+
+	if err := c.Get(ctx, key, lease); err != nil {
+		if !errors.IsNotFound(err) {
+			logging.Errorf("failed to get lease: %s, error: %s", key.Name, err)
+			return nil, err
+		}
+		// create lease
+		leaseTransitions := int32(0)
+		lease = &coordinationv1.Lease{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("%s-%s", leasePrefix, leaseName),
+				Namespace: ipam.namespace},
+			Spec: coordinationv1.LeaseSpec{
+				LeaseDurationSeconds: &leaseTimeout,
+				LeaseTransitions:     &leaseTransitions,
+			},
+		}
+		if err := c.Create(ctx, lease); err != nil {
+			if !errors.IsAlreadyExists(err) {
+				logging.Errorf("create lease: %s, error: %s", key.Name, err)
+				return nil, err
+			}
+			// fetch the lease
+			if err = c.Get(ctx, key, lease); err != nil {
+				logging.Errorf("get lease %s after creation, error: %s", key.Name, err)
+				return nil, err
+			}
+		}
+	}
+	return lease, nil
+}
+
+func (ipam *KubernetesIPAM) acquireLease(ipamConf *whereaboutstypes.IPAMConfig) (*coordinationv1.Lease, error) {
+	var lease *coordinationv1.Lease
+	var err error
+
+	backoff := int64(ipamConf.Backoff)
+	leaseName := leaseName(ipamConf.Range)
+	holderIdentity := fmt.Sprintf("%s/%s", ipamConf.PodNamespace, ipamConf.PodName)
+
+	logging.Debugf("client %s, trying to acquire lease %s", holderIdentity,
+		leasePrefix+leaseName)
+
+	ctx := context.Background()
+
+	for {
+		lease, err = ipam.getLease(ctx, leaseName)
+		if err != nil {
+			return nil, err
+		}
+		// try to acquire the lease
+		if !isLeaseValid(lease) {
+			err = updateLease(ctx, ipam.client, lease, &holderIdentity)
+			if err == nil {
+				break
+			}
+			if !errors.IsConflict(err) {
+				logging.Errorf("error acquiring lease %s by client %s, error: %s", lease.Name, holderIdentity, err)
+				return nil, err
+			}
+		}
+		interval, _ := rand.Int(rand.Reader, big.NewInt(backoff))
+		sleepTime := time.Duration(int64(10) + interval.Int64())
+		logging.Debugf("client %s, sleeping for %d ms for lease %s", holderIdentity, sleepTime, lease.Name)
+		time.Sleep(sleepTime * time.Millisecond)
+	}
+	if !isLeaseOwnedBy(lease, holderIdentity) {
+		return nil, fmt.Errorf("failed to acquire lease %s after waiting, client: %s",
+			lease.Name, holderIdentity)
+	}
+	logging.Debugf("lease %s acquired, client: %s", lease.Name, holderIdentity)
+	return lease, nil
+}
+
+func (ipam *KubernetesIPAM) releaseLease(ipamConf *whereaboutstypes.IPAMConfig) error {
+	leaseName := leaseName(ipamConf.Range)
+	key := leaseKey(ipam.namespace, leaseName)
+	holderIdentity := fmt.Sprintf("%s/%s", ipamConf.PodNamespace, ipamConf.PodName)
+
+	lease := &coordinationv1.Lease{}
+
+	ctx := context.Background()
+	if err := ipam.client.Get(ctx, key, lease); err != nil {
+		logging.Errorf("client %s, failed to get lease %s, err: %s", holderIdentity, key.Name, err)
+		return err
+	}
+	// check if this client is the owner of the lease and update
+	if !isLeaseOwnedBy(lease, holderIdentity) {
+		return fmt.Errorf("client %s, lease %s already cleared or held by someone else",
+			holderIdentity, lease.Name)
+	}
+	if err := updateLease(ctx, ipam.client, lease, nil); err != nil {
+		logging.Errorf("client %s, clear lease: %s, err %s", holderIdentity, lease.Name, err)
+		return err
+	}
+	logging.Debugf("lease %s cleared by client %s", lease.Name, holderIdentity)
 	return nil
 }
 
@@ -285,57 +439,10 @@ func (p *KubernetesIPPool) Update(ctx context.Context, reservations []whereabout
 	return nil
 }
 
-// newLeaderElector creates a new leaderelection.LeaderElector and associated
-// channels by which to observe elections and depositions.
-func newLeaderElector(clientset *kubernetes.Clientset, namespace string, podNamespace string, podID string, leaseDuration int, renewDeadline int, retryPeriod int) (*leaderelection.LeaderElector, chan struct{}, chan struct{}) {
-	//log.WithField("context", "leaderelection")
-	// leaderOK will block gRPC startup until it's closed.
-	leaderOK := make(chan struct{})
-	// deposed is closed by the leader election callback when
-	// we are deposed as leader so that we can clean up.
-	deposed := make(chan struct{})
-
-	var rl = &resourcelock.LeaseLock{
-		LeaseMeta: metav1.ObjectMeta{
-			Name:      "whereabouts",
-			Namespace: namespace,
-		},
-		Client: clientset.CoordinationV1(),
-		LockConfig: resourcelock.ResourceLockConfig{
-			Identity: fmt.Sprintf("%s/%s", podNamespace, podID),
-		},
-	}
-
-	// Make the leader elector, ready to be used in the Workgroup.
-	// !bang
-	le, err := leaderelection.NewLeaderElector(leaderelection.LeaderElectionConfig{
-		Lock:          rl,
-		LeaseDuration: time.Duration(leaseDuration) * time.Millisecond,
-		RenewDeadline: time.Duration(renewDeadline) * time.Millisecond,
-		RetryPeriod:   time.Duration(retryPeriod) * time.Millisecond,
-		Callbacks: leaderelection.LeaderCallbacks{
-			OnStartedLeading: func(_ context.Context) {
-				logging.Debugf("OnStartedLeading() called")
-				close(leaderOK)
-			},
-			OnStoppedLeading: func() {
-				logging.Debugf("OnStoppedLeading() called")
-				// The context being canceled will trigger a handler that will
-				// deal with being deposed.
-				close(deposed)
-			},
-		},
-	})
-	if err != nil {
-		logging.Errorf("Failed to create leader elector: %v", err)
-		return nil, leaderOK, deposed
-	}
-	return le, leaderOK, deposed
-}
-
 // IPManagement manages ip allocation and deallocation from a storage perspective
 func IPManagement(mode int, ipamConf whereaboutstypes.IPAMConfig, containerID string, podRef string) (net.IPNet, error) {
 	var newip net.IPNet
+	var lease *coordinationv1.Lease
 
 	ipam, err := NewKubernetesIPAM(containerID, ipamConf)
 	if err != nil {
@@ -347,62 +454,20 @@ func IPManagement(mode int, ipamConf whereaboutstypes.IPAMConfig, containerID st
 		return newip, fmt.Errorf("IPAM %s client initialization error: no pod name", ipamConf.Datastore)
 	}
 
-	// setup leader election
-	le, leader, deposed := newLeaderElector(ipam.clientSet, ipam.namespace, ipamConf.PodNamespace, ipamConf.PodName, ipamConf.LeaderLeaseDuration, ipamConf.LeaderRenewDeadline, ipamConf.LeaderRetryPeriod)
-	var wg sync.WaitGroup
-	wg.Add(2)
+	// acquire lease
+	lease, err = ipam.acquireLease(&ipamConf)
+	if err != nil {
+		return newip, fmt.Errorf("IPAM %s client failed to acquire lease, error: %v",
+			ipamConf.Datastore, err)
+	}
 
-	stopM := make(chan struct{})
-	result := make(chan error, 2)
-
-	go func() {
-		defer wg.Done()
-		for {
-			select {
-			case <-stopM:
-				logging.Debugf("Stopped leader election")
-				result <- nil
-				return
-			case <-leader:
-				logging.Debugf("Elected as leader, do processing")
-				newip, err = IPManagementKubernetesUpdate(mode, ipam, ipamConf, containerID, podRef)
-				stopM <- struct{}{}
-				return
-			case <-deposed:
-				logging.Debugf("Deposed as leader, shutting down")
-				result <- nil
-				return
-			}
-		}
-	}()
-
-	go func() {
-		defer wg.Done()
-		ctx, cancel := context.WithCancel(context.Background())
-		res := make(chan error)
-
-		go func() {
-			logging.Debugf("Started leader election")
-			le.Run(ctx)
-			logging.Debugf("Finished leader election")
-			res <- nil
-		}()
-
-		// wait for stop
-		<-stopM
-		// cancel fn(ctx)
-		cancel()
-		result <- (<-res)
-	}()
-
-	wg.Wait()
-	close(stopM)
-	logging.Debugf("IPManagement: %v, %v", newip, err)
+	newip, err = IPManagementKubernetesUpdate(mode, ipam, ipamConf, containerID, podRef, lease)
+	logging.Debugf("IPManagement mode: %v: ip: %v, err: %v", mode, newip, err)
 	return newip, err
 }
 
 // IPManagementKubernetesUpdate manages k8s updates
-func IPManagementKubernetesUpdate(mode int, ipam *KubernetesIPAM, ipamConf whereaboutstypes.IPAMConfig, containerID string, podRef string) (net.IPNet, error) {
+func IPManagementKubernetesUpdate(mode int, ipam *KubernetesIPAM, ipamConf whereaboutstypes.IPAMConfig, containerID string, podRef string, lease *coordinationv1.Lease) (net.IPNet, error) {
 	logging.Debugf("IPManagement -- mode: %v / containerID: %v / podRef: %v", mode, containerID, podRef)
 
 	var newip net.IPNet
@@ -417,14 +482,13 @@ func IPManagementKubernetesUpdate(mode int, ipam *KubernetesIPAM, ipamConf where
 	var pool storage.IPPool
 	var err error
 
-	ctx, cancel := context.WithTimeout(context.Background(), storage.RequestTimeout)
-	defer cancel()
+	// request processing should finish within lease deadline
+	leaseDuration := time.Duration(ipamConf.LeaseDuration) * time.Second
+	leaseDeadline := lease.Spec.AcquireTime.Add(leaseDuration)
+	requestTimeout := leaseDeadline.Sub(time.Now())
 
-	// Check our connectivity first
-	if err := ipam.Status(ctx); err != nil {
-		logging.Errorf("IPAM connectivity error: %v", err)
-		return newip, err
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
+	defer cancel()
 
 	// handle the ip add/del until successful
 	var overlappingrangeallocations []whereaboutstypes.IPReservation
