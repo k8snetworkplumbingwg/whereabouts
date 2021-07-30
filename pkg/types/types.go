@@ -9,11 +9,10 @@ import (
 
 // Datastore types
 const (
-	DatastoreETCD              = "etcd"
-	DatastoreKubernetes        = "kubernetes"
-	DefaultLeaderLeaseDuration = 1500
-	DefaultLeaderRenewDeadline = 1000
-	DefaultLeaderRetryPeriod   = 500
+	DatastoreETCD        = "etcd"
+	DatastoreKubernetes  = "kubernetes"
+	DefaultLeaseDuration = 10
+	DefaultBackoff       = 1000
 )
 
 // Net is The top-level network config - IPAM plugins are passed the full configuration
@@ -26,34 +25,33 @@ type Net struct {
 
 // IPAMConfig describes the expected json configuration for this plugin
 type IPAMConfig struct {
-	Name                string
-	Type                string            `json:"type"`
-	Routes              []*cnitypes.Route `json:"routes"`
-	Datastore           string            `json:"datastore"`
-	Addresses           []Address         `json:"addresses,omitempty"`
-	OmitRanges          []string          `json:"exclude,omitempty"`
-	DNS                 cnitypes.DNS      `json:"dns"`
-	Range               string            `json:"range"`
-	RangeStart          net.IP            `json:"range_start,omitempty"`
-	RangeEnd            net.IP            `json:"range_end,omitempty"`
-	GatewayStr          string            `json:"gateway"`
-	EtcdHost            string            `json:"etcd_host,omitempty"`
-	EtcdUsername        string            `json:"etcd_username,omitempty"`
-	EtcdPassword        string            `json:"etcd_password,omitempty"`
-	EtcdKeyFile         string            `json:"etcd_key_file,omitempty"`
-	EtcdCertFile        string            `json:"etcd_cert_file,omitempty"`
-	EtcdCACertFile      string            `json:"etcd_ca_cert_file,omitempty"`
-	LeaderLeaseDuration int               `json:"leader_lease_duration,omitempty"`
-	LeaderRenewDeadline int               `json:"leader_renew_deadline,omitempty"`
-	LeaderRetryPeriod   int               `json:"leader_retry_period,omitempty"`
-	LogFile             string            `json:"log_file"`
-	LogLevel            string            `json:"log_level"`
-	OverlappingRanges   bool              `json:"enable_overlapping_ranges,omitempty"`
-	Gateway             net.IP
-	Kubernetes          KubernetesConfig `json:"kubernetes,omitempty"`
-	ConfigurationPath   string           `json:"configuration_path"`
-	PodName             string
-	PodNamespace        string
+	Name              string
+	Type              string            `json:"type"`
+	Routes            []*cnitypes.Route `json:"routes"`
+	Datastore         string            `json:"datastore"`
+	Addresses         []Address         `json:"addresses,omitempty"`
+	OmitRanges        []string          `json:"exclude,omitempty"`
+	DNS               cnitypes.DNS      `json:"dns"`
+	Range             string            `json:"range"`
+	RangeStart        net.IP            `json:"range_start,omitempty"`
+	RangeEnd          net.IP            `json:"range_end,omitempty"`
+	GatewayStr        string            `json:"gateway"`
+	EtcdHost          string            `json:"etcd_host,omitempty"`
+	EtcdUsername      string            `json:"etcd_username,omitempty"`
+	EtcdPassword      string            `json:"etcd_password,omitempty"`
+	EtcdKeyFile       string            `json:"etcd_key_file,omitempty"`
+	EtcdCertFile      string            `json:"etcd_cert_file,omitempty"`
+	EtcdCACertFile    string            `json:"etcd_ca_cert_file,omitempty"`
+	LeaseDuration     int               `json:"lease_duration,omitempty"`
+	Backoff           int               `json:"backoff,omitempty"`
+	LogFile           string            `json:"log_file"`
+	LogLevel          string            `json:"log_level"`
+	OverlappingRanges bool              `json:"enable_overlapping_ranges,omitempty"`
+	Gateway           net.IP
+	Kubernetes        KubernetesConfig `json:"kubernetes,omitempty"`
+	ConfigurationPath string           `json:"configuration_path"`
+	PodName           string
+	PodNamespace      string
 }
 
 // IPAMEnvArgs are the environment vars we expect
