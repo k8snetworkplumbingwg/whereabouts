@@ -10,8 +10,8 @@ import (
 
 	cnitypes "github.com/containernetworking/cni/pkg/types"
 	types020 "github.com/containernetworking/cni/pkg/types/020"
-	"github.com/dougbtv/whereabouts/pkg/logging"
-	"github.com/dougbtv/whereabouts/pkg/types"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 	"github.com/imdario/mergo"
 )
 

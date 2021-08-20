@@ -9,8 +9,8 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	whereaboutsv1alpha1 "github.com/dougbtv/whereabouts/pkg/api/v1alpha1"
-	"github.com/dougbtv/whereabouts/pkg/types"
+	whereaboutsv1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/v1alpha1"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 )
 
 func TestIPReconciler(t *testing.T) {

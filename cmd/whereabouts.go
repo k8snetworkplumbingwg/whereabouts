@@ -9,12 +9,12 @@ import (
 	cnitypes "github.com/containernetworking/cni/pkg/types"
 	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/containernetworking/cni/pkg/version"
-	"github.com/dougbtv/whereabouts/pkg/allocate"
-	"github.com/dougbtv/whereabouts/pkg/config"
-	"github.com/dougbtv/whereabouts/pkg/logging"
-	"github.com/dougbtv/whereabouts/pkg/storage"
-	"github.com/dougbtv/whereabouts/pkg/storage/kubernetes"
-	"github.com/dougbtv/whereabouts/pkg/types"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/allocate"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/config"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage/kubernetes"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 )
 
 func main() {

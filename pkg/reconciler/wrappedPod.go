@@ -3,8 +3,8 @@ package reconciler
 import (
 	"encoding/json"
 
-	"github.com/dougbtv/whereabouts/pkg/logging"
-	"github.com/dougbtv/whereabouts/pkg/storage"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage"
 	k8snetworkplumbingwgv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 
 	v1 "k8s.io/api/core/v1"

@@ -10,9 +10,9 @@ import (
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/clientv3/concurrency"
 	"github.com/coreos/etcd/pkg/transport"
-	"github.com/dougbtv/whereabouts/pkg/allocate"
-	"github.com/dougbtv/whereabouts/pkg/logging"
-	"github.com/dougbtv/whereabouts/pkg/types"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/allocate"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 )
 
 const whereaboutsPrefix = "/whereabouts"

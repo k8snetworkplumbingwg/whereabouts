@@ -3,11 +3,11 @@ package main
 import (
 	"context"
 	"flag"
-	"github.com/dougbtv/whereabouts/pkg/storage"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage"
 	"os"
 
-	"github.com/dougbtv/whereabouts/pkg/logging"
-	"github.com/dougbtv/whereabouts/pkg/reconciler"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/reconciler"
 )
 
 func main() {

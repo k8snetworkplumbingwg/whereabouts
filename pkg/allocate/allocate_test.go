@@ -2,7 +2,7 @@ package allocate
 
 import (
 	"fmt"
-	"github.com/dougbtv/whereabouts/pkg/types"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 	"math"
 	"math/big"
 	"net"

@@ -10,8 +10,8 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	"github.com/dougbtv/whereabouts/pkg/api/v1alpha1"
-	"github.com/dougbtv/whereabouts/pkg/reconciler"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/api/v1alpha1"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/reconciler"
 	multusv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 
 	v1 "k8s.io/api/core/v1"
