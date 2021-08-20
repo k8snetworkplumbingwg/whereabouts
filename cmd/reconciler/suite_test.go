@@ -38,15 +38,17 @@ func TestAPIs(t *testing.T) {
 
 	RunSpecsWithDefaultAndCustomReporters(t,
 		"Whereabouts IP reconciler Suite",
-		[]Reporter{envtest.NewlineReporter{}})
+		[]Reporter{})
+		//[]Reporter{envtest.NewlineReporter{}})
 }
 
 var _ = BeforeSuite(func(done Done) {
-	logf.SetLogger(zap.LoggerTo(GinkgoWriter, true))
+	zap.WriteTo(GinkgoWriter)
+	logf.SetLogger(zap.New())
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths: []string{filepath.Join("../../", "doc")},
+		CRDDirectoryPaths: []string{filepath.Join("../../", "doc", "crds")},
 	}
 
 	var err error
