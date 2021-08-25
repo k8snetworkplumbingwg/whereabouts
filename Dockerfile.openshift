@@ -9,7 +9,7 @@ RUN go build -mod vendor -o bin/whereabouts cmd/whereabouts.go
 RUN go build -mod vendor -o bin/ip-reconciler cmd/reconciler/*.go
 WORKDIR /
 
-FROM registry.ci.openshift.org/ocp/builder:rhel-7-golang-1.16-openshift-4.9 AS rhel7
+FROM registry.ci.openshift.org/ocp/builder:rhel-8-golang-1.16-openshift-4.9 AS rhel7
 ADD . /go/src/github.com/dougbtv/whereabouts
 WORKDIR /go/src/github.com/dougbtv/whereabouts
 ENV CGO_ENABLED=1
