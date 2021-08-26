@@ -35,35 +35,45 @@ func AssignIP(ipamConf types.IPAMConfig, reservelist []types.IPReservation, cont
 }
 
 // DeallocateIP assigns an IP using a range and a reserve list.
-func DeallocateIP(iprange string, reservelist []types.IPReservation, containerID string) ([]types.IPReservation, error) {
+func DeallocateIP(reservelist []types.IPReservation, containerID string) ([]types.IPReservation, net.IP, error) {
 
-	updatedreservelist, err := IterateForDeallocation(reservelist, containerID)
+	updatedreservelist, hadip, err := IterateForDeallocation(reservelist, containerID, getMatchingIPReservationIndex)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return updatedreservelist, nil
+	logging.Debugf("Deallocating given previously used IP: %v", hadip)
+
+	return updatedreservelist, hadip, nil
 }
 
 // IterateForDeallocation iterates overs currently reserved IPs and the deallocates given the container id.
-func IterateForDeallocation(reservelist []types.IPReservation, containerID string) ([]types.IPReservation, error) {
+func IterateForDeallocation(
+	reservelist []types.IPReservation,
+	containerID string,
+	matchingFunction func(reservation []types.IPReservation, id string) int) ([]types.IPReservation, net.IP, error) {
 
-	// Cycle through and find the index that corresponds to our containerID
+	foundidx := matchingFunction(reservelist, containerID)
+	// Check if it's a valid index
+	if foundidx < 0 {
+		return reservelist, nil, fmt.Errorf("Did not find reserved IP for container %v", containerID)
+	}
+
+	returnip := reservelist[foundidx].IP
+
+	updatedreservelist := removeIdxFromSlice(reservelist, foundidx)
+	return updatedreservelist, returnip, nil
+}
+
+func getMatchingIPReservationIndex(reservelist []types.IPReservation, id string) int {
 	foundidx := -1
 	for idx, v := range reservelist {
-		if v.ContainerID == containerID {
+		if v.ContainerID == id {
 			foundidx = idx
 			break
 		}
 	}
-
-	// Check if it's a valid index
-	if foundidx < 0 {
-		return reservelist, fmt.Errorf("Did not find reserved IP for container %v", containerID)
-	}
-
-	updatedreservelist := removeIdxFromSlice(reservelist, foundidx)
-	return updatedreservelist, nil
+	return foundidx
 }
 
 func removeIdxFromSlice(s []types.IPReservation, i int) []types.IPReservation {

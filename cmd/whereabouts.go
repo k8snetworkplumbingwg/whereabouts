@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"strings"
 
 	"github.com/containernetworking/cni/pkg/skel"
@@ -12,6 +13,7 @@ import (
 	"github.com/dougbtv/whereabouts/pkg/config"
 	"github.com/dougbtv/whereabouts/pkg/logging"
 	"github.com/dougbtv/whereabouts/pkg/storage"
+	"github.com/dougbtv/whereabouts/pkg/storage/kubernetes"
 	"github.com/dougbtv/whereabouts/pkg/types"
 )
 
@@ -39,7 +41,14 @@ func cmdAdd(args *skel.CmdArgs) error {
 	result.Routes = ipamConf.Routes
 
 	logging.Debugf("Beginning IPAM for ContainerID: %v", args.ContainerID)
-	newip, err := storage.IPManagement(types.Allocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
+	var newip net.IPNet
+
+	switch ipamConf.Datastore {
+	case types.DatastoreETCD:
+		newip, err = storage.IPManagementEtcd(types.Allocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
+	case types.DatastoreKubernetes:
+		newip, err = kubernetes.IPManagement(types.Allocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
+	}
 	if err != nil {
 		logging.Errorf("Error at storage engine: %s", err)
 		return fmt.Errorf("Error at storage engine: %w", err)
@@ -76,9 +85,14 @@ func cmdDel(args *skel.CmdArgs) error {
 		return err
 	}
 	logging.Debugf("DEL - IPAM configuration successfully read: %+v", filterConf(*ipamConf))
-	logging.Debugf("ContainerID: %v", args.ContainerID)
+	logging.Debugf("Beginning delete for ContainerID: %v", args.ContainerID)
 
-	_, err = storage.IPManagement(types.Deallocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
+	switch ipamConf.Datastore {
+	case types.DatastoreETCD:
+		_, err = storage.IPManagementEtcd(types.Deallocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
+	case types.DatastoreKubernetes:
+		_, err = kubernetes.IPManagement(types.Deallocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
+	}
 	if err != nil {
 		logging.Verbosef("WARNING: Problem deallocating IP: %s", err)
 		// return fmt.Errorf("Error deallocating IP: %s", err)

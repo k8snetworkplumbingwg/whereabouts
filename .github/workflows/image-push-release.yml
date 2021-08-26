@@ -39,7 +39,7 @@ jobs:
           push: true
           tags: |
             ${{ steps.docker_meta.outputs.tags }}-amd64
-          file: deployments/Dockerfile
+          file: Dockerfile
 
   push-arm64:
     name: Image push/arm64
@@ -74,4 +74,4 @@ jobs:
           push: true
           tags: |
             ${{ steps.docker_meta.outputs.tags }}-arm64
-          file: deployments/Dockerfile
+          file: Dockerfile
