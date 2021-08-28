@@ -8,23 +8,29 @@ import (
 	"github.com/containernetworking/cni/pkg/skel"
 	cnitypes "github.com/containernetworking/cni/pkg/types"
 	"github.com/containernetworking/cni/pkg/types/current"
-	"github.com/containernetworking/cni/pkg/version"
+	cniversion "github.com/containernetworking/cni/pkg/version"
 	"github.com/dougbtv/whereabouts/pkg/allocate"
 	"github.com/dougbtv/whereabouts/pkg/config"
 	"github.com/dougbtv/whereabouts/pkg/logging"
 	"github.com/dougbtv/whereabouts/pkg/storage"
 	"github.com/dougbtv/whereabouts/pkg/storage/kubernetes"
 	"github.com/dougbtv/whereabouts/pkg/types"
+	"github.com/dougbtv/whereabouts/pkg/version"
 )
 
 func main() {
-	// TODO: implement plugin version
-	skel.PluginMain(cmdAdd, cmdGet, cmdDel, version.All, "TODO")
+	skel.PluginMain(
+		cmdAdd,
+		cmdCheck,
+		cmdDel,
+		cniversion.All,
+		fmt.Sprintf("whereabouts %s", version.GetFullVersionWithRuntimeInfo()),
+	)
 }
 
-func cmdGet(args *skel.CmdArgs) error {
+func cmdCheck(args *skel.CmdArgs) error {
 	// TODO
-	return fmt.Errorf("CNI GET method is not implemented")
+	return fmt.Errorf("CNI CHECK method is not implemented")
 }
 
 func cmdAdd(args *skel.CmdArgs) error {

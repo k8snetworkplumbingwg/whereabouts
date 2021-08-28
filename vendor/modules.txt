@@ -1,3 +1,6 @@
+# github.com/blang/semver v3.5.1+incompatible
+## explicit
+github.com/blang/semver
 # github.com/containernetworking/cni v0.7.1
 ## explicit
 github.com/containernetworking/cni/pkg/skel
