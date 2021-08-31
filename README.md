@@ -43,10 +43,10 @@ You can install this plugin with a Daemonset, using:
 ```
 git clone https://github.com/dougbtv/whereabouts && cd whereabouts
 kubectl apply \
-    -f ./doc/daemonset-install.yaml \
-    -f ./doc/whereabouts.cni.cncf.io_ippools.yaml \
-    -f ./doc/whereabouts.cni.cncf.io_overlappingrangeipreservations.yaml \
-    -f doc/ip-reconciler-job.yaml
+    -f doc/crds/daemonset-install.yaml \
+    -f doc/crds/whereabouts.cni.cncf.io_ippools.yaml \
+    -f doc/crds/whereabouts.cni.cncf.io_overlappingrangeipreservations.yaml \
+    -f doc/crds/ip-reconciler-job.yaml
 ```
 
 The daemonset installation requires Kubernetes Version 1.16 or later.
