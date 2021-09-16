@@ -43,6 +43,9 @@ var _ = Describe("Allocation operations", func() {
 		Expect(ipamconfig.RangeStart).To(Equal(net.ParseIP("192.168.1.5")))
 		Expect(ipamconfig.RangeEnd).To(Equal(net.ParseIP("192.168.1.25")))
 		Expect(ipamconfig.Gateway).To(Equal(net.ParseIP("192.168.10.1")))
+		Expect(ipamconfig.LeaderLeaseDuration).To(Equal(1500))
+		Expect(ipamconfig.LeaderRenewDeadline).To(Equal(1000))
+		Expect(ipamconfig.LeaderRetryPeriod).To(Equal(500))
 
 	})
 
@@ -71,7 +74,10 @@ var _ = Describe("Allocation operations", func() {
         "type": "whereabouts",
         "range": "192.168.2.230/24",
         "range_start": "192.168.2.223",
-        "gateway": "192.168.10.1"
+        "gateway": "192.168.10.1",
+        "leader_lease_duration": 3000,
+        "leader_renew_deadline": 2000,
+        "leader_retry_period": 1000
       }
       }`
 
@@ -85,6 +91,10 @@ var _ = Describe("Allocation operations", func() {
 		Expect(ipamconfig.Gateway).To(Equal(net.ParseIP("192.168.10.1")))
 		Expect(ipamconfig.Datastore).To(Equal("kubernetes"))
 		Expect(ipamconfig.Kubernetes.KubeConfigPath).To(Equal("/etc/cni/net.d/whereabouts.d/whereabouts.kubeconfig"))
+
+		Expect(ipamconfig.LeaderLeaseDuration).To(Equal(3000))
+		Expect(ipamconfig.LeaderRenewDeadline).To(Equal(2000))
+		Expect(ipamconfig.LeaderRetryPeriod).To(Equal(1000))
 
 	})
 
