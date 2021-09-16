@@ -42,12 +42,13 @@ func cmdAdd(args *skel.CmdArgs) error {
 
 	logging.Debugf("Beginning IPAM for ContainerID: %v", args.ContainerID)
 	var newip net.IPNet
+	var gateway net.IP
 
 	switch ipamConf.Datastore {
 	case types.DatastoreETCD:
-		newip, err = storage.IPManagementEtcd(types.Allocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
+		newip, gateway, err = storage.IPManagementEtcd(types.Allocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
 	case types.DatastoreKubernetes:
-		newip, err = kubernetes.IPManagement(types.Allocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
+		newip, gateway, err = kubernetes.IPManagement(types.Allocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
 	}
 	if err != nil {
 		logging.Errorf("Error at storage engine: %s", err)
@@ -89,9 +90,9 @@ func cmdDel(args *skel.CmdArgs) error {
 
 	switch ipamConf.Datastore {
 	case types.DatastoreETCD:
-		_, err = storage.IPManagementEtcd(types.Deallocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
+		_, _, err = storage.IPManagementEtcd(types.Deallocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
 	case types.DatastoreKubernetes:
-		_, err = kubernetes.IPManagement(types.Deallocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
+		_, _, err = kubernetes.IPManagement(types.Deallocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
 	}
 	if err != nil {
 		logging.Verbosef("WARNING: Problem deallocating IP: %s", err)

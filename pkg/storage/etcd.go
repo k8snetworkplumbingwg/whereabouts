@@ -163,27 +163,27 @@ func (p *ETCDIPPool) Update(ctx context.Context, reservations []types.IPReservat
 }
 
 // IPManagement manages ip allocation and deallocation from a storage perspective
-func IPManagementEtcd(mode int, ipamConf types.IPAMConfig, containerID string, podRef string) (net.IPNet, error) {
+func IPManagementEtcd(mode int, ipamConf types.IPAMConfig, containerID string, podRef string) (net.IPNet, net.IP, error) {
 
 	logging.Debugf("IPManagement -- mode: %v / host: %v / containerID: %v / podRef: %v", mode, ipamConf.EtcdHost, containerID, podRef)
 
 	var newip net.IPNet
+	var gateway net.IP
 	// Skip invalid modes
 	switch mode {
 	case types.Allocate, types.Deallocate:
 	default:
-		return newip, fmt.Errorf("Got an unknown mode passed to IPManagement: %v", mode)
+		return newip, gateway, fmt.Errorf("Got an unknown mode passed to IPManagement: %v", mode)
 	}
 
 	var ipam Store
-	var pool IPPool
 	var err error
 	if ipamConf.Datastore != types.DatastoreETCD {
-		return net.IPNet{}, logging.Errorf("wrong 'datastore' value in IPAM config: %s", ipamConf.Datastore)
+		return net.IPNet{}, gateway, logging.Errorf("wrong 'datastore' value in IPAM config: %s", ipamConf.Datastore)
 	}
 	ipam, err = NewETCDIPAM(ipamConf)
 	if err != nil {
-		return newip, logging.Errorf("IPAM %s client initialization error: %v", ipamConf.Datastore, err)
+		return newip, gateway, logging.Errorf("IPAM %s client initialization error: %v", ipamConf.Datastore, err)
 	}
 	defer ipam.Close()
 
@@ -193,8 +193,44 @@ func IPManagementEtcd(mode int, ipamConf types.IPAMConfig, containerID string, p
 	// Check our connectivity first
 	if err := ipam.Status(ctx); err != nil {
 		logging.Errorf("IPAM connectivity error: %v", err)
-		return newip, err
+		return newip, gateway, err
 	}
+
+	for _, ipRange := range ipamConf.Ranges {
+
+		logging.Debugf("try ipRange:%+v", ipRange)
+		newip, err = IPManagementEtcdRange(ctx, mode, ipRange, ipam, containerID, podRef)
+		logging.Debugf("result allocate in range %+v IP:%+v err:%v", ipRange, newip, err)
+		if err == nil {
+			gateway = ipRange.Gateway
+			break
+
+		} else {
+			switch mode {
+			case types.Allocate:
+				if _, ok := err.(allocate.AssignmentError); ok {
+					logging.Debugf("range not have free IP, try next")
+					continue
+				}
+			case types.Deallocate:
+				if _, ok := err.(allocate.DeallocateError); ok {
+					logging.Debugf("range not have container, try next")
+					continue
+				}
+			}
+			return newip, gateway, err
+		}
+	}
+
+	return newip, gateway, err
+
+}
+
+func IPManagementEtcdRange(ctx context.Context, mode int, ipRange types.IPRange, ipam Store, containerID string, podRef string) (net.IPNet, error) {
+
+	var newip net.IPNet
+	var pool IPPool
+	var err error
 
 	// handle the ip add/del until successful
 RETRYLOOP:
@@ -206,7 +242,7 @@ RETRYLOOP:
 			// retry the IPAM loop if the context has not been cancelled
 		}
 
-		pool, err = ipam.GetIPPool(ctx, ipamConf.Range)
+		pool, err = ipam.GetIPPool(ctx, ipRange.Range)
 		if err != nil {
 			logging.Errorf("IPAM error reading pool allocations (attempt: %d): %v", j, err)
 			if e, ok := err.(Temporary); ok && e.Temporary() {
@@ -219,7 +255,7 @@ RETRYLOOP:
 		var updatedreservelist []types.IPReservation
 		switch mode {
 		case types.Allocate:
-			newip, updatedreservelist, err = allocate.AssignIP(ipamConf, reservelist, containerID, podRef)
+			newip, updatedreservelist, err = allocate.AssignIP(ipRange, reservelist, containerID, podRef)
 			if err != nil {
 				logging.Errorf("Error assigning IP: %v", err)
 				return newip, err

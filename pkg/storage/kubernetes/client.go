@@ -67,14 +67,11 @@ func (i *Client) ListIPPools(ctx context.Context) ([]storage.IPPool, error) {
 	}
 
 	var whereaboutsApiIPPoolList []storage.IPPool
-	for idx, pool := range ipPoolList.Items {
-		firstIP, _, err := pool.ParseCIDR()
-		if err != nil {
-			return nil, err
-		}
+	for idx, _ := range ipPoolList.Items {
+
 		whereaboutsApiIPPoolList = append(
 			whereaboutsApiIPPoolList,
-			&KubernetesIPPool{client: i.client, firstIP: firstIP, pool: &ipPoolList.Items[idx]})
+			&KubernetesIPPool{client: i.client, pool: &ipPoolList.Items[idx]})
 	}
 	return whereaboutsApiIPPoolList, nil
 }
