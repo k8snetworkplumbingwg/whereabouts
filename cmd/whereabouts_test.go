@@ -181,7 +181,6 @@ var _ = Describe("Whereabouts operations", func() {
 		expectedAddress := "fd00:0:0:10:0:0:3:1/64"
 
 		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, []string{expectedAddress}, whereaboutstypes.DatastoreKubernetes)
-
 	})
 
 	It("excludes a range of addresses", func() {
@@ -740,6 +739,323 @@ var _ = Describe("Whereabouts operations", func() {
 		Expect(err).To(HaveOccurred())
 	})
 
+	It("detects IPv4 addresses used in other ranges, to allow for overlapping IP address ranges", func() {
+		const ifname string = "eth0"
+		const nspath string = "/some/where"
+
+		// ----------------------------- range 1
+
+		conf := fmt.Sprintf(`{
+		"cniVersion": "0.3.1",
+		"name": "mynet",
+		"type": "ipvlan",
+		"master": "foo0",
+		"ipam": {
+		  "type": "whereabouts",
+		  "datastore": "kubernetes",
+		  "log_file" : "/tmp/whereabouts.log",
+			"log_level" : "debug",
+		  "kubernetes": {"kubeconfig": "%s"},
+		  "range": "192.168.22.0/24"
+		}
+	  }`, kubeConfigPath)
+
+		args := &skel.CmdArgs{
+			ContainerID: "dummyfirstrange",
+			Netns:       nspath,
+			IfName:      ifname,
+			StdinData:   []byte(conf),
+			Args:        "IgnoreUnknown=1;K8S_POD_NAMESPACE=dummyNS;K8S_POD_NAME=dummyPOD",
+		}
+
+		// Allocate the IP
+		r, raw, err := testutils.CmdAddWithArgs(args, func() error {
+			return cmdAdd(args)
+		})
+		Expect(err).NotTo(HaveOccurred())
+		// fmt.Printf("!bang raw: %s\n", raw)
+		Expect(strings.Index(string(raw), "\"version\":")).Should(BeNumerically(">", 0))
+
+		result, err := current.GetResult(r)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Gomega is cranky about slices with different caps
+		Expect(*result.IPs[0]).To(Equal(
+			current.IPConfig{
+				Version: "4",
+				Address: mustCIDR("192.168.22.1/24"),
+			}))
+
+		// ----------------------------- range 2
+
+		confsecond := fmt.Sprintf(`{
+		"cniVersion": "0.3.1",
+		"name": "mynet",
+		"type": "ipvlan",
+		"master": "foo0",
+		"ipam": {
+		  "type": "whereabouts",
+		  "datastore": "kubernetes",
+		  "log_file" : "/tmp/whereabouts.log",
+			"log_level" : "debug",
+		  "kubernetes": {"kubeconfig": "%s"},
+		  "range": "192.168.22.0/28"
+		}
+	  }`, kubeConfigPath)
+
+		argssecond := &skel.CmdArgs{
+			ContainerID: "dummysecondrange",
+			Netns:       nspath,
+			IfName:      ifname,
+			StdinData:   []byte(confsecond),
+			Args:        "IgnoreUnknown=1;K8S_POD_NAMESPACE=dummyNS;K8S_POD_NAME=dummyPOD",
+		}
+
+		// Allocate the IP
+		r, raw, err = testutils.CmdAddWithArgs(argssecond, func() error {
+			return cmdAdd(argssecond)
+		})
+		Expect(err).NotTo(HaveOccurred())
+		// fmt.Printf("!bang raw: %s\n", raw)
+		Expect(strings.Index(string(raw), "\"version\":")).Should(BeNumerically(">", 0))
+
+		result, err = current.GetResult(r)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Gomega is cranky about slices with different caps
+		Expect(*result.IPs[0]).To(Equal(
+			current.IPConfig{
+				Version: "4",
+				Address: mustCIDR("192.168.22.2/28"),
+			}))
+
+		// ------------------------ deallocation
+
+		// Release the IP, first range
+		err = testutils.CmdDelWithArgs(args, func() error {
+			return cmdDel(args)
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		// Release the IP, second range
+		err = testutils.CmdDelWithArgs(argssecond, func() error {
+			return cmdDel(argssecond)
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+	})
+
+	It("detects IPv6 addresses used in other ranges, to allow for overlapping IP address ranges", func() {
+		const ifname string = "eth0"
+		const nspath string = "/some/where"
+
+		// ----------------------------- range 1
+
+		conf := fmt.Sprintf(`{
+		"cniVersion": "0.3.1",
+		"name": "mynet",
+		"type": "ipvlan",
+		"master": "foo0",
+		"ipam": {
+		  "type": "whereabouts",
+		  "datastore": "kubernetes",
+		  "log_file" : "/tmp/whereabouts.log",
+			"log_level" : "debug",
+		  "kubernetes": {"kubeconfig": "%s"},
+		  "range": "2001::2:3:0/124"
+		}
+	  }`, kubeConfigPath)
+
+		args := &skel.CmdArgs{
+			ContainerID: "dummyfirstrange",
+			Netns:       nspath,
+			IfName:      ifname,
+			StdinData:   []byte(conf),
+			Args:        "IgnoreUnknown=1;K8S_POD_NAMESPACE=dummyNS;K8S_POD_NAME=dummyPOD",
+		}
+
+		// Allocate the IP
+		r, raw, err := testutils.CmdAddWithArgs(args, func() error {
+			return cmdAdd(args)
+		})
+		Expect(err).NotTo(HaveOccurred())
+		// fmt.Printf("!bang raw: %s\n", raw)
+		Expect(strings.Index(string(raw), "\"version\":")).Should(BeNumerically(">", 0))
+
+		result, err := current.GetResult(r)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Gomega is cranky about slices with different caps
+		Expect(*result.IPs[0]).To(Equal(
+			current.IPConfig{
+				Version: "6",
+				Address: mustCIDR("2001::2:3:1/124"),
+			}))
+
+		// ----------------------------- range 2
+
+		confsecond := fmt.Sprintf(`{
+		"cniVersion": "0.3.1",
+		"name": "mynet",
+		"type": "ipvlan",
+		"master": "foo0",
+		"ipam": {
+		  "type": "whereabouts",
+		  "datastore": "kubernetes",
+		  "log_file" : "/tmp/whereabouts.log",
+			"log_level" : "debug",
+		  "kubernetes": {"kubeconfig": "%s"},
+		  "range": "2001::2:3:0/126"
+		}
+	  }`, kubeConfigPath)
+
+		argssecond := &skel.CmdArgs{
+			ContainerID: "dummysecondrange",
+			Netns:       nspath,
+			IfName:      ifname,
+			StdinData:   []byte(confsecond),
+			Args:        "IgnoreUnknown=1;K8S_POD_NAMESPACE=dummyNS;K8S_POD_NAME=dummyPOD",
+		}
+
+		// Allocate the IP
+		r, raw, err = testutils.CmdAddWithArgs(argssecond, func() error {
+			return cmdAdd(argssecond)
+		})
+		Expect(err).NotTo(HaveOccurred())
+		// fmt.Printf("!bang raw: %s\n", raw)
+		Expect(strings.Index(string(raw), "\"version\":")).Should(BeNumerically(">", 0))
+
+		result, err = current.GetResult(r)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Gomega is cranky about slices with different caps
+		Expect(*result.IPs[0]).To(Equal(
+			current.IPConfig{
+				Version: "6",
+				Address: mustCIDR("2001::2:3:2/126"),
+			}))
+
+		// ------------------------ deallocation
+
+		// Release the IP, first range
+		err = testutils.CmdDelWithArgs(args, func() error {
+			return cmdDel(args)
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		// Release the IP, second range
+		err = testutils.CmdDelWithArgs(argssecond, func() error {
+			return cmdDel(argssecond)
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+	})
+
+	It("allows IP collisions across ranges when enable_overlapping_ranges is set to false", func() {
+		const ifname string = "eth0"
+		const nspath string = "/some/where"
+
+		// ----------------------------- range 1
+
+		conf := fmt.Sprintf(`{
+		"cniVersion": "0.3.1",
+		"name": "mynet",
+		"type": "ipvlan",
+		"master": "foo0",
+		"ipam": {
+		  "type": "whereabouts",
+		  "datastore": "kubernetes",
+		  "log_file" : "/tmp/whereabouts.log",
+			"log_level" : "debug",
+		  "kubernetes": {"kubeconfig": "%s"},
+		  "enable_overlapping_ranges": false,
+		  "range": "192.168.33.0/24"
+		}
+	  }`, kubeConfigPath)
+
+		args := &skel.CmdArgs{
+			ContainerID: "dummyfirstrange",
+			Netns:       nspath,
+			IfName:      ifname,
+			StdinData:   []byte(conf),
+			Args:        "IgnoreUnknown=1;K8S_POD_NAMESPACE=dummyNS;K8S_POD_NAME=dummyPOD",
+		}
+
+		// Allocate the IP
+		r, raw, err := testutils.CmdAddWithArgs(args, func() error {
+			return cmdAdd(args)
+		})
+		Expect(err).NotTo(HaveOccurred())
+		// fmt.Printf("!bang raw: %s\n", raw)
+		Expect(strings.Index(string(raw), "\"version\":")).Should(BeNumerically(">", 0))
+
+		result, err := current.GetResult(r)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Gomega is cranky about slices with different caps
+		Expect(*result.IPs[0]).To(Equal(
+			current.IPConfig{
+				Version: "4",
+				Address: mustCIDR("192.168.33.1/24"),
+			}))
+
+		// ----------------------------- range 2
+
+		confsecond := fmt.Sprintf(`{
+		"cniVersion": "0.3.1",
+		"name": "mynet",
+		"type": "ipvlan",
+		"master": "foo0",
+		"ipam": {
+		  "type": "whereabouts",
+		  "datastore": "kubernetes",
+		  "log_file" : "/tmp/whereabouts.log",
+			"log_level" : "debug",
+		  "kubernetes": {"kubeconfig": "%s"},
+		  "range": "192.168.33.0/28"
+		}
+	  }`, kubeConfigPath)
+
+		argssecond := &skel.CmdArgs{
+			ContainerID: "dummysecondrange",
+			Netns:       nspath,
+			IfName:      ifname,
+			StdinData:   []byte(confsecond),
+			Args:        "IgnoreUnknown=1;K8S_POD_NAMESPACE=dummyNS;K8S_POD_NAME=dummyPOD",
+		}
+
+		// Allocate the IP
+		r, raw, err = testutils.CmdAddWithArgs(argssecond, func() error {
+			return cmdAdd(argssecond)
+		})
+		Expect(err).NotTo(HaveOccurred())
+		// fmt.Printf("!bang raw: %s\n", raw)
+		Expect(strings.Index(string(raw), "\"version\":")).Should(BeNumerically(">", 0))
+
+		result, err = current.GetResult(r)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Gomega is cranky about slices with different caps
+		Expect(*result.IPs[0]).To(Equal(
+			current.IPConfig{
+				Version: "4",
+				Address: mustCIDR("192.168.33.1/28"),
+			}))
+
+		// ------------------------ deallocation
+
+		// Release the IP, first range
+		err = testutils.CmdDelWithArgs(args, func() error {
+			return cmdDel(args)
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		// Release the IP, second range
+		err = testutils.CmdDelWithArgs(argssecond, func() error {
+			return cmdDel(argssecond)
+		})
+		Expect(err).NotTo(HaveOccurred())
+	})
 })
 
 func mustCIDR(s string) net.IPNet {

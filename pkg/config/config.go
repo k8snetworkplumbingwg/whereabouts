@@ -33,7 +33,11 @@ func canonicalizeIP(ip *net.IP) error {
 func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, error) {
 
 	// We first load up what we already have, before we start reading a file...
-	n := types.Net{}
+	n := types.Net{
+		IPAM: &types.IPAMConfig{
+			OverlappingRanges: true,
+		},
+	}
 	if err := json.Unmarshal(bytes, &n); err != nil {
 		return nil, "", fmt.Errorf("LoadIPAMConfig - JSON Parsing Error: %s / bytes: %s", err, bytes)
 	}
@@ -46,6 +50,8 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 	if err := cnitypes.LoadArgs(envArgs, &args); err != nil {
 		return nil, "", fmt.Errorf("LoadArgs - CNI Args Parsing Error: %s", err)
 	}
+	n.IPAM.PodName = string(args.K8S_POD_NAME)
+	n.IPAM.PodNamespace = string(args.K8S_POD_NAMESPACE)
 
 	// Once we have our basics, let's look for our (optional) configuration file
 	confdirs := []string{"/etc/kubernetes/cni/net.d/whereabouts.d/whereabouts.conf", "/etc/cni/net.d/whereabouts.d/whereabouts.conf"}
@@ -140,6 +146,18 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 
 	if err := configureStatic(&n, args); err != nil {
 		return nil, "", err
+	}
+
+	if n.IPAM.LeaderLeaseDuration == 0 {
+		n.IPAM.LeaderLeaseDuration = types.DefaultLeaderLeaseDuration
+	}
+
+	if n.IPAM.LeaderRenewDeadline == 0 {
+		n.IPAM.LeaderRenewDeadline = types.DefaultLeaderRenewDeadline
+	}
+
+	if n.IPAM.LeaderRetryPeriod == 0 {
+		n.IPAM.LeaderRetryPeriod = types.DefaultLeaderRetryPeriod
 	}
 
 	// Copy net name into IPAM so not to drag Net struct around
