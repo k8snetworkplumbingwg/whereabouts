@@ -313,6 +313,7 @@ func newLeaderElector(clientset *kubernetes.Clientset, namespace string, podName
 		LeaseDuration: time.Duration(leaseDuration) * time.Millisecond,
 		RenewDeadline: time.Duration(renewDeadline) * time.Millisecond,
 		RetryPeriod:   time.Duration(retryPeriod) * time.Millisecond,
+		ReleaseOnCancel: true,
 		Callbacks: leaderelection.LeaderCallbacks{
 			OnStartedLeading: func(_ context.Context) {
 				logging.Debugf("OnStartedLeading() called")
