@@ -10,6 +10,9 @@ spec:
   jobTemplate:
     spec:
       template:
+        metadata:
+          labels:
+            app: whereabouts
         spec:
           containers:
             - name: whereabouts
