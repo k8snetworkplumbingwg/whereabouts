@@ -433,7 +433,7 @@ RETRYLOOP:
 	for j := 0; j < storage.DatastoreRetries; j++ {
 		select {
 		case <-ctx.Done():
-			return newip, nil
+			return newip, err
 		default:
 			// retry the IPAM loop if the context has not been cancelled
 		}
