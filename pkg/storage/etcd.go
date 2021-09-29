@@ -23,7 +23,7 @@ var (
 )
 
 // NewETCDIPAM returns a new IPAM Client configured to an etcd backend
-func NewETCDIPAM(ipamConf types.IPAMConfig) (*ETCDIPAM, error) {
+func NewETCDIPAM(ctx context.Context, ipamConf types.IPAMConfig) (*ETCDIPAM, error) {
 	cfg := clientv3.Config{
 		DialTimeout: DialTimeout,
 		Endpoints:   []string{ipamConf.EtcdHost},
@@ -54,7 +54,7 @@ func NewETCDIPAM(ipamConf types.IPAMConfig) (*ETCDIPAM, error) {
 	mutex := concurrency.NewMutex(session, fmt.Sprintf("%s/%s", whereaboutsPrefix, ipamConf.Range))
 
 	// acquire our lock
-	if err := mutex.Lock(context.Background()); err != nil {
+	if err := mutex.Lock(ctx); err != nil {
 		return nil, err
 	}
 
@@ -163,7 +163,7 @@ func (p *ETCDIPPool) Update(ctx context.Context, reservations []types.IPReservat
 }
 
 // IPManagement manages ip allocation and deallocation from a storage perspective
-func IPManagementEtcd(mode int, ipamConf types.IPAMConfig, containerID string, podRef string) (net.IPNet, error) {
+func IPManagementEtcd(ctx context.Context, mode int, ipamConf types.IPAMConfig, containerID string, podRef string) (net.IPNet, error) {
 
 	logging.Debugf("IPManagement -- mode: %v / host: %v / containerID: %v / podRef: %v", mode, ipamConf.EtcdHost, containerID, podRef)
 
@@ -181,17 +181,17 @@ func IPManagementEtcd(mode int, ipamConf types.IPAMConfig, containerID string, p
 	if ipamConf.Datastore != types.DatastoreETCD {
 		return net.IPNet{}, logging.Errorf("wrong 'datastore' value in IPAM config: %s", ipamConf.Datastore)
 	}
-	ipam, err = NewETCDIPAM(ipamConf)
+	ipam, err = NewETCDIPAM(ctx, ipamConf)
 	if err != nil {
 		return newip, logging.Errorf("IPAM %s client initialization error: %v", ipamConf.Datastore, err)
 	}
 	defer ipam.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
-	defer cancel()
+	requestCtx, requestCancel := context.WithTimeout(ctx, RequestTimeout)
+	defer requestCancel()
 
 	// Check our connectivity first
-	if err := ipam.Status(ctx); err != nil {
+	if err := ipam.Status(requestCtx); err != nil {
 		logging.Errorf("IPAM connectivity error: %v", err)
 		return newip, err
 	}
@@ -200,13 +200,13 @@ func IPManagementEtcd(mode int, ipamConf types.IPAMConfig, containerID string, p
 RETRYLOOP:
 	for j := 0; j < DatastoreRetries; j++ {
 		select {
-		case <-ctx.Done():
+		case <-requestCtx.Done():
 			return newip, nil
 		default:
 			// retry the IPAM loop if the context has not been cancelled
 		}
 
-		pool, err = ipam.GetIPPool(ctx, ipamConf.Range)
+		pool, err = ipam.GetIPPool(requestCtx, ipamConf.Range)
 		if err != nil {
 			logging.Errorf("IPAM error reading pool allocations (attempt: %d): %v", j, err)
 			if e, ok := err.(Temporary); ok && e.Temporary() {
@@ -232,7 +232,7 @@ RETRYLOOP:
 			}
 		}
 
-		err = pool.Update(ctx, updatedreservelist)
+		err = pool.Update(requestCtx, updatedreservelist)
 		if err != nil {
 			logging.Errorf("IPAM error updating pool (attempt: %d): %v", j, err)
 			if e, ok := err.(Temporary); ok && e.Temporary() {
