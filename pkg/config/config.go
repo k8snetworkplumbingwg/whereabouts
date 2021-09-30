@@ -36,6 +36,7 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 	n := types.Net{
 		IPAM: &types.IPAMConfig{
 			OverlappingRanges: true,
+			SleepForRace:      false,
 		},
 	}
 	if err := json.Unmarshal(bytes, &n); err != nil {
