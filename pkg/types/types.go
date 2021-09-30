@@ -3,6 +3,7 @@ package types
 import (
 	"fmt"
 	"net"
+	"time"
 
 	cnitypes "github.com/containernetworking/cni/pkg/types"
 )
@@ -14,6 +15,8 @@ const (
 	DefaultLeaderLeaseDuration = 1500
 	DefaultLeaderRenewDeadline = 1000
 	DefaultLeaderRetryPeriod   = 500
+	AddTimeLimit               = 2 * time.Minute
+	DelTimeLimit               = 1 * time.Minute
 )
 
 // Net is The top-level network config - IPAM plugins are passed the full configuration

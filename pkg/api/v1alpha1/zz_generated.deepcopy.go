@@ -53,7 +53,7 @@ func (in *IPPool) DeepCopyObject() runtime.Object {
 func (in *IPPoolList) DeepCopyInto(out *IPPoolList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
-	out.ListMeta = in.ListMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
 	if in.Items != nil {
 		in, out := &in.Items, &out.Items
 		*out = make([]IPPool, len(*in))
@@ -133,7 +133,7 @@ func (in *OverlappingRangeIPReservation) DeepCopyObject() runtime.Object {
 func (in *OverlappingRangeIPReservationList) DeepCopyInto(out *OverlappingRangeIPReservationList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
-	out.ListMeta = in.ListMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
 	if in.Items != nil {
 		in, out := &in.Items, &out.Items
 		*out = make([]OverlappingRangeIPReservation, len(*in))
