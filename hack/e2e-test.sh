@@ -211,6 +211,11 @@ is_ippool_consistent() {
 
   echo "#### found '${#ippool_keys[@]}' IP pool ids in '$pool_name' and '${#pod_ips[@]}' pod IPs"
 
+  if [[ ${#ippool_keys[@]} -ne ${#pod_ips[@]} ]]; then
+    echo "#### number of IP pools IPs does not equal number of whereabouts assigned pods IPs"
+    exit_code=4
+  fi
+
   for ippool_key in ${ippool_keys[@]}; do
     resolved_ippool_ip="${ips[$ippool_key]}"
     found=false
