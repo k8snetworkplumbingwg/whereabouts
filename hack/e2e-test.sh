@@ -68,7 +68,7 @@ wait_until_all_pods() {
   local pod_phases
   while [[ $timeout -gt 0 ]]; do
     all_running=true
-    pod_phases="$(kubectl get pods --namespace $namespace --output jsonpath="{range .items[*]}{.status.phase}{' '}{end}")"
+    pod_phases="$(kubectl get pods --namespace $namespace --selector $WB_LABEL_EQUAL --output jsonpath="{range .items[*]}{.status.phase}{' '}{end}")"
     for phase in $pod_phases; do
       if [[ $phase != "Running" ]] && [[ $phase != "Succeeded" ]]; then
         all_running=false
@@ -89,7 +89,7 @@ wait_until_all_pods_terminated() {
   local namespace="$1"
   local timeout=${TIMEOUT:-300}
   while [[ $timeout -gt 0 ]]; do
-    if ! kubectl get pods --namespace $namespace | grep Terminating >/dev/null; then
+    if ! kubectl get pods --namespace $namespace --selector $WB_LABEL_EQUAL | grep Terminating >/dev/null; then
       return 0
     fi
     sleep 1
