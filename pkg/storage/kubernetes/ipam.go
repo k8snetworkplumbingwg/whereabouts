@@ -309,10 +309,10 @@ func newLeaderElector(clientset *kubernetes.Clientset, namespace string, podName
 	// Make the leader elector, ready to be used in the Workgroup.
 	// !bang
 	le, err := leaderelection.NewLeaderElector(leaderelection.LeaderElectionConfig{
-		Lock:          rl,
-		LeaseDuration: time.Duration(leaseDuration) * time.Millisecond,
-		RenewDeadline: time.Duration(renewDeadline) * time.Millisecond,
-		RetryPeriod:   time.Duration(retryPeriod) * time.Millisecond,
+		Lock:            rl,
+		LeaseDuration:   time.Duration(leaseDuration) * time.Millisecond,
+		RenewDeadline:   time.Duration(renewDeadline) * time.Millisecond,
+		RetryPeriod:     time.Duration(retryPeriod) * time.Millisecond,
 		ReleaseOnCancel: true,
 		Callbacks: leaderelection.LeaderCallbacks{
 			OnStartedLeading: func(_ context.Context) {
@@ -499,6 +499,11 @@ RETRYLOOP:
 			if rl.IsAllocated != true {
 				usereservelist = append(usereservelist, rl)
 			}
+		}
+
+		// Manual race condition testing
+		if ipamConf.SleepForRace {
+			time.Sleep(20 * time.Second)
 		}
 
 		err = pool.Update(requestCtx, usereservelist)
