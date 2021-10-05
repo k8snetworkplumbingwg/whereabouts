@@ -67,6 +67,10 @@ func getFlatIPSet(pod v1.Pod) map[string]void {
 
 	for _, network := range networkStatusList {
 		// we're only after multus secondary interfaces
+		if network.Default {
+			continue
+		}
+
 		if network.Interface[:multusPrefixSize] == multusInterfaceNamePrefix {
 			for _, ip := range network.IPs {
 				ipSet[ip] = empty
