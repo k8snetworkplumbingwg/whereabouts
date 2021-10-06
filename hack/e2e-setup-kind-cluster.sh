@@ -24,6 +24,10 @@ TIMEOUT=300
 TIMEOUT_K8="${TIMEOUT}s"
 KIND_CLUSTER_NAME="whereabouts"
 OCI_BIN="${OCI_BIN:-"docker"}"
+IMG_PROJECT="whereabouts"
+IMG_REGISTRY="ghcr.io/k8snetworkplumbingwg"
+IMG_TAG="latest-amd64"
+IMG_NAME="$IMG_REGISTRY/$IMG_PROJECT:$IMG_TAG"
 
 create_cluster() {
 workers="$(for i in $(seq $NUMBER_OF_COMPUTE_NODES); do echo "  - role: worker"; done)"
@@ -85,10 +89,14 @@ retry kubectl create -f "${CNIS_DAEMONSET_URL}"
 retry kubectl -n kube-system wait --for=condition=ready -l name="cni-plugins" pod --timeout=$TIMEOUT_K8
 echo "## build whereabouts"
 pushd "$ROOT"
-$OCI_BIN build . -t ghcr.io/k8snetworkplumbingwg/whereabouts:latest-amd64
+$OCI_BIN build . -t "$IMG_NAME"
 popd
+
 echo "## load image into KinD"
-kind load docker-image --name "$KIND_CLUSTER_NAME" ghcr.io/k8snetworkplumbingwg/whereabouts:latest-amd64
+trap "rm /tmp/whereabouts-img.tar || true" EXIT
+"$OCI_BIN" save -o /tmp/whereabouts-img.tar "$IMG_NAME"
+kind load image-archive --name "$KIND_CLUSTER_NAME" /tmp/whereabouts-img.tar
+
 echo "## install whereabouts"
 for file in "daemonset-install.yaml" "ip-reconciler-job.yaml" "whereabouts.cni.cncf.io_ippools.yaml" "whereabouts.cni.cncf.io_overlappingrangeipreservations.yaml"; do
   retry kubectl apply -f "$ROOT/doc/crds/$file"
