@@ -207,6 +207,10 @@ is_ippool_consistent() {
   local pod_ips
   local resolved_ippool_ip
   local exit_code=0
+
+  echo "Forcing reconciliation of the cluster ..."
+  bin/ip-reconciler -kubeconfig="${HOME}"/.kube/config
+
   ippool_keys=($(kubectl get ippool $pool_name --namespace $pool_namespace --output json \
     | jq --raw-output '.spec.allocations|to_entries |map("\(.key)")| .[]'))
   ips=($(nmap -sL -n $range | awk '/Nmap scan report for/{printf "%s ", $NF}'))
