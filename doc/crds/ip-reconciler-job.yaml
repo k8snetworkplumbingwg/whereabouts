@@ -24,6 +24,7 @@ spec:
               command:
                 - /ip-reconciler
                 - -kubeconfig=/host/etc/cni/net.d/whereabouts.d/whereabouts.kubeconfig
+                - -log-level=verbose
               volumeMounts:
                 - name: cni-net-dir
                   mountPath: /host/etc/cni/net.d
