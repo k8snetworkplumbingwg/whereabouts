@@ -12,12 +12,14 @@ import (
 
 func main() {
 	kubeConfigFile := flag.String("kubeconfig", "", "the path to the Kubernetes configuration file")
+	logLevel := flag.String("log-level", "error", "the logging level for the `ip-reconciler` app. Valid values are: \"debug\", \"verbose\", \"error\", and \"panic\".")
 	flag.Parse()
 
 	if *kubeConfigFile == "" {
 		_ = logging.Errorf("must specify the kubernetes config file, via the '-kubeconfig' flag")
 		os.Exit(kubeconfigNotFound)
 	}
+	logging.SetLogLevel(*logLevel)
 
 	ctx, cancel := context.WithTimeout(context.Background(), storage.RequestTimeout)
 	defer cancel()
