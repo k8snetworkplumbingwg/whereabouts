@@ -10,8 +10,8 @@ import (
 	"github.com/containernetworking/cni/pkg/types"
 	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/containernetworking/plugins/pkg/testutils"
-	"github.com/dougbtv/whereabouts/pkg/allocate"
-	whereaboutstypes "github.com/dougbtv/whereabouts/pkg/types"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/allocate"
+	whereaboutstypes "github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
