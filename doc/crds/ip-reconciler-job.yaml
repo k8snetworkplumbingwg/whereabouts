@@ -19,9 +19,6 @@ spec:
                 requests:
                   cpu: "100m"
                   memory: "50Mi"
-                limits:
-                  cpu: "100m"
-                  memory: "50Mi"
               command:
                 - /ip-reconciler
                 - -kubeconfig=/host/etc/cni/net.d/whereabouts.d/whereabouts.kubeconfig
