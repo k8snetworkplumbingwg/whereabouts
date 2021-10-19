@@ -11,14 +11,12 @@ spec:
     spec:
       template:
         spec:
+          priorityClassName: "system-node-critical"
           containers:
             - name: whereabouts
               image: ghcr.io/k8snetworkplumbingwg/whereabouts:latest-amd64
               resources:
                 requests:
-                  cpu: "100m"
-                  memory: "50Mi"
-                limits:
                   cpu: "100m"
                   memory: "50Mi"
               command:
