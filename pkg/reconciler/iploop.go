@@ -179,7 +179,7 @@ func (rl ReconcileLooper) ReconcileOverlappingIPAddresses() error {
 			failedReconciledClusterWideIPs = append(failedReconciledClusterWideIPs, overlappingIPStruct.GetName())
 			continue
 		}
-		logging.Debugf("removed stale overlappingIP allocation [%s]", overlappingIPStruct.GetName())
+		logging.Verbosef("removed stale overlappingIP allocation [%s]", overlappingIPStruct.GetName())
 	}
 
 	if len(failedReconciledClusterWideIPs) != 0 {
