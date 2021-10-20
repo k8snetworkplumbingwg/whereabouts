@@ -10,9 +10,9 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	multusv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/api/v1alpha1"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/reconciler"
-	multusv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -66,7 +66,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 				Context("reconciling the IPPool", func() {
 					BeforeEach(func() {
 						var err error
-						reconcileLooper, err = reconciler.NewReconcileLooper(kubeConfigPath, context.TODO())
+						reconcileLooper, err = reconciler.NewReconcileLooperWithKubeconfig(kubeConfigPath, context.TODO())
 						Expect(err).NotTo(HaveOccurred())
 					})
 
@@ -137,7 +137,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 			Context("reconciling the IPPool", func() {
 				BeforeEach(func() {
 					var err error
-					reconcileLooper, err = reconciler.NewReconcileLooper(kubeConfigPath, context.TODO())
+					reconcileLooper, err = reconciler.NewReconcileLooperWithKubeconfig(kubeConfigPath, context.TODO())
 					Expect(err).NotTo(HaveOccurred())
 				})
 
@@ -242,7 +242,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 
 		It("will delete an orphaned IP address", func() {
 			Expect(k8sClientSet.CoreV1().Pods(namespace).Delete(context.TODO(), pods[podIndexToRemove].Name, metav1.DeleteOptions{})).NotTo(HaveOccurred())
-			newReconciler, err := reconciler.NewReconcileLooper(kubeConfigPath, context.TODO())
+			newReconciler, err := reconciler.NewReconcileLooperWithKubeconfig(kubeConfigPath, context.TODO())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(newReconciler.ReconcileOverlappingIPAddresses()).To(Succeed())
 
