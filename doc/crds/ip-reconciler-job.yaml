@@ -2,6 +2,7 @@ apiVersion: batch/v1beta1
 kind: CronJob
 metadata:
   name: ip-reconciler
+  namespace: kube-system
   labels:
     tier: node
     app: whereabouts
@@ -12,6 +13,7 @@ spec:
       template:
         spec:
           priorityClassName: "system-node-critical"
+          serviceAccountName: whereabouts
           containers:
             - name: whereabouts
               image: ghcr.io/k8snetworkplumbingwg/whereabouts:latest-amd64
@@ -21,7 +23,6 @@ spec:
                   memory: "50Mi"
               command:
                 - /ip-reconciler
-                - -kubeconfig=/host/etc/cni/net.d/whereabouts.d/whereabouts.kubeconfig
                 - -log-level=verbose
               volumeMounts:
                 - name: cni-net-dir

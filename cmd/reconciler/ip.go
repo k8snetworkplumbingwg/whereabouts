@@ -15,15 +15,18 @@ func main() {
 	logLevel := flag.String("log-level", "error", "the logging level for the `ip-reconciler` app. Valid values are: \"debug\", \"verbose\", \"error\", and \"panic\".")
 	flag.Parse()
 
-	if *kubeConfigFile == "" {
-		_ = logging.Errorf("must specify the kubernetes config file, via the '-kubeconfig' flag")
-		os.Exit(kubeconfigNotFound)
-	}
 	logging.SetLogLevel(*logLevel)
 
 	ctx, cancel := context.WithTimeout(context.Background(), storage.RequestTimeout)
 	defer cancel()
-	ipReconcileLoop, err := reconciler.NewReconcileLooper(*kubeConfigFile, ctx)
+
+	var err error
+	var ipReconcileLoop *reconciler.ReconcileLooper
+	if kubeConfigFile == nil {
+		ipReconcileLoop, err = reconciler.NewReconcileLooper(ctx)
+	} else {
+		ipReconcileLoop, err = reconciler.NewReconcileLooperWithKubeconfig(*kubeConfigFile, ctx)
+	}
 	if err != nil {
 		_ = logging.Errorf("failed to create the reconcile looper: %v", err)
 		os.Exit(couldNotStartOrphanedIPMonitor)
