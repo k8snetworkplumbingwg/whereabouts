@@ -75,7 +75,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Install requirements
-        run: sudo apt-get install nmap jq
+        run: sudo apt-get install nmap jq && ./hack/build-go.sh
 
       - name: Get tools, setup KinD cluster test environment
         run: source hack/e2e-get-test-tools.sh && ./hack/e2e-setup-kind-cluster.sh --number-of-compute $NUMBER_OF_COMPUTE_NODES

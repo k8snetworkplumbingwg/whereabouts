@@ -160,18 +160,23 @@ metadata:
 spec:
   config: '{
       "cniVersion": "0.3.0",
-      "type": "macvlan",
-      "master": "$TEST_INTERFACE_NAME",
-      "mode": "bridge",
-      "ipam": {
-        "type": "whereabouts",
-        "leader_lease_duration": $LEADER_LEASE_DURATION,
-        "leader_renew_deadline": $LEADER_RENEW_DEADLINE,
-        "leader_retry_period": $LEADER_RETRY_PERIOD,
-        "range": "$1",
-        "log_level": "debug",
-        "log_file": "/tmp/wb"
-      }
+      "disableCheck": true,
+      "plugins": [
+          {
+              "type": "macvlan",
+              "master": "$TEST_INTERFACE_NAME",
+              "mode": "bridge",
+              "ipam": {
+                  "type": "whereabouts",
+                  "leader_lease_duration": $LEADER_LEASE_DURATION,
+                  "leader_renew_deadline": $LEADER_RENEW_DEADLINE,
+                  "leader_retry_period": $LEADER_RETRY_PERIOD,
+                  "range": "$1",
+                  "log_level": "debug",
+                  "log_file": "/tmp/wb"
+              }
+          }
+      ]
     }'
 EOF
 }
@@ -202,6 +207,10 @@ is_ippool_consistent() {
   local pod_ips
   local resolved_ippool_ip
   local exit_code=0
+
+  echo "Forcing reconciliation of the cluster ..."
+  bin/ip-reconciler -kubeconfig="${HOME}"/.kube/config
+
   ippool_keys=($(kubectl get ippool $pool_name --namespace $pool_namespace --output json \
     | jq --raw-output '.spec.allocations|to_entries |map("\(.key)")| .[]'))
   ips=($(nmap -sL -n $range | awk '/Nmap scan report for/{printf "%s ", $NF}'))
