@@ -38,10 +38,10 @@ echo "VERSION: ${VERSION}"
 echo "GIT_SHA: ${GIT_SHA}"
 echo "GIT_TREE_STATE: ${GIT_TREE_STATE}"
 echo "RELEASE_STATUS: ${RELEASE_STATUS}"
-VERSION_LDFLAGS="-X github.com/dougbtv/whereabouts/pkg/version.Version=${VERSION} \
--X github.com/dougbtv/whereabouts/pkg/version.GitSHA=${GIT_SHA} \
--X github.com/dougbtv/whereabouts/pkg/version.GitTreeState=${GIT_TREE_STATE} \
--X github.com/dougbtv/whereabouts/pkg/version.ReleaseStatus=${RELEASE_STATUS}"
+VERSION_LDFLAGS="-X github.com/k8snetworkplumbingwg/whereabouts/pkg/version.Version=${VERSION} \
+-X github.com/k8snetworkplumbingwg/whereabouts/pkg/version.GitSHA=${GIT_SHA} \
+-X github.com/k8snetworkplumbingwg/whereabouts/pkg/version.GitTreeState=${GIT_TREE_STATE} \
+-X github.com/k8snetworkplumbingwg/whereabouts/pkg/version.ReleaseStatus=${RELEASE_STATUS}"
 GLDFLAGS="${GLDFLAGS} ${VERSION_LDFLAGS}"
 
 CGO_ENABLED=0 GOOS=${GOOS} GOARCH=${GOARCH} ${GO} build ${GOFLAGS} -ldflags "${GLDFLAGS}" -o bin/${cmd} cmd/${cmd}.go

@@ -2,14 +2,15 @@ package kubernetes
 
 import (
 	"context"
-	whereaboutsv1alpha1 "github.com/dougbtv/whereabouts/pkg/api/v1alpha1"
-	"github.com/dougbtv/whereabouts/pkg/logging"
-	"github.com/dougbtv/whereabouts/pkg/storage"
+	whereaboutsv1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/v1alpha1"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
@@ -22,17 +23,34 @@ type Client struct {
 	retries   int
 }
 
-func NewClient(kubeconfigPath string) (*Client, error) {
+func NewClient() (*Client, error) {
+	scheme := runtime.NewScheme()
+	_ = whereaboutsv1alpha1.AddToScheme(scheme)
+
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	return newClient(config, scheme)
+}
+
+func NewClientViaKubeconfig(kubeconfigPath string) (*Client, error) {
 	scheme := runtime.NewScheme()
 	_ = whereaboutsv1alpha1.AddToScheme(scheme)
 
 	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		&clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeconfigPath},
 		&clientcmd.ConfigOverrides{}).ClientConfig()
+
 	if err != nil {
 		return nil, err
 	}
 
+	return newClient(config, scheme)
+}
+
+func newClient(config *rest.Config, schema *runtime.Scheme) (*Client, error) {
 	clientSet, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		return nil, err
@@ -42,7 +60,7 @@ func NewClient(kubeconfigPath string) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	c, err := client.New(config, client.Options{Scheme: scheme, Mapper: mapper})
+	c, err := client.New(config, client.Options{Scheme: schema, Mapper: mapper})
 	if err != nil {
 		return nil, err
 	}
