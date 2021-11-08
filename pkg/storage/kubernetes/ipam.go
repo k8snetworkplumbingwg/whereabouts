@@ -502,8 +502,8 @@ RETRYLOOP:
 		}
 
 		// Manual race condition testing
-		if ipamConf.SleepForRace {
-			time.Sleep(20 * time.Second)
+		if ipamConf.SleepForRace > 0 {
+			time.Sleep(time.Duration(ipamConf.SleepForRace) * time.Second)
 		}
 
 		err = pool.Update(requestCtx, usereservelist)
