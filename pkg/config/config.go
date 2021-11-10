@@ -10,7 +10,6 @@ import (
 
 	cnitypes "github.com/containernetworking/cni/pkg/types"
 	types020 "github.com/containernetworking/cni/pkg/types/020"
-	"github.com/imdario/mergo"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 )
@@ -62,7 +61,6 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 	}
 
 	// Cycle through the path and parse the JSON config
-	flatipam := types.Net{}
 	foundflatfile := ""
 	for _, confpath := range confdirs {
 		if pathExists(confpath) {
@@ -80,7 +78,7 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 				return nil, "", fmt.Errorf("LoadIPAMConfig Flatfile (%s) - ioutil.ReadAll error: %s", confpath, err)
 			}
 
-			if err := json.Unmarshal(jsonBytes, &flatipam.IPAM); err != nil {
+			if err := json.Unmarshal(jsonBytes, &n.IPAM); err != nil {
 				return nil, "", fmt.Errorf("LoadIPAMConfig Flatfile (%s) - JSON Parsing Error: %s / bytes: %s", confpath, err, jsonBytes)
 			}
 
@@ -90,10 +88,9 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 		}
 	}
 
-	// Now let's try to merge the configurations...
-	// NB: Don't try to do any initialization before this point or it won't account for merged flat file.
-	if err := mergo.Merge(&n, flatipam); err != nil {
-		logging.Errorf("Merge error with flat file: %s", err)
+	// Unmarshal again to set the IPAM values (overriding the values originating from the flatfile)
+	if err := json.Unmarshal(bytes, &n); err != nil {
+		return nil, "", fmt.Errorf("LoadIPAMConfig - JSON Parsing Error: %s / bytes: %s", err, bytes)
 	}
 
 	// Logging
