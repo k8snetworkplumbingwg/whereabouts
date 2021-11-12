@@ -11,6 +11,9 @@ spec:
   jobTemplate:
     spec:
       template:
+        metadata:
+          labels:
+            app: whereabouts
         spec:
           priorityClassName: "system-node-critical"
           serviceAccountName: whereabouts
