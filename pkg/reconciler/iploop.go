@@ -108,7 +108,7 @@ func (rl ReconcileLooper) isPodAlive(podRef string, ip string) bool {
 				ip,
 				livePodIPs)
 			_, isFound := livePodIPs[ip]
-			return isFound
+			return isFound || livePod.phase == v1.PodPending
 		}
 	}
 	return false
