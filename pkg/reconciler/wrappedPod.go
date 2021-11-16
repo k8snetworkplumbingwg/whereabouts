@@ -71,10 +71,9 @@ func getFlatIPSet(pod v1.Pod) map[string]void {
 			continue
 		}
 
-		if network.Interface[:multusPrefixSize] == multusInterfaceNamePrefix {
-			for _, ip := range network.IPs {
-				ipSet[ip] = empty
-			}
+		for _, ip := range network.IPs {
+			ipSet[ip] = empty
+			logging.Debugf("Added IP %s for pod %s", ip, composePodRef(pod))
 		}
 	}
 	return ipSet
