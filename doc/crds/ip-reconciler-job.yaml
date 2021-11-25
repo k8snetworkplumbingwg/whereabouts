@@ -8,6 +8,7 @@ metadata:
     app: whereabouts
 spec:
   concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 0
   schedule: "*/5 * * * *"
   jobTemplate:
     spec:
