@@ -12,6 +12,7 @@ spec:
   schedule: "*/5 * * * *"
   jobTemplate:
     spec:
+      backoffLimit: 0
       template:
         metadata:
           labels:
