@@ -183,78 +183,64 @@ func IPAddOffset(ip net.IP, offset uint64) net.IP {
 
 // IterateForAssignment iterates given an IP/IPNet and a list of reserved IPs
 func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, reservelist []types.IPReservation, excludeRanges []string, containerID string, podRef string) (net.IP, []types.IPReservation, error) {
-	firstip := rangeStart.To16()
-	var lastip net.IP
+	firstip, lastip, err := GetIPRange(rangeStart, ipnet)
+	if err != nil {
+		return net.IP{}, reservelist, err
+	}
 	if rangeEnd != nil {
 		lastip = rangeEnd.To16()
-	} else {
-		var err error
-		firstip, lastip, err = GetIPRange(rangeStart, ipnet)
-		if err != nil {
-			logging.Errorf("GetIPRange request failed with: %v", err)
-			return net.IP{}, reservelist, err
+	}
+	firstIP, ok := netaddr.FromStdIP(firstip)
+	if !ok {
+		return nil, nil, fmt.Errorf("ip invalid: %v", firstip)
+	}
+	lastIP, ok := netaddr.FromStdIP(lastip)
+	if !ok {
+		return nil, nil, fmt.Errorf("ip invalid: %v", lastip)
+	}
+
+	builder := netaddr.IPSetBuilder{}
+	builder.AddRange(netaddr.IPRangeFrom(firstIP, lastIP))
+
+	// exclude reserved IPs
+	for i, r := range reservelist {
+		ip, ok := netaddr.FromStdIP(r.IP)
+		if !ok {
+			return net.IP{}, reservelist, fmt.Errorf("ip[%d] in reservelist invalid: %s", i, r.IP)
 		}
+		builder.Remove(ip)
 	}
-	logging.Debugf("IterateForAssignment input >> ip: %v | ipnet: %v | first IP: %v | last IP: %v", rangeStart, ipnet, firstip, lastip)
+	logging.Debugf("IterateForAssignment input >> ip: %v | ipnet: %v | first IP: %v | last IP: %v", rangeStart, ipnet, firstIP, lastIP)
 
-	reserved := make(map[string]bool)
-	for _, r := range reservelist {
-		reserved[r.IP.String()] = true
-	}
-
-	// excluded,            "192.168.2.229/30", "192.168.1.229/30",
-	excluded := []*net.IPNet{}
-	for _, v := range excludeRanges {
-		_, subnet, _ := net.ParseCIDR(v)
-		excluded = append(excluded, subnet)
+	// remove excluded ranges
+	for i, v := range excludeRanges {
+		prefix, err := netaddr.ParseIPPrefix(v)
+		if err != nil {
+			return net.IP{}, reservelist, fmt.Errorf("subnet[%d] (%q) in excludeRanges invalid: %w", i, v, err)
+		}
+		builder.RemovePrefix(prefix)
 	}
 
-	// Iterate every IP address in the range
+	// return the current set of IPs contained by the builder
+	ipset, err := builder.IPSet()
+	if err != nil {
+		return net.IP{}, reservelist, err
+
+	}
 	var assignedip net.IP
 	performedassignment := false
-	endip := IPAddOffset(lastip, uint64(1))
-	for i := firstip; !i.Equal(endip); i = IPAddOffset(i, uint64(1)) {
-		// if already reserved, skip it
-		if reserved[i.String()] {
-			continue
-		}
-
-		// Lastly, we need to check if this IP is within the range of excluded subnets
-		isAddrExcluded := false
-		for _, subnet := range excluded {
-			if subnet.Contains(i) {
-				isAddrExcluded = true
-			}
-		}
-		if isAddrExcluded {
-			continue
-		}
-
-		// Ok, this one looks like we can assign it!
+	for _, r := range ipset.Ranges() {
+		// the first range should start with the first available IP
 		performedassignment = true
-
-		assignedip = i
+		assignedip = r.From().IPAddr().IP
 		logging.Debugf("Reserving IP: |%v|", assignedip.String()+" "+containerID)
 		reservelist = append(reservelist, types.IPReservation{IP: assignedip, ContainerID: containerID, PodRef: podRef})
 		break
 	}
-
 	if !performedassignment {
-		return net.IP{}, reservelist, AssignmentError{firstip, lastip, ipnet}
+		return net.IP{}, reservelist, AssignmentError{firstIP.IPAddr().IP, lastIP.IPAddr().IP, ipnet}
 	}
-
 	return assignedip, reservelist, nil
-}
-
-func mergeIPAddress(net, host []byte) ([]byte, error) {
-	if len(net) != len(host) {
-		return nil, fmt.Errorf("not matched")
-	}
-	addr := append([]byte{}, net...)
-	for i := range net {
-		addr[i] = net[i] | host[i]
-	}
-	return addr, nil
 }
 
 // GetIPRange returns the first and last IP in a range
