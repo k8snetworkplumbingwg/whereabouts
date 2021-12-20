@@ -2,7 +2,12 @@
 OCI_BIN=${OCI_BIN:-docker}
 
 # install controller-gen
+TMP_DIR=$(mktemp -d)
+cd $TMP_DIR
+go mod init tmp
 go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.4.1
+cd $OLDPWD
+rm -rf $TMP_DIR
 
 # install kubebuilder tools to bin/
 mkdir -p bin
