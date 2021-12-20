@@ -2,11 +2,12 @@ package allocate
 
 import (
 	"fmt"
-	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 	"math"
 	"math/big"
 	"net"
 	"testing"
+
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -372,7 +373,7 @@ var _ = Describe("Allocation operations", func() {
 
 		_, _, err = GetIPRange(badip, *badipnet)
 		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(HavePrefix("Net mask is too short"))
+		Expect(err.Error()).To(HavePrefix("net mask is too short"))
 
 	})
 })

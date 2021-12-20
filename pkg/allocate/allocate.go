@@ -5,6 +5,8 @@ import (
 	"math"
 	"net"
 
+	"inet.af/netaddr"
+
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 )
@@ -260,39 +262,34 @@ func GetIPRange(ip net.IP, ipnet net.IPNet) (net.IP, net.IP, error) {
 	mask := ipnet.Mask
 	ones, bits := mask.Size()
 	masklen := bits - ones
-
 	// Error when the mask isn't large enough.
 	if masklen < 2 {
-		return nil, nil, fmt.Errorf("Net mask is too short, must be 2 or more: %v", masklen)
+		return nil, nil, fmt.Errorf("net mask is too short, must be 2 or more: %v", masklen)
 	}
+	// convert to netaddr IPPrefix for range start/end calculation
+	prefix, ok := netaddr.FromStdIPNet(&ipnet)
+	if !ok {
+		return nil, nil, fmt.Errorf("IPNet invalid: %v", ipnet)
 
-	// get network part
-	network := ip.Mask(ipnet.Mask)
-	// get bitmask for host
-	hostMask := net.IPMask(append([]byte{}, ipnet.Mask...))
-	for i, n := range hostMask {
-		hostMask[i] = ^n
 	}
-	// get host part of ip
-	first := ip.Mask(net.IPMask(hostMask))
+	lastIP := prefix.Range().To()
+	firstIP, ok := netaddr.FromStdIP(ip)
+	if !ok {
+		return nil, nil, fmt.Errorf("ip invalid: %v", firstIP)
+	}
 	// if ip is just same as ipnet.IP, i.e. just network address,
 	// increment it for start ip
-	if ip.Equal(ipnet.IP) {
-		first[len(first)-1] = 0x1
+	if firstIP.IPAddr().IP.Equal(ipnet.IP) {
+		firstIP = firstIP.Next()
 	}
-	// calculate last byte
-	last := hostMask
+	ipRange := netaddr.IPRangeFrom(firstIP, lastIP)
+	firstIP = ipRange.From()
+	lastIP = ipRange.To()
 	// if IPv4 case, decrement 1 for broadcasting address
-	if ip.To4() != nil {
-		last[len(last)-1]--
+	if lastIP.Is4() {
+		lastIP = lastIP.Prior()
 	}
-	// get first ip and last ip based on network part + host part
-	firstIPbyte, _ := mergeIPAddress([]byte(network), first)
-	lastIPbyte, _ := mergeIPAddress([]byte(network), last)
-	firstIP := net.IP(firstIPbyte).To16()
-	lastIP := net.IP(lastIPbyte).To16()
-
-	return firstIP, lastIP, nil
+	return firstIP.IPAddr().IP, lastIP.IPAddr().IP, nil
 }
 
 // IsIPv4 checks if an IP is v4.
