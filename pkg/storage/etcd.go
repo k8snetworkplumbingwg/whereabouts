@@ -93,7 +93,7 @@ func (i *EtcdOverlappingRangeStore) IsAllocatedInOverlappingRange(ctx context.Co
 }
 
 // UpdateOverlappingRangeAllocation updates our clusterwide allocation for overlapping ranges.
-func (i *EtcdOverlappingRangeStore) UpdateOverlappingRangeAllocation(ctx context.Context, mode int, ip net.IP, containerID string, podRef string) error {
+func (i *EtcdOverlappingRangeStore) UpdateOverlappingRangeAllocation(ctx context.Context, mode int, ip []net.IP, containerID string, podRef string) error {
 	logging.Debugf("ETCD UpdateOverlappingRangeWide is NOT IMPLEMENTED!!!! TODO")
 	return nil
 }
@@ -163,11 +163,11 @@ func (p *ETCDIPPool) Update(ctx context.Context, reservations []types.IPReservat
 }
 
 // IPManagement manages ip allocation and deallocation from a storage perspective
-func IPManagementEtcd(ctx context.Context, mode int, ipamConf types.IPAMConfig, containerID string, podRef string) (net.IPNet, error) {
+func IPManagementEtcd(ctx context.Context, mode int, ipamConf types.IPAMConfig, containerID string, podRef string) ([]net.IPNet, error) {
 
 	logging.Debugf("IPManagement -- mode: %v / host: %v / containerID: %v / podRef: %v", mode, ipamConf.EtcdHost, containerID, podRef)
 
-	var newip net.IPNet
+	var newip []net.IPNet
 	// Skip invalid modes
 	switch mode {
 	case types.Allocate, types.Deallocate:
@@ -179,7 +179,7 @@ func IPManagementEtcd(ctx context.Context, mode int, ipamConf types.IPAMConfig, 
 	var pool IPPool
 	var err error
 	if ipamConf.Datastore != types.DatastoreETCD {
-		return net.IPNet{}, logging.Errorf("wrong 'datastore' value in IPAM config: %s", ipamConf.Datastore)
+		return []net.IPNet{}, logging.Errorf("wrong 'datastore' value in IPAM config: %s", ipamConf.Datastore)
 	}
 	ipam, err = NewETCDIPAM(ctx, ipamConf)
 	if err != nil {

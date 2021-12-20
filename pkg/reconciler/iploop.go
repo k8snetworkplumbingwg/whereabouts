@@ -119,11 +119,11 @@ func composePodRef(pod v1.Pod) string {
 }
 
 func (rl ReconcileLooper) ReconcileIPPools() ([]net.IP, error) {
-	matchByPodRef := func(reservations []types.IPReservation, podRef string) int {
-		foundidx := -1
+	matchByPodRef := func(reservations []types.IPReservation, podRef string) []int {
+		foundidx := []int{}
 		for idx, v := range reservations {
 			if v.PodRef == podRef {
-				return idx
+				foundidx = append(foundidx, idx)
 			}
 		}
 		return foundidx
@@ -134,9 +134,9 @@ func (rl ReconcileLooper) ReconcileIPPools() ([]net.IP, error) {
 	for _, orphanedIP := range rl.orphanedIPs {
 		currentIPReservations := orphanedIP.Pool.Allocations()
 		podRefsToDeallocate := findOutPodRefsToDeallocateIPsFrom(orphanedIP)
-		var deallocatedIP net.IP
+		var deallocatedIPs []net.IP
 		for _, podRef := range podRefsToDeallocate {
-			currentIPReservations, deallocatedIP, err = allocate.IterateForDeallocation(currentIPReservations, podRef, matchByPodRef)
+			currentIPReservations, deallocatedIPs, err = allocate.IterateForDeallocation(currentIPReservations, podRef, matchByPodRef)
 			if err != nil {
 				return nil, err
 			}
@@ -146,7 +146,7 @@ func (rl ReconcileLooper) ReconcileIPPools() ([]net.IP, error) {
 		if err := orphanedIP.Pool.Update(rl.ctx, currentIPReservations); err != nil {
 			return nil, logging.Errorf("failed to update the reservation list: %v", err)
 		}
-		totalCleanedUpIps = append(totalCleanedUpIps, deallocatedIP)
+		totalCleanedUpIps = append(totalCleanedUpIps, deallocatedIPs...)
 	}
 
 	return totalCleanedUpIps, nil

@@ -2,11 +2,12 @@ package allocate
 
 import (
 	"fmt"
-	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 	"math"
 	"math/big"
 	"net"
 	"testing"
+
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -260,8 +261,27 @@ var _ = Describe("Allocation operations", func() {
 		var ipres []types.IPReservation
 		var exrange []string
 		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
-		Expect(fmt.Sprint(newip)).To(Equal("192.168.1.1"))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(fmt.Sprint(newip[0])).To(Equal("192.168.1.1"))
+	})
 
+	It("can allocate static IPv4 address", func() {
+		_, ipnet, err := net.ParseCIDR("192.168.1.1/24")
+		Expect(err).NotTo(HaveOccurred())
+
+		ip, statIP, err := net.ParseCIDR("192.168.1.20/24")
+		Expect(err).NotTo(HaveOccurred())
+
+		var ipres []types.IPReservation
+		ipamConf := types.IPAMConfig{
+			Addresses: []types.Address{{Address: net.IPNet{
+				IP:   ip,
+				Mask: statIP.Mask,
+			},
+			},
+			}}
+		newip, _, err := assignStaticAllocation(*ipnet, ipamConf, ipres, "0xdeadbeef", "")
+		Expect(fmt.Sprint(newip[0])).To(Equal("192.168.1.20"))
 	})
 
 	It("can IterateForAssignment on an IPv6 address when the first hextet has NO leading zeroes", func() {
@@ -275,7 +295,7 @@ var _ = Describe("Allocation operations", func() {
 		var ipres []types.IPReservation
 		var exrange []string
 		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
-		Expect(fmt.Sprint(newip)).To(Equal("caa5::1"))
+		Expect(fmt.Sprint(newip[0])).To(Equal("caa5::1"))
 
 	})
 
@@ -290,7 +310,7 @@ var _ = Describe("Allocation operations", func() {
 		var ipres []types.IPReservation
 		var exrange []string
 		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
-		Expect(fmt.Sprint(newip)).To(Equal("::1"))
+		Expect(fmt.Sprint(newip[0])).To(Equal("::1"))
 
 	})
 
@@ -307,7 +327,7 @@ var _ = Describe("Allocation operations", func() {
 		var ipres []types.IPReservation
 		var exrange []string
 		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
-		Expect(fmt.Sprint(newip)).To(Equal("fd::1"))
+		Expect(fmt.Sprint(newip[0])).To(Equal("fd::1"))
 
 	})
 
@@ -322,7 +342,7 @@ var _ = Describe("Allocation operations", func() {
 		var ipres []types.IPReservation
 		var exrange []string
 		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
-		Expect(fmt.Sprint(newip)).To(Equal("100::2:1"))
+		Expect(fmt.Sprint(newip[0])).To(Equal("100::2:1"))
 
 	})
 

@@ -48,7 +48,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 	result.Routes = ipamConf.Routes
 
 	logging.Debugf("Beginning IPAM for ContainerID: %v", args.ContainerID)
-	var newip net.IPNet
+	var newip []net.IPNet
 
 	ctx, cancel := context.WithTimeout(context.Background(), types.AddTimeLimit)
 	defer cancel()
@@ -64,25 +64,30 @@ func cmdAdd(args *skel.CmdArgs) error {
 		return fmt.Errorf("Error at storage engine: %w", err)
 	}
 
-	// Determine if v4 or v6.
-	var useVersion string
-	if allocate.IsIPv4(newip.IP) {
-		useVersion = "4"
-	} else {
-		useVersion = "6"
+	for _, n := range newip {
+		// Determine if v4 or v6.
+		var useVersion string
+		if allocate.IsIPv4(n.IP) {
+			useVersion = "4"
+		} else {
+			useVersion = "6"
+		}
+
+		result.IPs = append(result.IPs, &current.IPConfig{
+			Version: useVersion,
+			Address: n,
+			Gateway: ipamConf.Gateway})
 	}
 
-	result.IPs = append(result.IPs, &current.IPConfig{
-		Version: useVersion,
-		Address: newip,
-		Gateway: ipamConf.Gateway})
-
-	// Assign all the static IP elements.
+	_, ipnet, _ := net.ParseCIDR(ipamConf.Range)
+	// Assign all the static IP outside pool elements.
 	for _, v := range ipamConf.Addresses {
-		result.IPs = append(result.IPs, &current.IPConfig{
-			Version: v.Version,
-			Address: v.Address,
-			Gateway: v.Gateway})
+		if !ipnet.Contains(v.Address.IP) {
+			result.IPs = append(result.IPs, &current.IPConfig{
+				Version: v.Version,
+				Address: v.Address,
+				Gateway: v.Gateway})
+		}
 	}
 
 	return cnitypes.PrintResult(result, confVersion)
