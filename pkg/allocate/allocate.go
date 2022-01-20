@@ -5,8 +5,8 @@ import (
 	"math"
 	"net"
 
-	"github.com/dougbtv/whereabouts/pkg/logging"
-	"github.com/dougbtv/whereabouts/pkg/types"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 )
 
 // AssignmentError defines an IP assignment error.

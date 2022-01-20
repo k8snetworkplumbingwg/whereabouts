@@ -10,9 +10,9 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	"github.com/dougbtv/whereabouts/pkg/api/v1alpha1"
-	"github.com/dougbtv/whereabouts/pkg/reconciler"
 	multusv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/api/v1alpha1"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/reconciler"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -66,7 +66,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 				Context("reconciling the IPPool", func() {
 					BeforeEach(func() {
 						var err error
-						reconcileLooper, err = reconciler.NewReconcileLooper(kubeConfigPath, context.TODO())
+						reconcileLooper, err = reconciler.NewReconcileLooperWithKubeconfig(kubeConfigPath, context.TODO())
 						Expect(err).NotTo(HaveOccurred())
 					})
 
@@ -137,7 +137,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 			Context("reconciling the IPPool", func() {
 				BeforeEach(func() {
 					var err error
-					reconcileLooper, err = reconciler.NewReconcileLooper(kubeConfigPath, context.TODO())
+					reconcileLooper, err = reconciler.NewReconcileLooperWithKubeconfig(kubeConfigPath, context.TODO())
 					Expect(err).NotTo(HaveOccurred())
 				})
 
@@ -242,7 +242,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 
 		It("will delete an orphaned IP address", func() {
 			Expect(k8sClientSet.CoreV1().Pods(namespace).Delete(context.TODO(), pods[podIndexToRemove].Name, metav1.DeleteOptions{})).NotTo(HaveOccurred())
-			newReconciler, err := reconciler.NewReconcileLooper(kubeConfigPath, context.TODO())
+			newReconciler, err := reconciler.NewReconcileLooperWithKubeconfig(kubeConfigPath, context.TODO())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(newReconciler.ReconcileOverlappingIPAddresses()).To(Succeed())
 
@@ -250,6 +250,37 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 			var clusterWideIPAllocations v1alpha1.OverlappingRangeIPReservationList
 			Expect(k8sClient.List(context.TODO(), &clusterWideIPAllocations)).To(Succeed())
 			Expect(clusterWideIPAllocations.Items).To(HaveLen(expectedClusterWideIPs))
+		})
+	})
+
+	Context("a pod in pending state, without an IP in its network-status", func() {
+		const poolName = "pool1"
+
+		var pod *v1.Pod
+		var pool *v1alpha1.IPPool
+
+		BeforeEach(func() {
+			var err error
+			pod, err = k8sClientSet.CoreV1().Pods(namespace).Create(
+				context.TODO(),
+				generatePendingPod(namespace, podName),
+				metav1.CreateOptions{})
+			Expect(err).NotTo(HaveOccurred())
+
+			pool = generateIPPoolSpec(ipRange, namespace, poolName, pod.Name)
+			Expect(k8sClient.Create(context.Background(), pool)).NotTo(HaveOccurred())
+
+			reconcileLooper, err = reconciler.NewReconcileLooperWithKubeconfig(kubeConfigPath, context.TODO())
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		AfterEach(func() {
+			Expect(k8sClient.Delete(context.Background(), pool)).NotTo(HaveOccurred())
+			Expect(k8sClientSet.CoreV1().Pods(namespace).Delete(context.TODO(), pod.GetName(), metav1.DeleteOptions{}))
+		})
+
+		It("cannot be reconciled", func() {
+			Expect(reconcileLooper.ReconcileIPPools()).To(BeEmpty())
 		})
 	})
 })
@@ -300,7 +331,14 @@ func generatePod(namespace string, podName string, ipNetworks ...ipInNetwork) *v
 				},
 			},
 		},
+		Status: v1.PodStatus{Phase: v1.PodRunning},
 	}
+}
+
+func generatePendingPod(namespace string, podName string, ipNetworks ...ipInNetwork) *v1.Pod {
+	pod := generatePod(namespace, podName, ipNetworks...)
+	pod.Status.Phase = v1.PodPending
+	return pod
 }
 
 func generatePodAnnotations(ipNetworks ...ipInNetwork) map[string]string {

@@ -1,4 +1,4 @@
-module github.com/dougbtv/whereabouts
+module github.com/k8snetworkplumbingwg/whereabouts
 
 go 1.15
 

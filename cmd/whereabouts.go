@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"strings"
@@ -9,13 +10,13 @@ import (
 	cnitypes "github.com/containernetworking/cni/pkg/types"
 	"github.com/containernetworking/cni/pkg/types/current"
 	cniversion "github.com/containernetworking/cni/pkg/version"
-	"github.com/dougbtv/whereabouts/pkg/allocate"
-	"github.com/dougbtv/whereabouts/pkg/config"
-	"github.com/dougbtv/whereabouts/pkg/logging"
-	"github.com/dougbtv/whereabouts/pkg/storage"
-	"github.com/dougbtv/whereabouts/pkg/storage/kubernetes"
-	"github.com/dougbtv/whereabouts/pkg/types"
-	"github.com/dougbtv/whereabouts/pkg/version"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/allocate"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/config"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage/kubernetes"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/version"
 )
 
 func main() {
@@ -49,11 +50,14 @@ func cmdAdd(args *skel.CmdArgs) error {
 	logging.Debugf("Beginning IPAM for ContainerID: %v", args.ContainerID)
 	var newip net.IPNet
 
+	ctx, cancel := context.WithTimeout(context.Background(), types.AddTimeLimit)
+	defer cancel()
+
 	switch ipamConf.Datastore {
 	case types.DatastoreETCD:
-		newip, err = storage.IPManagementEtcd(types.Allocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
+		newip, err = storage.IPManagementEtcd(ctx, types.Allocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
 	case types.DatastoreKubernetes:
-		newip, err = kubernetes.IPManagement(types.Allocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
+		newip, err = kubernetes.IPManagement(ctx, types.Allocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
 	}
 	if err != nil {
 		logging.Errorf("Error at storage engine: %s", err)
@@ -93,11 +97,14 @@ func cmdDel(args *skel.CmdArgs) error {
 	logging.Debugf("DEL - IPAM configuration successfully read: %+v", filterConf(*ipamConf))
 	logging.Debugf("Beginning delete for ContainerID: %v", args.ContainerID)
 
+	ctx, cancel := context.WithTimeout(context.Background(), types.DelTimeLimit)
+	defer cancel()
+
 	switch ipamConf.Datastore {
 	case types.DatastoreETCD:
-		_, err = storage.IPManagementEtcd(types.Deallocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
+		_, err = storage.IPManagementEtcd(ctx, types.Deallocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
 	case types.DatastoreKubernetes:
-		_, err = kubernetes.IPManagement(types.Deallocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
+		_, err = kubernetes.IPManagement(ctx, types.Deallocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
 	}
 	if err != nil {
 		logging.Verbosef("WARNING: Problem deallocating IP: %s", err)

@@ -1,0 +1,27 @@
+name: Binaries upload release
+on:
+  release:
+    types:
+      - created
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64, arm]
+    steps:
+    - uses: actions/checkout@v2
+    - name: Build whereabouts binary
+      env:
+        GOARCH: ${{ matrix.arch }}
+      run: ./hack/build-go.sh
+    - name: Upload whereabouts binary
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ github.event.release.upload_url }}
+        asset_path: ./bin/whereabouts
+        asset_name: whereabouts-${{ matrix.arch }}
+        asset_content_type: application/octet-stream

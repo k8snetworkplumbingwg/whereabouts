@@ -1,5 +1,5 @@
 # whereabouts
-![Travis CI status](https://travis-ci.org/dougbtv/whereabouts.svg?branch=master) ![Go report card](https://goreportcard.com/badge/github.com/dougbtv/whereabouts)
+![Travis CI status](https://travis-ci.org/k8snetworkplumbingwg/whereabouts.svg?branch=master) ![Go report card](https://goreportcard.com/badge/github.com/k8snetworkplumbingwg/whereabouts)
 
 ![whereabouts-logo](doc/logo.png)
 
@@ -41,7 +41,7 @@ Further installation options (including etcd usage) and configuration parameters
 You can install this plugin with a Daemonset, using:
 
 ```
-git clone https://github.com/dougbtv/whereabouts && cd whereabouts
+git clone https://github.com/k8snetworkplumbingwg/whereabouts && cd whereabouts
 kubectl apply \
     -f doc/crds/daemonset-install.yaml \
     -f doc/crds/whereabouts.cni.cncf.io_ippools.yaml \

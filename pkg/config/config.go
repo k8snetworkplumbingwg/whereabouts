@@ -10,9 +10,9 @@ import (
 
 	cnitypes "github.com/containernetworking/cni/pkg/types"
 	types020 "github.com/containernetworking/cni/pkg/types/020"
-	"github.com/dougbtv/whereabouts/pkg/logging"
-	"github.com/dougbtv/whereabouts/pkg/types"
 	"github.com/imdario/mergo"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 )
 
 // canonicalizeIP makes sure a provided ip is in standard form
@@ -36,6 +36,7 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 	n := types.Net{
 		IPAM: &types.IPAMConfig{
 			OverlappingRanges: true,
+			SleepForRace:      0,
 		},
 	}
 	if err := json.Unmarshal(bytes, &n); err != nil {

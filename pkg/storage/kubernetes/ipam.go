@@ -14,11 +14,11 @@ import (
 	"k8s.io/client-go/tools/leaderelection"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 
-	"github.com/dougbtv/whereabouts/pkg/allocate"
-	whereaboutsv1alpha1 "github.com/dougbtv/whereabouts/pkg/api/v1alpha1"
-	"github.com/dougbtv/whereabouts/pkg/logging"
-	"github.com/dougbtv/whereabouts/pkg/storage"
-	whereaboutstypes "github.com/dougbtv/whereabouts/pkg/types"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/allocate"
+	whereaboutsv1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/v1alpha1"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage"
+	whereaboutstypes "github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 	jsonpatch "gomodules.xyz/jsonpatch/v2"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -38,7 +38,7 @@ func NewKubernetesIPAM(containerID string, ipamConf whereaboutstypes.IPAMConfig)
 		return nil, fmt.Errorf("k8s config: namespace not present in context")
 	}
 
-	kubernetesClient, err := NewClient(ipamConf.Kubernetes.KubeConfigPath)
+	kubernetesClient, err := NewClientViaKubeconfig(ipamConf.Kubernetes.KubeConfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed instantiating kubernetes client: %v", err)
 	}
@@ -309,10 +309,11 @@ func newLeaderElector(clientset *kubernetes.Clientset, namespace string, podName
 	// Make the leader elector, ready to be used in the Workgroup.
 	// !bang
 	le, err := leaderelection.NewLeaderElector(leaderelection.LeaderElectionConfig{
-		Lock:          rl,
-		LeaseDuration: time.Duration(leaseDuration) * time.Millisecond,
-		RenewDeadline: time.Duration(renewDeadline) * time.Millisecond,
-		RetryPeriod:   time.Duration(retryPeriod) * time.Millisecond,
+		Lock:            rl,
+		LeaseDuration:   time.Duration(leaseDuration) * time.Millisecond,
+		RenewDeadline:   time.Duration(renewDeadline) * time.Millisecond,
+		RetryPeriod:     time.Duration(retryPeriod) * time.Millisecond,
+		ReleaseOnCancel: true,
 		Callbacks: leaderelection.LeaderCallbacks{
 			OnStartedLeading: func(_ context.Context) {
 				logging.Debugf("OnStartedLeading() called")
@@ -334,7 +335,7 @@ func newLeaderElector(clientset *kubernetes.Clientset, namespace string, podName
 }
 
 // IPManagement manages ip allocation and deallocation from a storage perspective
-func IPManagement(mode int, ipamConf whereaboutstypes.IPAMConfig, containerID string, podRef string) (net.IPNet, error) {
+func IPManagement(ctx context.Context, mode int, ipamConf whereaboutstypes.IPAMConfig, containerID string, podRef string) (net.IPNet, error) {
 	var newip net.IPNet
 
 	ipam, err := NewKubernetesIPAM(containerID, ipamConf)
@@ -359,13 +360,13 @@ func IPManagement(mode int, ipamConf whereaboutstypes.IPAMConfig, containerID st
 		defer wg.Done()
 		for {
 			select {
-			case <-stopM:
-				logging.Debugf("Stopped leader election")
-				result <- nil
+			case <-ctx.Done():
+				err = fmt.Errorf("time limit exceeded while waiting to become leader")
+				stopM <- struct{}{}
 				return
 			case <-leader:
 				logging.Debugf("Elected as leader, do processing")
-				newip, err = IPManagementKubernetesUpdate(mode, ipam, ipamConf, containerID, podRef)
+				newip, err = IPManagementKubernetesUpdate(ctx, mode, ipam, ipamConf, containerID, podRef)
 				stopM <- struct{}{}
 				return
 			case <-deposed:
@@ -378,20 +379,20 @@ func IPManagement(mode int, ipamConf whereaboutstypes.IPAMConfig, containerID st
 
 	go func() {
 		defer wg.Done()
-		ctx, cancel := context.WithCancel(context.Background())
 		res := make(chan error)
+		leCtx, leCancel := context.WithCancel(context.Background())
 
 		go func() {
 			logging.Debugf("Started leader election")
-			le.Run(ctx)
+			le.Run(leCtx)
 			logging.Debugf("Finished leader election")
 			res <- nil
 		}()
 
-		// wait for stop
+		// wait for stop which tells us when IP allocation occurred or context deadline exceeded
 		<-stopM
-		// cancel fn(ctx)
-		cancel()
+		// leCancel fn(leCtx)
+		leCancel()
 		result <- (<-res)
 	}()
 
@@ -402,7 +403,8 @@ func IPManagement(mode int, ipamConf whereaboutstypes.IPAMConfig, containerID st
 }
 
 // IPManagementKubernetesUpdate manages k8s updates
-func IPManagementKubernetesUpdate(mode int, ipam *KubernetesIPAM, ipamConf whereaboutstypes.IPAMConfig, containerID string, podRef string) (net.IPNet, error) {
+func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *KubernetesIPAM, ipamConf whereaboutstypes.IPAMConfig,
+	containerID string, podRef string) (net.IPNet, error) {
 	logging.Debugf("IPManagement -- mode: %v / containerID: %v / podRef: %v", mode, containerID, podRef)
 
 	var newip net.IPNet
@@ -417,11 +419,11 @@ func IPManagementKubernetesUpdate(mode int, ipam *KubernetesIPAM, ipamConf where
 	var pool storage.IPPool
 	var err error
 
-	ctx, cancel := context.WithTimeout(context.Background(), storage.RequestTimeout)
-	defer cancel()
+	requestCtx, requestCancel := context.WithTimeout(ctx, storage.RequestTimeout)
+	defer requestCancel()
 
 	// Check our connectivity first
-	if err := ipam.Status(ctx); err != nil {
+	if err := ipam.Status(requestCtx); err != nil {
 		logging.Errorf("IPAM connectivity error: %v", err)
 		return newip, err
 	}
@@ -433,7 +435,7 @@ RETRYLOOP:
 	for j := 0; j < storage.DatastoreRetries; j++ {
 		select {
 		case <-ctx.Done():
-			return newip, nil
+			return newip, err
 		default:
 			// retry the IPAM loop if the context has not been cancelled
 		}
@@ -444,7 +446,7 @@ RETRYLOOP:
 			return newip, err
 		}
 
-		pool, err = ipam.GetIPPool(ctx, ipamConf.Range)
+		pool, err = ipam.GetIPPool(requestCtx, ipamConf.Range)
 		if err != nil {
 			logging.Errorf("IPAM error reading pool allocations (attempt: %d): %v", j, err)
 			if e, ok := err.(storage.Temporary); ok && e.Temporary() {
@@ -467,7 +469,7 @@ RETRYLOOP:
 			// When it's allocated overlappingrange wide, we add it to a local reserved list
 			// And we try again.
 			if ipamConf.OverlappingRanges {
-				isallocated, err := overlappingrangestore.IsAllocatedInOverlappingRange(ctx, newip.IP)
+				isallocated, err := overlappingrangestore.IsAllocatedInOverlappingRange(requestCtx, newip.IP)
 				if err != nil {
 					logging.Errorf("Error checking overlappingrange allocation: %v", err)
 					return newip, err
@@ -499,7 +501,12 @@ RETRYLOOP:
 			}
 		}
 
-		err = pool.Update(ctx, usereservelist)
+		// Manual race condition testing
+		if ipamConf.SleepForRace > 0 {
+			time.Sleep(time.Duration(ipamConf.SleepForRace) * time.Second)
+		}
+
+		err = pool.Update(requestCtx, usereservelist)
 		if err != nil {
 			logging.Errorf("IPAM error updating pool (attempt: %d): %v", j, err)
 			if e, ok := err.(storage.Temporary); ok && e.Temporary() {
@@ -511,7 +518,7 @@ RETRYLOOP:
 	}
 
 	if ipamConf.OverlappingRanges {
-		err = overlappingrangestore.UpdateOverlappingRangeAllocation(ctx, mode, ipforoverlappingrangeupdate, containerID, podRef)
+		err = overlappingrangestore.UpdateOverlappingRangeAllocation(requestCtx, mode, ipforoverlappingrangeupdate, containerID, podRef)
 		if err != nil {
 			logging.Errorf("Error performing UpdateOverlappingRangeAllocation: %v", err)
 			return newip, err
