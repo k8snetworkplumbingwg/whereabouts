@@ -175,10 +175,11 @@ func composePodRef(pod v1.Pod) string {
 }
 
 func (rl ReconcileLooper) ReconcileIPPools(ctx context.Context) ([]net.IP, error) {
-	matchByPodRef := func(reservations []types.IPReservation, podRef string) int {
+	matchByContainerID := func(reservations []types.IPReservation, containerID string) int {
 		foundidx := -1
+		fmt.Printf("!bang ------------- %+v", reservations)
 		for idx, v := range reservations {
-			if v.PodRef == podRef {
+			if v.ContainerID == containerID {
 				return idx
 			}
 		}
@@ -189,10 +190,10 @@ func (rl ReconcileLooper) ReconcileIPPools(ctx context.Context) ([]net.IP, error
 	var totalCleanedUpIps []net.IP
 	for _, orphanedIP := range rl.orphanedIPs {
 		currentIPReservations := orphanedIP.Pool.Allocations()
-		podRefsToDeallocate := findOutPodRefsToDeallocateIPsFrom(orphanedIP)
+		containerIDsToDeallocate := findOutContainerIDsToDeallocateIPsFrom(orphanedIP)
 		var deallocatedIP net.IP
-		for _, podRef := range podRefsToDeallocate {
-			currentIPReservations, deallocatedIP, err = allocate.IterateForDeallocation(currentIPReservations, podRef, matchByPodRef)
+		for _, containerID := range containerIDsToDeallocate {
+			currentIPReservations, deallocatedIP, err = allocate.IterateForDeallocation(currentIPReservations, containerID, matchByContainerID)
 			if err != nil {
 				return nil, err
 			}
@@ -256,10 +257,10 @@ func (rl ReconcileLooper) ReconcileOverlappingIPAddresses(ctx context.Context) e
 	return nil
 }
 
-func findOutPodRefsToDeallocateIPsFrom(orphanedIP OrphanedIPReservations) []string {
-	var podRefsToDeallocate []string
+func findOutContainerIDsToDeallocateIPsFrom(orphanedIP OrphanedIPReservations) []string {
+	var containerIDsToDeallocate []string
 	for _, orphanedAllocation := range orphanedIP.Allocations {
-		podRefsToDeallocate = append(podRefsToDeallocate, orphanedAllocation.PodRef)
+		containerIDsToDeallocate = append(containerIDsToDeallocate, orphanedAllocation.ContainerID)
 	}
-	return podRefsToDeallocate
+	return containerIDsToDeallocate
 }
