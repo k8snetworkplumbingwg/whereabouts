@@ -80,7 +80,7 @@ func (i *Client) ListIPPools(ctx context.Context) ([]storage.IPPool, error) {
 	logging.Debugf("listing IP pools")
 	ipPoolList := &whereaboutsv1alpha1.IPPoolList{}
 
-	if err := i.client.List(ctx, ipPoolList, &client.ListOptions{}); err != nil {
+	if err := i.client.List(context.TODO(), ipPoolList, &client.ListOptions{}); err != nil {
 		return nil, err
 	}
 
@@ -112,7 +112,7 @@ func (i *Client) ListPods() ([]v1.Pod, error) {
 
 func (i *Client) ListOverlappingIPs(ctx context.Context) ([]whereaboutsv1alpha1.OverlappingRangeIPReservation, error) {
 	overlappingIPsList := whereaboutsv1alpha1.OverlappingRangeIPReservationList{}
-	if err := i.client.List(ctx, &overlappingIPsList, &client.ListOptions{}); err != nil {
+	if err := i.client.List(context.TODO(), &overlappingIPsList, &client.ListOptions{}); err != nil {
 		return nil, err
 	}
 
@@ -124,5 +124,5 @@ func (i *Client) ListOverlappingIPs(ctx context.Context) ([]whereaboutsv1alpha1.
 }
 
 func (i *Client) DeleteOverlappingIP(ctx context.Context, clusterWideIP *whereaboutsv1alpha1.OverlappingRangeIPReservation) error {
-	return i.client.Delete(ctx, clusterWideIP)
+	return i.client.Delete(context.TODO(), clusterWideIP)
 }
