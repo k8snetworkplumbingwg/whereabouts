@@ -1,8 +1,8 @@
 package v1
 
 import (
-	"net"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"net"
 )
 
 // +genclient
@@ -78,12 +78,15 @@ type NetworkSelectionElement struct {
 	// Namespace contains the optional namespace that the network referenced
 	// by Name exists in
 	Namespace string `json:"namespace,omitempty"`
-	// IPRequest contains an optional requested IP address for this network
+	// IPRequest contains an optional requested IP addresses for this network
 	// attachment
-	IPRequest string `json:"ips,omitempty"`
+	IPRequest []string `json:"ips,omitempty"`
 	// MacRequest contains an optional requested MAC address for this
 	// network attachment
 	MacRequest string `json:"mac,omitempty"`
+	// InfinibandGUIDRequest contains an optional requested Infiniband GUID
+	// address for this network attachment
+	InfinibandGUIDRequest string `json:"infiniband-guid,omitempty"`
 	// InterfaceRequest contains an optional requested name for the
 	// network interface this attachment will create in the container
 	InterfaceRequest string `json:"interface,omitempty"`
@@ -103,7 +106,9 @@ const (
 	// Pod annotation for network-attachment-definition
 	NetworkAttachmentAnnot = "k8s.v1.cni.cncf.io/networks"
 	// Pod annotation for network status
-	NetworkStatusAnnot = "k8s.v1.cni.cncf.io/networks-status"
+	NetworkStatusAnnot = "k8s.v1.cni.cncf.io/network-status"
+	// Old Pod annotation for network status (which is used before but it will be obsolated)
+	OldNetworkStatusAnnot = "k8s.v1.cni.cncf.io/networks-status"
 )
 
 // NoK8sNetworkError indicates error, no network in kubernetes

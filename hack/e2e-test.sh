@@ -272,6 +272,7 @@ for i in $(seq $NUMBER_OF_THRASH_ITER); do
   set_pod_count 0
   steady_state_or_die "$TEST_NAMESPACE"
   is_zero_ippool_allocations "$IPV4_RANGE_POOL_NAME" "$WB_NAMESPACE"
+  echo $NUMBER_OF_COMPUTE_NODES
   set_pod_count $(( $(get_pods_per_node) * $NUMBER_OF_COMPUTE_NODES ))
   steady_state_or_die "$TEST_NAMESPACE"
   # tests
