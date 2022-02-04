@@ -16,7 +16,6 @@ import (
 )
 
 type ReconcileLooper struct {
-	ctx                    context.Context
 	k8sClient              kubernetes.Client
 	liveWhereaboutsPods    map[string]podWrapper
 	orphanedIPs            []OrphanedIPReservations
@@ -28,13 +27,13 @@ type OrphanedIPReservations struct {
 	Allocations []types.IPReservation
 }
 
-func NewReconcileLooperWithKubeconfig(kubeconfigPath string, ctx context.Context) (*ReconcileLooper, error) {
+func NewReconcileLooperWithKubeconfig(ctx context.Context, kubeconfigPath string) (*ReconcileLooper, error) {
 	logging.Debugf("NewReconcileLooper - Kubernetes config file located at: %s", kubeconfigPath)
 	k8sClient, err := kubernetes.NewClientViaKubeconfig(kubeconfigPath)
 	if err != nil {
 		return nil, logging.Errorf("failed to instantiate the Kubernetes client: %+v", err)
 	}
-	return newReconcileLooper(k8sClient, ctx)
+	return newReconcileLooper(ctx, k8sClient)
 }
 
 func NewReconcileLooper(ctx context.Context) (*ReconcileLooper, error) {
@@ -43,10 +42,10 @@ func NewReconcileLooper(ctx context.Context) (*ReconcileLooper, error) {
 	if err != nil {
 		return nil, logging.Errorf("failed to instantiate the Kubernetes client: %+v", err)
 	}
-	return newReconcileLooper(k8sClient, ctx)
+	return newReconcileLooper(ctx, k8sClient)
 }
 
-func newReconcileLooper(k8sClient *kubernetes.Client, ctx context.Context) (*ReconcileLooper, error) {
+func newReconcileLooper(ctx context.Context, k8sClient *kubernetes.Client) (*ReconcileLooper, error) {
 	pods, err := k8sClient.ListPods()
 	if err != nil {
 		return nil, err
@@ -59,7 +58,6 @@ func newReconcileLooper(k8sClient *kubernetes.Client, ctx context.Context) (*Rec
 
 	whereaboutsPodRefs := getPodRefsServedByWhereabouts(ipPools)
 	looper := &ReconcileLooper{
-		ctx:                 ctx,
 		k8sClient:           *k8sClient,
 		liveWhereaboutsPods: indexPods(pods, whereaboutsPodRefs),
 	}
@@ -68,7 +66,7 @@ func newReconcileLooper(k8sClient *kubernetes.Client, ctx context.Context) (*Rec
 		return nil, err
 	}
 
-	if err := looper.findClusterWideIPReservations(); err != nil {
+	if err := looper.findClusterWideIPReservations(ctx); err != nil {
 		return nil, err
 	}
 	return looper, nil
@@ -118,7 +116,7 @@ func composePodRef(pod v1.Pod) string {
 	return fmt.Sprintf("%s/%s", pod.GetNamespace(), pod.GetName())
 }
 
-func (rl ReconcileLooper) ReconcileIPPools() ([]net.IP, error) {
+func (rl ReconcileLooper) ReconcileIPPools(ctx context.Context) ([]net.IP, error) {
 	matchByPodRef := func(reservations []types.IPReservation, podRef string) int {
 		foundidx := -1
 		for idx, v := range reservations {
@@ -143,7 +141,7 @@ func (rl ReconcileLooper) ReconcileIPPools() ([]net.IP, error) {
 		}
 
 		logging.Debugf("Going to update the reserve list to: %+v", currentIPReservations)
-		if err := orphanedIP.Pool.Update(rl.ctx, currentIPReservations); err != nil {
+		if err := orphanedIP.Pool.Update(ctx, currentIPReservations); err != nil {
 			return nil, logging.Errorf("failed to update the reservation list: %v", err)
 		}
 		totalCleanedUpIps = append(totalCleanedUpIps, deallocatedIP)
@@ -152,8 +150,8 @@ func (rl ReconcileLooper) ReconcileIPPools() ([]net.IP, error) {
 	return totalCleanedUpIps, nil
 }
 
-func (rl *ReconcileLooper) findClusterWideIPReservations() error {
-	clusterWideIPReservations, err := rl.k8sClient.ListOverlappingIPs(rl.ctx)
+func (rl *ReconcileLooper) findClusterWideIPReservations(ctx context.Context) error {
+	clusterWideIPReservations, err := rl.k8sClient.ListOverlappingIPs(ctx)
 	if err != nil {
 		return logging.Errorf("failed to list all OverLappingIPs: %v", err)
 	}
@@ -171,10 +169,10 @@ func (rl *ReconcileLooper) findClusterWideIPReservations() error {
 	return nil
 }
 
-func (rl ReconcileLooper) ReconcileOverlappingIPAddresses() error {
+func (rl ReconcileLooper) ReconcileOverlappingIPAddresses(ctx context.Context) error {
 	var failedReconciledClusterWideIPs []string
 	for _, overlappingIPStruct := range rl.orphanedClusterWideIPs {
-		if err := rl.k8sClient.DeleteOverlappingIP(rl.ctx, &overlappingIPStruct); err != nil {
+		if err := rl.k8sClient.DeleteOverlappingIP(ctx, &overlappingIPStruct); err != nil {
 			logging.Errorf("failed to remove cluster wide IP: %s", overlappingIPStruct.GetName())
 			failedReconciledClusterWideIPs = append(failedReconciledClusterWideIPs, overlappingIPStruct.GetName())
 			continue

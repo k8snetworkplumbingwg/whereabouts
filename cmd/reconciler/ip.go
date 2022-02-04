@@ -25,14 +25,14 @@ func main() {
 	if kubeConfigFile == nil {
 		ipReconcileLoop, err = reconciler.NewReconcileLooper(ctx)
 	} else {
-		ipReconcileLoop, err = reconciler.NewReconcileLooperWithKubeconfig(*kubeConfigFile, ctx)
+		ipReconcileLoop, err = reconciler.NewReconcileLooperWithKubeconfig(ctx, *kubeConfigFile)
 	}
 	if err != nil {
 		_ = logging.Errorf("failed to create the reconcile looper: %v", err)
 		os.Exit(couldNotStartOrphanedIPMonitor)
 	}
 
-	cleanedUpIps, err := ipReconcileLoop.ReconcileIPPools()
+	cleanedUpIps, err := ipReconcileLoop.ReconcileIPPools(ctx)
 	if err != nil {
 		_ = logging.Errorf("failed to clean up IP for allocations: %v", err)
 		os.Exit(failedToReconcileIPPools)
@@ -43,7 +43,7 @@ func main() {
 		logging.Debugf("no IP addresses to cleanup")
 	}
 
-	if err := ipReconcileLoop.ReconcileOverlappingIPAddresses(); err != nil {
+	if err := ipReconcileLoop.ReconcileOverlappingIPAddresses(ctx); err != nil {
 		os.Exit(failedToReconcileClusterWideIPs)
 	}
 }
