@@ -66,7 +66,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 				Context("reconciling the IPPool", func() {
 					BeforeEach(func() {
 						var err error
-						reconcileLooper, err = reconciler.NewReconcileLooperWithKubeconfig(kubeConfigPath, context.TODO())
+						reconcileLooper, err = reconciler.NewReconcileLooperWithKubeconfig(context.TODO(), kubeConfigPath)
 						Expect(err).NotTo(HaveOccurred())
 					})
 
@@ -137,7 +137,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 			Context("reconciling the IPPool", func() {
 				BeforeEach(func() {
 					var err error
-					reconcileLooper, err = reconciler.NewReconcileLooperWithKubeconfig(kubeConfigPath, context.TODO())
+					reconcileLooper, err = reconciler.NewReconcileLooperWithKubeconfig(context.TODO(), kubeConfigPath)
 					Expect(err).NotTo(HaveOccurred())
 				})
 
@@ -242,7 +242,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 
 		It("will delete an orphaned IP address", func() {
 			Expect(k8sClientSet.CoreV1().Pods(namespace).Delete(context.TODO(), pods[podIndexToRemove].Name, metav1.DeleteOptions{})).NotTo(HaveOccurred())
-			newReconciler, err := reconciler.NewReconcileLooperWithKubeconfig(kubeConfigPath, context.TODO())
+			newReconciler, err := reconciler.NewReconcileLooperWithKubeconfig(context.TODO(), kubeConfigPath)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(newReconciler.ReconcileOverlappingIPAddresses()).To(Succeed())
 
@@ -270,7 +270,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 			pool = generateIPPoolSpec(ipRange, namespace, poolName, pod.Name)
 			Expect(k8sClient.Create(context.Background(), pool)).NotTo(HaveOccurred())
 
-			reconcileLooper, err = reconciler.NewReconcileLooperWithKubeconfig(kubeConfigPath, context.TODO())
+			reconcileLooper, err = reconciler.NewReconcileLooperWithKubeconfig(context.TODO(), kubeConfigPath)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
