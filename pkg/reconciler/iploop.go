@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/allocate"
 	whereaboutsv1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/v1alpha1"
@@ -20,6 +21,7 @@ type ReconcileLooper struct {
 	liveWhereaboutsPods    map[string]podWrapper
 	orphanedIPs            []OrphanedIPReservations
 	orphanedClusterWideIPs []whereaboutsv1alpha1.OverlappingRangeIPReservation
+	requestTimeout         int
 }
 
 type OrphanedIPReservations struct {
@@ -27,26 +29,26 @@ type OrphanedIPReservations struct {
 	Allocations []types.IPReservation
 }
 
-func NewReconcileLooperWithKubeconfig(ctx context.Context, kubeconfigPath string) (*ReconcileLooper, error) {
+func NewReconcileLooperWithKubeconfig(ctx context.Context, kubeconfigPath string, timeout int) (*ReconcileLooper, error) {
 	logging.Debugf("NewReconcileLooper - Kubernetes config file located at: %s", kubeconfigPath)
 	k8sClient, err := kubernetes.NewClientViaKubeconfig(kubeconfigPath)
 	if err != nil {
 		return nil, logging.Errorf("failed to instantiate the Kubernetes client: %+v", err)
 	}
-	return newReconcileLooper(ctx, k8sClient)
+	return newReconcileLooper(ctx, k8sClient, timeout)
 }
 
-func NewReconcileLooper(ctx context.Context) (*ReconcileLooper, error) {
+func NewReconcileLooper(ctx context.Context, timeout int) (*ReconcileLooper, error) {
 	logging.Debugf("NewReconcileLooper - inferred connection data")
 	k8sClient, err := kubernetes.NewClient()
 	if err != nil {
 		return nil, logging.Errorf("failed to instantiate the Kubernetes client: %+v", err)
 	}
-	return newReconcileLooper(ctx, k8sClient)
+	return newReconcileLooper(ctx, k8sClient, timeout)
 }
 
-func newReconcileLooper(ctx context.Context, k8sClient *kubernetes.Client) (*ReconcileLooper, error) {
-	pods, err := k8sClient.ListPods()
+func newReconcileLooper(ctx context.Context, k8sClient *kubernetes.Client, timeout int) (*ReconcileLooper, error) {
+	pods, err := k8sClient.ListPods(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -60,6 +62,7 @@ func newReconcileLooper(ctx context.Context, k8sClient *kubernetes.Client) (*Rec
 	looper := &ReconcileLooper{
 		k8sClient:           *k8sClient,
 		liveWhereaboutsPods: indexPods(pods, whereaboutsPodRefs),
+		requestTimeout:      timeout,
 	}
 
 	if err := looper.findOrphanedIPsPerPool(ipPools); err != nil {
@@ -151,7 +154,10 @@ func (rl ReconcileLooper) ReconcileIPPools(ctx context.Context) ([]net.IP, error
 }
 
 func (rl *ReconcileLooper) findClusterWideIPReservations(ctx context.Context) error {
-	clusterWideIPReservations, err := rl.k8sClient.ListOverlappingIPs(ctx)
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, time.Duration(rl.requestTimeout)*time.Second)
+	defer cancel()
+
+	clusterWideIPReservations, err := rl.k8sClient.ListOverlappingIPs(ctxWithTimeout)
 	if err != nil {
 		return logging.Errorf("failed to list all OverLappingIPs: %v", err)
 	}
@@ -171,8 +177,12 @@ func (rl *ReconcileLooper) findClusterWideIPReservations(ctx context.Context) er
 
 func (rl ReconcileLooper) ReconcileOverlappingIPAddresses(ctx context.Context) error {
 	var failedReconciledClusterWideIPs []string
+
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, time.Duration(rl.requestTimeout)*time.Second)
+	defer cancel()
+
 	for _, overlappingIPStruct := range rl.orphanedClusterWideIPs {
-		if err := rl.k8sClient.DeleteOverlappingIP(ctx, &overlappingIPStruct); err != nil {
+		if err := rl.k8sClient.DeleteOverlappingIP(ctxWithTimeout, &overlappingIPStruct); err != nil {
 			logging.Errorf("failed to remove cluster wide IP: %s", overlappingIPStruct.GetName())
 			failedReconciledClusterWideIPs = append(failedReconciledClusterWideIPs, overlappingIPStruct.GetName())
 			continue
