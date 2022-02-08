@@ -2,7 +2,7 @@
 OCI_BIN=${OCI_BIN:-docker}
 
 # install controller-gen
-go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.4.1
+go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.4.1
 
 # install kubebuilder tools to bin/
 mkdir -p bin
