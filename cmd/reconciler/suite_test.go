@@ -1,11 +1,12 @@
 package main
 
 import (
-	"encoding/base64"
 	"fmt"
+	"io/fs"
 	"io/ioutil"
 	"k8s.io/client-go/kubernetes"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -16,8 +17,6 @@ import (
 	whereaboutsv1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
-	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -63,35 +62,10 @@ var _ = BeforeSuite(func(done Done) {
 	apiURL := testEnv.ControlPlane.APIServer.SecureServing.URL("https", "/").String()
 	Expect(apiURL).ToNot(BeNil())
 
-	var caContents string
-	for _, s := range strings.Split(string(cfg.TLSClientConfig.CAData), "\n") {
-		caContents += base64.StdEncoding.EncodeToString([]byte(s))
-	}
-
 	tmpdir, err = ioutil.TempDir("/tmp", "whereabouts")
 	Expect(err).ToNot(HaveOccurred())
-
-	kubeconfig := clientcmdapi.Config{
-		Clusters: map[string]*clientcmdapi.Cluster{
-			"local": {Server: apiURL, CertificateAuthorityData: []byte(caContents)},
-		},
-		AuthInfos: map[string]*clientcmdapi.AuthInfo{
-			"whereabouts": {
-				Token: cfg.BearerToken,
-			},
-		},
-		Contexts: map[string]*clientcmdapi.Context{
-			"whereabouts-context": {
-				Cluster:   "local",
-				AuthInfo:  "whereabouts",
-				Namespace: "default",
-			},
-		},
-		CurrentContext: "whereabouts-context",
-	}
 	kubeConfigPath = fmt.Sprintf("%s/whereabouts.kubeconfig", tmpdir)
-	err = clientcmd.WriteToFile(kubeconfig, kubeConfigPath)
-	Expect(err).ToNot(HaveOccurred())
+	Expect(copyEnvKubeconfigFile(testEnv.ControlPlane.APIServer.CertDir, kubeConfigPath)).To(Succeed())
 
 	err = whereaboutsv1alpha1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
@@ -113,3 +87,34 @@ var _ = AfterSuite(func() {
 	err := testEnv.Stop()
 	Expect(err).ToNot(HaveOccurred())
 })
+
+func copyEnvKubeconfigFile(envCertDir string, destFilePath string) error {
+	files, err := ioutil.ReadDir(envCertDir)
+	if err != nil {
+		return fmt.Errorf("failed to read the certificate dir: %w", err)
+	}
+
+	for _, file := range files {
+		if isKubeconfigFile(file) {
+			return copyFile(path.Join(envCertDir, file.Name()), destFilePath, file.Mode())
+		}
+	}
+	return fmt.Errorf("could not find the generated kubeconfig file")
+}
+
+func isKubeconfigFile(file fs.FileInfo) bool {
+	return strings.HasSuffix(file.Name(), ".kubecfg") ||
+		strings.HasSuffix(file.Name(), ".kubeconfig")
+}
+
+func copyFile(src string, dst string, mode fs.FileMode) error {
+	fileContents, err := ioutil.ReadFile(src)
+	if err != nil {
+		return fmt.Errorf("failed to read src file %s: %w", src, err)
+	}
+
+	if err := ioutil.WriteFile(dst, fileContents, mode); err != nil {
+		return fmt.Errorf("error writing dst file %s: %w", dst, err)
+	}
+	return nil
+}
