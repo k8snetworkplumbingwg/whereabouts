@@ -7,10 +7,16 @@ metadata:
     tier: node
     app: whereabouts
 spec:
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
   schedule: "*/5 * * * *"
   jobTemplate:
     spec:
+      backoffLimit: 0
       template:
+        metadata:
+          labels:
+            app: whereabouts
         spec:
           priorityClassName: "system-node-critical"
           serviceAccountName: whereabouts
