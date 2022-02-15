@@ -5,10 +5,30 @@ import (
 	"flag"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage"
 	"os"
+	"strings"
 
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/reconciler"
 )
+
+// Matches known error cases from which the process should exit cleanly.
+func knownErrorCase(err error) bool {
+
+	// We ignore timeout errors, as they may be transient.
+	if strings.Contains(err.Error(), "timeout") {
+		logging.Verbosef("Timeout error [known error] ignored: %v", err)
+		return true
+	}
+
+	// Context deadline exceeded can happen
+	if strings.Contains(err.Error(), "context deadline exceeded") {
+		logging.Verbosef("context deadline exceeded [known error] ignored: %v", err)
+		return true
+	}
+
+	return false
+
+}
 
 func main() {
 	kubeConfigFile := flag.String("kubeconfig", "", "the path to the Kubernetes configuration file")
@@ -29,13 +49,21 @@ func main() {
 	}
 	if err != nil {
 		_ = logging.Errorf("failed to create the reconcile looper: %v", err)
-		os.Exit(couldNotStartOrphanedIPMonitor)
+		if knownErrorCase(err) {
+			os.Exit(0)
+		} else {
+			os.Exit(couldNotStartOrphanedIPMonitor)
+		}
 	}
 
 	cleanedUpIps, err := ipReconcileLoop.ReconcileIPPools()
 	if err != nil {
 		_ = logging.Errorf("failed to clean up IP for allocations: %v", err)
-		os.Exit(failedToReconcileIPPools)
+		if knownErrorCase(err) {
+			os.Exit(0)
+		} else {
+			os.Exit(failedToReconcileIPPools)
+		}
 	}
 	if len(cleanedUpIps) > 0 {
 		logging.Debugf("successfully cleanup IPs: %+v", cleanedUpIps)
@@ -44,6 +72,10 @@ func main() {
 	}
 
 	if err := ipReconcileLoop.ReconcileOverlappingIPAddresses(); err != nil {
-		os.Exit(failedToReconcileClusterWideIPs)
+		if knownErrorCase(err) {
+			os.Exit(0)
+		} else {
+			os.Exit(failedToReconcileClusterWideIPs)
+		}
 	}
 }
