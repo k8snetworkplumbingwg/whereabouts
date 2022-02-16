@@ -69,6 +69,7 @@ rules:
   - create
   - patch
   - update
+  - get
 ---
 apiVersion: apps/v1
 kind: DaemonSet

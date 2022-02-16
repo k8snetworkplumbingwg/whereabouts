@@ -103,17 +103,71 @@ func (rl *ReconcileLooper) findOrphanedIPsPerPool(ipPools []storage.IPPool) erro
 func (rl ReconcileLooper) isPodAlive(podRef string, ip string) bool {
 	for livePodRef, livePod := range rl.liveWhereaboutsPods {
 		if podRef == livePodRef {
-			livePodIPs := livePod.ips
-			logging.Debugf(
-				"pod reference %s matches allocation; Allocation IP: %s; PodIPs: %s",
-				livePodRef,
-				ip,
-				livePodIPs)
-			_, isFound := livePodIPs[ip]
-			return isFound || livePod.phase == v1.PodPending
+			isFound := isIpOnPod(&livePod, podRef, ip)
+			if !isFound && (livePod.phase == v1.PodPending) {
+				/* Sometimes pods are still coming up, and may not yet have Multus
+				 * annotation added to it yet. We don't want to check the IPs yet
+				 * so re-fetch the Pod 5x
+				 */
+				podToMatch := &livePod
+				retries := 0
+
+				logging.Debugf("Re-fetching Pending Pod: %s IP-to-match: %s", livePodRef, ip)
+
+				for retries < storage.PodRefreshRetries {
+					retries += 1
+					podToMatch = rl.refreshPod(livePodRef)
+					if podToMatch == nil {
+						logging.Debugf("Cleaning up...")
+						return false
+					} else if podToMatch.phase != v1.PodPending {
+						logging.Debugf("Pending Pod is now in phase: %s", podToMatch.phase)
+						break
+					} else {
+						isFound = isIpOnPod(podToMatch, podRef, ip)
+						// Short-circuit - Pending Pod may have IP now
+						if isFound {
+							logging.Debugf("Pod now has IP annotation while in Pending")
+							return true
+						}
+						time.Sleep(time.Duration(500) * time.Millisecond)
+					}
+				}
+				isFound = isIpOnPod(podToMatch, podRef, ip)
+			}
+
+			return isFound
 		}
 	}
 	return false
+}
+
+func (rl ReconcileLooper) refreshPod(podRef string) *podWrapper {
+	namespace, podName := splitPodRef(podRef)
+	if namespace == "" || podName == "" {
+		logging.Errorf("Invalid podRef format: %s", podRef)
+		return nil
+	}
+
+	pod, err := rl.k8sClient.GetPod(namespace, podName)
+	if err != nil {
+		logging.Errorf("Failed to refresh Pod %s: %s\n", podRef, err)
+		return nil
+	}
+
+	wrappedPod := wrapPod(*pod)
+	logging.Debugf("Got refreshed pod: %v", wrappedPod)
+	return wrappedPod
+}
+
+func splitPodRef(podRef string) (string, string) {
+	namespacedName := strings.Split(podRef, "/")
+	if len(namespacedName) != 2 {
+		logging.Errorf("Failed to split podRef %s", podRef)
+		return "", ""
+	}
+
+	return namespacedName[0], namespacedName[1]
 }
 
 func composePodRef(pod v1.Pod) string {

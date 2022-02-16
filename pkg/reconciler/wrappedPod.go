@@ -89,3 +89,14 @@ func networkStatusFromPod(pod v1.Pod) string {
 	}
 	return networkStatusAnnotationValue
 }
+
+func isIpOnPod(livePod *podWrapper, podRef, ip string) bool {
+	livePodIPs := livePod.ips
+	logging.Debugf(
+		"pod reference %s matches allocation; Allocation IP: %s; PodIPs: %s",
+		podRef,
+		ip,
+		livePodIPs)
+	_, isFound := livePodIPs[ip]
+	return isFound
+}

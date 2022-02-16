@@ -107,6 +107,15 @@ func (i *Client) ListPods(ctx context.Context) ([]v1.Pod, error) {
 	return podList.Items, nil
 }
 
+func (i *Client) GetPod(namespace, name string) (*v1.Pod, error) {
+	pod, err := i.clientSet.CoreV1().Pods(namespace).Get(context.TODO(), name, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	return pod, nil
+}
+
 func (i *Client) ListOverlappingIPs(ctx context.Context) ([]whereaboutsv1alpha1.OverlappingRangeIPReservation, error) {
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, storage.RequestTimeout)
 	defer cancel()

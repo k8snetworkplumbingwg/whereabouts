@@ -13,7 +13,8 @@ var (
 	RequestTimeout = 10 * time.Second
 
 	// DatastoreRetries defines how many retries are attempted when updating the Pool
-	DatastoreRetries = 100
+	DatastoreRetries  = 100
+	PodRefreshRetries = 3
 )
 
 // IPPool is the interface that represents an manageable pool of allocated IPs
