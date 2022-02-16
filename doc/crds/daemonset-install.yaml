@@ -47,6 +47,7 @@ rules:
   - pods
   verbs:
   - list
+<<<<<<< HEAD
   - watch
 - apiGroups: [""]
   resources:
@@ -69,6 +70,7 @@ rules:
   - create
   - patch
   - update
+  - get
 ---
 apiVersion: apps/v1
 kind: DaemonSet
