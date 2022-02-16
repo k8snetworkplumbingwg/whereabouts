@@ -9,7 +9,7 @@ import (
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/reconciler"
 )
 
-const defaultReconcilerTimeout = 30
+const defaultReconcilerTimeout = 60
 
 func main() {
 	kubeConfigFile := flag.String("kubeconfig", "", "the path to the Kubernetes configuration file")

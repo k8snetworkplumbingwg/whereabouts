@@ -47,6 +47,7 @@ rules:
   - pods
   verbs:
   - list
+  - get
 ---
 apiVersion: apps/v1
 kind: DaemonSet
