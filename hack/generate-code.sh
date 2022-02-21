@@ -1,3 +1,9 @@
 #!/usr/bin/env bash
 
-controller-gen object crd:crdVersions=v1,trivialVersions=false paths="./..." output:crd:artifacts:config=doc/crds
+GO=${GO:-go}
+
+${GO} run ./vendor/sigs.k8s.io/controller-tools/cmd/controller-gen object \
+    crd:crdVersions=v1,trivialVersions=false \
+    paths="./..." \
+    output:crd:artifacts:config=doc/crds
+

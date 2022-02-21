@@ -18,7 +18,7 @@ require (
 	k8s.io/apimachinery v0.22.6
 	k8s.io/client-go v0.22.6
 	sigs.k8s.io/controller-runtime v0.8.2
-	sigs.k8s.io/controller-tools v0.4.1 // indirect
+	sigs.k8s.io/controller-tools v0.4.1
 )
 
 replace github.com/gogo/protobuf => github.com/gogo/protobuf v1.3.2
