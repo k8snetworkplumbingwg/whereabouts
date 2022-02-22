@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net"
+	"os"
 	"testing"
 
 	"time"
@@ -22,17 +23,11 @@ import (
 
 // Global Constants
 const (
-	testNetworkName   = "wa-nad"
-	wbNamespace       = "kube-system"
-	testNamespace     = "default"
-	timeout           = 5000
-	testImage         = "quay.io/dougbtv/alpine:latest"
-	ipv4TestRange     = "10.10.0.0/16"
-	ipv4RangePoolName = "10.10.0.0-16"
-	singlePodName     = "whereabouts-basic-test"
-	rsName            = "whereabouts-scale-test"
-	wbLabelEqual      = "tier=whereabouts-scale-test"
-	wbLabelColon      = "tier: whereabouts-scale-test"
+	testNetworkName = "wa-nad"
+	testNamespace   = "default"
+	testImage       = "quay.io/dougbtv/alpine:latest"
+	ipv4TestRange   = "10.10.0.0/16"
+	singlePodName   = "whereabouts-basic-test"
 )
 
 // ClientInfo contains information given from k8s client
@@ -50,25 +45,25 @@ var _ = Describe("Whereabouts functionality", func() {
 	Context("Test setup", func() {
 		// Declare variables
 		var (
-			err                 error
-			numComputeNodes     int
-			kubeconfig          *string
-			fillPercentCapacity int
-			numThrashIter       int
-			label               map[string]string
-			annotations         map[string]string
-			clientInfo          ClientInfo
-			clientSet           *kubernetes.Clientset
-			netClient           *netclient.K8sCniCncfIoV1Client
-			netAttachDef        *nettypes.NetworkAttachmentDefinition
-			config              *rest.Config
-			netStatus           []nettypes.NetworkStatus
-			pod                 *core.Pod
+			err          error
+			kubeconfig   string
+			label        map[string]string
+			annotations  map[string]string
+			clientInfo   ClientInfo
+			clientSet    *kubernetes.Clientset
+			netClient    netclient.K8sCniCncfIoV1Interface
+			netAttachDef *nettypes.NetworkAttachmentDefinition
+			config       *rest.Config
+			netStatus    []nettypes.NetworkStatus
+			pod          *core.Pod
 		)
 
 		BeforeEach(func() {
+			var found bool
+			kubeconfig, found = os.LookupEnv("KUBECONFIG")
+			Expect(found).To(BeTrue(), "must provide the path to the kubeconfig via the `KUBECONFIG` env variable")
 
-			config, err = clientcmd.BuildConfigFromFlags("", *kubeconfig)
+			config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
 			Expect(err).To(BeNil())
 
 			// Create k8sclient and ClientInfo object
