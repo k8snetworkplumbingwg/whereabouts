@@ -80,7 +80,9 @@ func (i *Client) ListIPPools(ctx context.Context) ([]storage.IPPool, error) {
 	logging.Debugf("listing IP pools")
 	ipPoolList := &whereaboutsv1alpha1.IPPoolList{}
 
-	if err := i.client.List(ctx, ipPoolList, &client.ListOptions{}); err != nil {
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, storage.RequestTimeout)
+	defer cancel()
+	if err := i.client.List(ctxWithTimeout, ipPoolList, &client.ListOptions{}); err != nil {
 		return nil, err
 	}
 
@@ -97,8 +99,11 @@ func (i *Client) ListIPPools(ctx context.Context) ([]storage.IPPool, error) {
 	return whereaboutsApiIPPoolList, nil
 }
 
-func (i *Client) ListPods() ([]v1.Pod, error) {
-	podList, err := i.clientSet.CoreV1().Pods(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
+func (i *Client) ListPods(ctx context.Context) ([]v1.Pod, error) {
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, storage.RequestTimeout)
+	defer cancel()
+
+	podList, err := i.clientSet.CoreV1().Pods(metav1.NamespaceAll).List(ctxWithTimeout, metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}

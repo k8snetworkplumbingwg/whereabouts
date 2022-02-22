@@ -37,7 +37,6 @@ var _ = Describe("IPReconciler", func() {
 
 	newIPReconciler := func(orphanedIPs ...OrphanedIPReservations) *ReconcileLooper {
 		reconciler := &ReconcileLooper{
-			ctx:         context.TODO(),
 			orphanedIPs: orphanedIPs,
 		}
 
@@ -50,7 +49,7 @@ var _ = Describe("IPReconciler", func() {
 		})
 
 		It("does not delete anything", func() {
-			reconciledIPs, err := ipReconciler.ReconcileIPPools()
+			reconciledIPs, err := ipReconciler.ReconcileIPPools(context.TODO())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(reconciledIPs).To(BeEmpty())
 		})
@@ -78,7 +77,7 @@ var _ = Describe("IPReconciler", func() {
 		})
 
 		It("does delete the orphaned IP address", func() {
-			reconciledIPs, err := ipReconciler.ReconcileIPPools()
+			reconciledIPs, err := ipReconciler.ReconcileIPPools(context.TODO())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(reconciledIPs).To(Equal([]net.IP{net.ParseIP(firstIPInRange)}))
 		})
@@ -98,7 +97,7 @@ var _ = Describe("IPReconciler", func() {
 			})
 
 			It("does delete *only the orphaned* the IP address", func() {
-				reconciledIPs, err := ipReconciler.ReconcileIPPools()
+				reconciledIPs, err := ipReconciler.ReconcileIPPools(context.TODO())
 				Expect(err).NotTo(HaveOccurred())
 				Expect(reconciledIPs).To(ConsistOf([]net.IP{net.ParseIP("192.168.14.2")}))
 			})
@@ -122,7 +121,7 @@ var _ = Describe("IPReconciler", func() {
 			})
 
 			It("errors when attempting to clean up the IP address", func() {
-				reconciledIPs, err := ipReconciler.ReconcileIPPools()
+				reconciledIPs, err := ipReconciler.ReconcileIPPools(context.TODO())
 				Expect(err).To(MatchError(fmt.Sprintf("Did not find reserved IP for container %s", reservationPodRef)))
 				Expect(reconciledIPs).To(BeEmpty())
 			})
