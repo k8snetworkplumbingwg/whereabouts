@@ -27,7 +27,7 @@ jobs:
       run: ./hack/install-kubebuilder-tools.sh
 
     - name: Generate code
-      run: ./hack/generate-code.sh
+      run: ./hack/generate-code.sh && hack/verify-codegen.sh
 
     - name: Run go fmt
       run: go fmt ./...
