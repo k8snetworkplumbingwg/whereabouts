@@ -10,17 +10,14 @@ import (
 	"time"
 
 	v1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 )
 
-// return a condition function that indicates whether the given pod is
-// currently running
 func isPodRunning(cs *kubernetes.Clientset, podName, namespace string) wait.ConditionFunc {
 	return func() (bool, error) {
-		fmt.Printf(".") // progress bar!
-
 		pod, err := cs.CoreV1().Pods(namespace).Get(context.Background(), podName, metav1.GetOptions{})
 		if err != nil {
 			return false, err
@@ -39,13 +36,32 @@ func isPodRunning(cs *kubernetes.Clientset, podName, namespace string) wait.Cond
 	}
 }
 
-// Poll up to timeout seconds for pod to enter steady state (running or succeeded state).
+func isPodGone(cs *kubernetes.Clientset, podName, namespace string) wait.ConditionFunc {
+	return func() (bool, error) {
+		pod, err := cs.CoreV1().Pods(namespace).Get(context.Background(), podName, metav1.GetOptions{})
+		if err != nil && k8serrors.IsNotFound(err) {
+			return true, nil
+		} else if err != nil {
+			return false, fmt.Errorf("something weird happened with the pod, which is in state: [%s]. Errors: %w", pod.Status.Phase, err)
+		}
+
+		return false, nil
+	}
+}
+
+// WaitForPodReady polls up to timeout seconds for pod to enter steady state (running or succeeded state).
 // Returns an error if the pod never enters a steady state.
 func WaitForPodReady(cs *kubernetes.Clientset, namespace, podName string, timeout time.Duration) error {
 	return wait.PollImmediate(time.Second, timeout, isPodRunning(cs, podName, namespace))
 }
 
-// Returns the list of currently scheduled or running pods in `namespace` with the given selector
+// WaitForPodToDisappear polls up to timeout seconds for pod to be gone from the Kubernets cluster.
+// Returns an error if the pod is never deleted, or if GETing it returns an error other than `NotFound`.
+func WaitForPodToDisappear(cs *kubernetes.Clientset, namespace, podName string, timeout time.Duration) error {
+	return wait.PollImmediate(time.Second, timeout, isPodGone(cs, podName, namespace))
+}
+
+// ListPods returns the list of currently scheduled or running pods in `namespace` with the given selector
 func ListPods(cs *kubernetes.Clientset, namespace, selector string) (*v1.PodList, error) {
 	listOptions := metav1.ListOptions{LabelSelector: selector}
 	podList, err := cs.CoreV1().Pods(namespace).List(context.Background(), listOptions)
@@ -56,7 +72,7 @@ func ListPods(cs *kubernetes.Clientset, namespace, selector string) (*v1.PodList
 	return podList, nil
 }
 
-// Wait up to timeout seconds for all pods in 'namespace' with given 'selector' to enter provided state
+// WaitForPodBySelector waits up to timeout seconds for all pods in 'namespace' with given 'selector' to enter provided state
 // If no pods are found, return nil.
 func WaitForPodBySelector(cs *kubernetes.Clientset, namespace, selector string, timeout int) error {
 	podList, err := ListPods(cs, namespace, selector)
@@ -64,7 +80,6 @@ func WaitForPodBySelector(cs *kubernetes.Clientset, namespace, selector string, 
 		return err
 	}
 
-	// if there are no pods that match
 	if len(podList.Items) == 0 {
 		return nil
 	}

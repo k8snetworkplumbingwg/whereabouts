@@ -3,17 +3,19 @@ package whereabouts_e2e
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"os"
+	"strings"
 	"testing"
-
 	"time"
+
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 
 	nettypes "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 	netclient "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/client/clientset/versioned/typed/k8s.cni.cncf.io/v1"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -21,20 +23,15 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-// Global Constants
 const (
 	testNetworkName = "wa-nad"
 	testNamespace   = "default"
 	testImage       = "quay.io/dougbtv/alpine:latest"
 	ipv4TestRange   = "10.10.0.0/16"
 	singlePodName   = "whereabouts-basic-test"
+	createTimeout   = 10 * time.Second
+	deleteTimeout   = 2 * createTimeout
 )
-
-// ClientInfo contains information given from k8s client
-type ClientInfo struct {
-	Client    kubernetes.Interface
-	NetClient netclient.K8sCniCncfIoV1Interface
-}
 
 func TestWhereaboutsE2E(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -43,49 +40,24 @@ func TestWhereaboutsE2E(t *testing.T) {
 
 var _ = Describe("Whereabouts functionality", func() {
 	Context("Test setup", func() {
-		// Declare variables
 		var (
-			err          error
-			kubeconfig   string
-			label        map[string]string
-			annotations  map[string]string
-			clientInfo   ClientInfo
-			clientSet    *kubernetes.Clientset
-			netClient    netclient.K8sCniCncfIoV1Interface
+			clientInfo   *ClientInfo
 			netAttachDef *nettypes.NetworkAttachmentDefinition
-			config       *rest.Config
-			netStatus    []nettypes.NetworkStatus
 			pod          *core.Pod
 		)
 
 		BeforeEach(func() {
-			var found bool
-			kubeconfig, found = os.LookupEnv("KUBECONFIG")
-			Expect(found).To(BeTrue(), "must provide the path to the kubeconfig via the `KUBECONFIG` env variable")
+			config, err := clusterConfig()
+			Expect(err).NotTo(HaveOccurred())
 
-			config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
-			Expect(err).To(BeNil())
+			clientInfo, err = NewClientInfo(config)
+			Expect(err).NotTo(HaveOccurred())
 
-			// Create k8sclient and ClientInfo object
-			clientSet, err = kubernetes.NewForConfig(config)
-			Expect(err).To(BeNil())
-			netClient, err = netclient.NewForConfig(config)
-			Expect(err).To(BeNil())
-
-			clientInfo = ClientInfo{
-				Client:    clientSet,
-				NetClient: netClient,
-			}
 			netAttachDef = macvlanNetworkWithWhereaboutsIPAMNetwork()
 
-			label = make(map[string]string)
-			annotations = make(map[string]string)
-			annotations["k8s.v1.cni.cncf.io/networks"] = testNetworkName
-
-			// Create a net-attach-def
 			By("creating a NetworkAttachmentDefinition for whereabouts")
 			_, err = clientInfo.addNetAttachDef(netAttachDef)
-			Expect(err).To(BeNil())
+			Expect(err).NotTo(HaveOccurred())
 		})
 
 		AfterEach(func() {
@@ -95,35 +67,112 @@ var _ = Describe("Whereabouts functionality", func() {
 		Context("Single pod tests", func() {
 			BeforeEach(func() {
 				By("creating a pod with whereabouts net-attach-def")
-				label["tier"] = singlePodName
-				pod = provisionPod(label, annotations, clientSet)
+				var err error
+				pod, err = clientInfo.provisionPod(
+					podTierLabel(singlePodName),
+					podNetworkSelectionElements(testNetworkName),
+				)
+				Expect(err).NotTo(HaveOccurred())
 			})
 
 			AfterEach(func() {
 				By("deleting pod with whereabouts net-attach-def")
-				deletePod(pod, clientSet)
+				Expect(clientInfo.deletePod(pod)).To(Succeed())
 			})
 
-			It("allocates a single pod with the correct IP range", func() {
-				// Get net1 IP address from pod
+			It("allocates a single pod within the correct IP range", func() {
 				By("checking pod IP is within whereabouts IPAM range")
-				secondaryIfaceIP := secondaryIfaceIPValue(pod, netStatus)
-				Expect(inRange(ipv4TestRange, secondaryIfaceIP)).To(BeTrue())
+				secondaryIfaceIP, err := secondaryIfaceIPValue(pod)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(inRange(ipv4TestRange, secondaryIfaceIP)).To(Succeed())
 			})
 		})
 	})
 })
 
-// AddNetAttachDef adds a net-attach-def into kubernetes
-// Returns a NAD object and an error variable
+func clusterConfig() (*rest.Config, error) {
+	const kubeconfig = "KUBECONFIG"
+
+	kubeconfigPath, found := os.LookupEnv(kubeconfig)
+	if !found {
+		return nil, fmt.Errorf("must provide the path to the kubeconfig via the `KUBECONFIG` env variable")
+	}
+
+	config, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
+	if err != nil {
+		return nil, err
+	}
+	return config, nil
+}
+
+func podTierLabel(podTier string) map[string]string {
+	const tier = "tier"
+	return map[string]string{tier: podTier}
+}
+
+func podNetworkSelectionElements(networkNames ...string) map[string]string {
+	return map[string]string{
+		nettypes.NetworkAttachmentAnnot: strings.Join(networkNames, ","),
+	}
+}
+
+type ClientInfo struct {
+	Client    *kubernetes.Clientset
+	NetClient netclient.K8sCniCncfIoV1Interface
+}
+
+func NewClientInfo(config *rest.Config) (*ClientInfo, error) {
+	clientSet, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return nil, err
+	}
+	netClient, err := netclient.NewForConfig(config)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ClientInfo{
+		Client:    clientSet,
+		NetClient: netClient,
+	}, nil
+}
+
 func (c *ClientInfo) addNetAttachDef(netattach *nettypes.NetworkAttachmentDefinition) (*nettypes.NetworkAttachmentDefinition, error) {
 	return c.NetClient.NetworkAttachmentDefinitions(netattach.ObjectMeta.Namespace).Create(context.TODO(), netattach, metav1.CreateOptions{})
 }
 
-// DelNetAttachDef removes a net-attach-def from kubernetes
-// Returns an error variable
 func (c *ClientInfo) delNetAttachDef(netattach *nettypes.NetworkAttachmentDefinition) error {
 	return c.NetClient.NetworkAttachmentDefinitions(netattach.ObjectMeta.Namespace).Delete(context.TODO(), netattach.Name, metav1.DeleteOptions{})
+}
+
+func (c *ClientInfo) provisionPod(label, annotations map[string]string) (*core.Pod, error) {
+	pod := podObject(label, annotations)
+	pod, err := c.Client.CoreV1().Pods(pod.Namespace).Create(context.Background(), pod, metav1.CreateOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	if err := WaitForPodReady(c.Client, pod.Namespace, pod.Name, createTimeout); err != nil {
+		return nil, err
+	}
+
+	pod, err = c.Client.CoreV1().Pods(pod.Namespace).Get(context.Background(), pod.Name, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	return pod, nil
+}
+
+func (c *ClientInfo) deletePod(pod *core.Pod) error {
+	if err := c.Client.CoreV1().Pods(pod.Namespace).Delete(context.TODO(), pod.Name, metav1.DeleteOptions{}); err != nil {
+		return err
+	}
+
+	if err := WaitForPodToDisappear(c.Client, pod.GetNamespace(), pod.GetName(), deleteTimeout); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Returns a network attachment definition object configured by provided parameters
@@ -143,7 +192,6 @@ func generateNetAttachDefSpec(name, namespace, config string) *nettypes.NetworkA
 	}
 }
 
-// Returns a network attachment definition object configured for whereabouts
 func macvlanNetworkWithWhereaboutsIPAMNetwork() *nettypes.NetworkAttachmentDefinition {
 	macvlanConfig := `{
         "cniVersion": "0.3.0",
@@ -168,34 +216,6 @@ func macvlanNetworkWithWhereaboutsIPAMNetwork() *nettypes.NetworkAttachmentDefin
 	return generateNetAttachDefSpec(testNetworkName, testNamespace, macvlanConfig)
 }
 
-// returns a pod object and creates the pod in kubernetes
-func provisionPod(label, annotations map[string]string, clientSet *kubernetes.Clientset) *core.Pod {
-	// Create pod
-	pod := podObject(label, annotations)
-	pod, err := clientSet.CoreV1().Pods(pod.Namespace).Create(context.Background(), pod, metav1.CreateOptions{})
-	Expect(err).To(BeNil())
-
-	// Wait for pod to become ready
-	Expect(WaitForPodReady(clientSet, pod.Namespace, pod.Name, 10*time.Second)).To(Succeed())
-
-	// Update pod object
-	pod, err = clientSet.CoreV1().Pods(pod.Namespace).Get(context.Background(), pod.Name, metav1.GetOptions{})
-	Expect(err).To(BeNil())
-
-	return pod
-}
-
-// takes in a pod object and deletes it in kubernetes - the function also waits for the pod to explicitly not exist (aka finish terminating)
-func deletePod(pod *core.Pod, clientSet *kubernetes.Clientset) {
-	Expect(clientSet.CoreV1().Pods(pod.Namespace).Delete(context.TODO(), pod.Name, metav1.DeleteOptions{})).To(Succeed())
-	Eventually(func() error {
-		_, err := clientSet.CoreV1().Pods(pod.Namespace).Get(context.Background(), pod.Name, metav1.GetOptions{})
-		return err
-	}, 20*time.Second, time.Second).ShouldNot(BeNil()) // eventually, to make this cleaner, instead of this, check if error is NotFound/IsNotFound
-}
-
-// Takes in a label and whereabouts annotations
-// Returns a pod object with a whereabouts annotation
 func podObject(label, annotations map[string]string) *core.Pod {
 	return &core.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -220,7 +240,8 @@ func containerCmd() []string {
 	return []string{"/bin/ash", "-c", "trap : TERM INT; sleep infinity & wait"}
 }
 
-func filterNetworkStatus(networkStatuses []nettypes.NetworkStatus, predicate func(nettypes.NetworkStatus) bool) *nettypes.NetworkStatus {
+func filterNetworkStatus(
+	networkStatuses []nettypes.NetworkStatus, predicate func(nettypes.NetworkStatus) bool) *nettypes.NetworkStatus {
 	for i, networkStatus := range networkStatuses {
 		if predicate(networkStatus) {
 			return &networkStatuses[i]
@@ -229,25 +250,37 @@ func filterNetworkStatus(networkStatuses []nettypes.NetworkStatus, predicate fun
 	return nil
 }
 
-func secondaryIfaceIPValue(pod *core.Pod, netStatus []nettypes.NetworkStatus) string {
+func secondaryIfaceIPValue(pod *core.Pod) (string, error) {
 	podNetStatus, found := pod.Annotations[nettypes.NetworkStatusAnnot]
-	Expect(found).To(BeTrue(), "expected the pod to have a `networks-status` annotation")
-	Expect(json.Unmarshal([]byte(podNetStatus), &netStatus)).To(Succeed())
-	Expect(netStatus).NotTo(BeEmpty())
-	// Check if interface is net1 and if IP is in range
+	if !found {
+		return "", fmt.Errorf("the pod must feature the `networks-status` annotation")
+	}
+
+	var netStatus []nettypes.NetworkStatus
+	if err := json.Unmarshal([]byte(podNetStatus), &netStatus); err != nil {
+		return "", err
+	}
+
 	secondaryInterfaceNetworkStatus := filterNetworkStatus(netStatus, func(status nettypes.NetworkStatus) bool {
 		return status.Interface == "net1"
 	})
-	Expect(secondaryInterfaceNetworkStatus.IPs).NotTo(BeEmpty())
-	secondaryIfaceIP := secondaryInterfaceNetworkStatus.IPs[0]
 
-	return secondaryIfaceIP
+	if len(secondaryInterfaceNetworkStatus.IPs) == 0 {
+		return "", fmt.Errorf("the pod does not have IPs for its secondary interfaces")
+	}
+
+	return secondaryInterfaceNetworkStatus.IPs[0], nil
 }
 
-func inRange(cidr string, ip string) bool {
+func inRange(cidr string, ip string) error {
 	_, cidrRange, err := net.ParseCIDR(cidr)
-	Expect(err).To(BeNil())
-	ipInRangeCandidate := net.ParseIP(ip)
+	if err != nil {
+		return err
+	}
 
-	return cidrRange.Contains(ipInRangeCandidate)
+	if cidrRange.Contains(net.ParseIP(ip)) {
+		return nil
+	}
+
+	return fmt.Errorf("ip [%s] is NOT in range %s", ip, cidr)
 }
