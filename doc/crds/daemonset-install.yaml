@@ -47,6 +47,14 @@ rules:
   - pods
   verbs:
   - list
+  - watch
+- apiGroups: ["k8s.cni.cncf.io"]
+  resources:
+    - network-attachment-definitions
+  verbs:
+    - get
+    - list
+    - watch
 ---
 apiVersion: apps/v1
 kind: DaemonSet
@@ -78,6 +86,12 @@ spec:
         effect: NoSchedule
       containers:
       - name: whereabouts
+        command: [ "/bin/sh" ]
+        args:
+          - -c
+          - >
+            SLEEP=false /install-cni.sh &&
+            /ip-control-loop -log-level debug
         image: ghcr.io/k8snetworkplumbingwg/whereabouts:latest-amd64
         env:
         - name: WHEREABOUTS_NAMESPACE
