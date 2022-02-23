@@ -30,7 +30,7 @@ func canonicalizeIP(ip *net.IP) error {
 // LoadIPAMConfig creates IPAMConfig using json encoded configuration provided
 // as `bytes`. At the moment values provided in envArgs are ignored so there
 // is no possibility to overload the json configuration using envArgs
-func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, error) {
+func LoadIPAMConfig(bytes []byte, envArgs string, extraConfigPaths ...string) (*types.IPAMConfig, string, error) {
 
 	// We first load up what we already have, before we start reading a file...
 	n := types.Net{
@@ -56,6 +56,7 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 
 	// Once we have our basics, let's look for our (optional) configuration file
 	confdirs := []string{"/etc/kubernetes/cni/net.d/whereabouts.d/whereabouts.conf", "/etc/cni/net.d/whereabouts.d/whereabouts.conf"}
+	confdirs = append(confdirs, extraConfigPaths...)
 	// We prefix the optional configuration path (so we look there first)
 	if n.IPAM.ConfigurationPath != "" {
 		confdirs = append([]string{n.IPAM.ConfigurationPath}, confdirs...)
