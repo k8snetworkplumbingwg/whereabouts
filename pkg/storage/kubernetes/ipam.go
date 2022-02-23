@@ -91,10 +91,7 @@ func toAllocationMap(reservelist []whereaboutstypes.IPReservation, firstip net.I
 
 // GetIPPool returns a storage.IPPool for the given range
 func (i *KubernetesIPAM) GetIPPool(ctx context.Context, ipRange string) (storage.IPPool, error) {
-	// v6 filter
-	normalized := strings.ReplaceAll(ipRange, ":", "-")
-	// replace subnet cidr slash
-	normalized = strings.ReplaceAll(normalized, "/", "-")
+	normalized := NormalizeRange(ipRange)
 
 	pool, err := i.getPool(ctx, normalized, ipRange)
 	if err != nil {
@@ -107,6 +104,14 @@ func (i *KubernetesIPAM) GetIPPool(ctx context.Context, ipRange string) (storage
 	}
 
 	return &KubernetesIPPool{i.client, i.containerID, firstIP, pool}, nil
+}
+
+func NormalizeRange(ipRange string) string {
+	// v6 filter
+	normalized := strings.ReplaceAll(ipRange, ":", "-")
+	// replace subnet cidr slash
+	normalized = strings.ReplaceAll(normalized, "/", "-")
+	return normalized
 }
 
 func (i *KubernetesIPAM) getPool(ctx context.Context, name string, iprange string) (*whereaboutsv1alpha1.IPPool, error) {
