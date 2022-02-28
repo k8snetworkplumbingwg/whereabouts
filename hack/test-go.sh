@@ -5,4 +5,4 @@ set -e -x
 echo "Linting go code..."
 golint ./cmd ./pkg
 echo "Running go tests..."
-KUBEBUILDER_ASSETS="$(pwd)/bin" go test -v -covermode=count -coverprofile=coverage.out ./...
+KUBEBUILDER_ASSETS="$(pwd)/bin" go test -v -covermode=count -coverprofile=coverage.out $(go list ./... | grep -v e2e | tr "\n" " ")
