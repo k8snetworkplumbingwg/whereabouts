@@ -61,7 +61,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 	}
 	if err != nil {
 		logging.Errorf("Error at storage engine: %s", err)
-		return fmt.Errorf("Error at storage engine: %w", err)
+		return fmt.Errorf("error at storage engine: %w", err)
 	}
 
 	// Determine if v4 or v6.

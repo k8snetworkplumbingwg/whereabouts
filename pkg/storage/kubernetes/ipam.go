@@ -412,7 +412,7 @@ func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *Kubernete
 	switch mode {
 	case whereaboutstypes.Allocate, whereaboutstypes.Deallocate:
 	default:
-		return newip, fmt.Errorf("Got an unknown mode passed to IPManagement: %v", mode)
+		return newip, fmt.Errorf("got an unknown mode passed to IPManagement: %v", mode)
 	}
 
 	var overlappingrangestore storage.OverlappingRangeStore
@@ -496,7 +496,7 @@ RETRYLOOP:
 		// Clean out any dummy records from the reservelist...
 		var usereservelist []whereaboutstypes.IPReservation
 		for _, rl := range updatedreservelist {
-			if rl.IsAllocated != true {
+			if !rl.IsAllocated {
 				usereservelist = append(usereservelist, rl)
 			}
 		}

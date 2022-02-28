@@ -108,11 +108,7 @@ func (i *Client) ListPods(ctx context.Context) ([]v1.Pod, error) {
 		return nil, err
 	}
 
-	var podEntries []v1.Pod
-	for _, pod := range podList.Items {
-		podEntries = append(podEntries, pod)
-	}
-	return podEntries, nil
+	return podList.Items, nil
 }
 
 func (i *Client) ListOverlappingIPs(ctx context.Context) ([]whereaboutsv1alpha1.OverlappingRangeIPReservation, error) {
@@ -121,11 +117,7 @@ func (i *Client) ListOverlappingIPs(ctx context.Context) ([]whereaboutsv1alpha1.
 		return nil, err
 	}
 
-	var clusterWiderReservations []whereaboutsv1alpha1.OverlappingRangeIPReservation
-	for _, reservationInfo := range overlappingIPsList.Items {
-		clusterWiderReservations = append(clusterWiderReservations, reservationInfo)
-	}
-	return clusterWiderReservations, nil
+	return overlappingIPsList.Items, nil
 }
 
 func (i *Client) DeleteOverlappingIP(ctx context.Context, clusterWideIP *whereaboutsv1alpha1.OverlappingRangeIPReservation) error {
