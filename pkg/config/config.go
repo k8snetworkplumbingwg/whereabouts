@@ -70,7 +70,7 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 			jsonFile, err := os.Open(confpath)
 
 			if err != nil {
-				return nil, "", fmt.Errorf("Error opening flat configuration file @ %s with: %s", confpath, err)
+				return nil, "", fmt.Errorf("error opening flat configuration file @ %s with: %s", confpath, err)
 			}
 
 			defer jsonFile.Close()
@@ -160,7 +160,7 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 	if n.IPAM.GatewayStr != "" {
 		gwip := net.ParseIP(n.IPAM.GatewayStr)
 		if gwip == nil {
-			return nil, "", fmt.Errorf("Couldn't parse gateway IP: %s", n.IPAM.GatewayStr)
+			return nil, "", fmt.Errorf("couldn't parse gateway IP: %s", n.IPAM.GatewayStr)
 		}
 		n.IPAM.Gateway = gwip
 	}

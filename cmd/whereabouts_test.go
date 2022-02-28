@@ -610,7 +610,7 @@ var _ = Describe("Whereabouts operations", func() {
 
 		// assigning more IPs should result in error due to the defined range_start - range_end
 		args := &skel.CmdArgs{
-			ContainerID: fmt.Sprintf("dummy-failure"),
+			ContainerID: "dummy-failure",
 			Netns:       nspath,
 			IfName:      ifname,
 			StdinData:   []byte(conf),

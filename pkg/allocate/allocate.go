@@ -56,7 +56,7 @@ func IterateForDeallocation(
 	foundidx := matchingFunction(reservelist, containerID)
 	// Check if it's a valid index
 	if foundidx < 0 {
-		return reservelist, nil, fmt.Errorf("Did not find reserved IP for container %v", containerID)
+		return reservelist, nil, fmt.Errorf("did not find reserved IP for container %v", containerID)
 	}
 
 	returnip := reservelist[foundidx].IP
@@ -91,8 +91,7 @@ func byteSliceAdd(ar1, ar2 []byte) ([]byte, error) {
 
 	sumByte := make([]byte, 16)
 	for n := range ar1 {
-		var sum uint
-		sum = uint(ar1[15-n]) + uint(ar2[15-n]) + carry
+		sum := uint(ar1[15-n]) + uint(ar2[15-n]) + carry
 		carry = 0
 		if sum > 255 {
 			carry = 1
@@ -263,7 +262,7 @@ func GetIPRange(ip net.IP, ipnet net.IPNet) (net.IP, net.IP, error) {
 
 	// Error when the mask isn't large enough.
 	if masklen < 2 {
-		return nil, nil, fmt.Errorf("Net mask is too short, must be 2 or more: %v", masklen)
+		return nil, nil, fmt.Errorf("net mask is too short, must be 2 or more: %v", masklen)
 	}
 
 	// get network part
