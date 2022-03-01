@@ -4,13 +4,15 @@ ADD . /go/src/github.com/k8snetworkplumbingwg/whereabouts
 WORKDIR /go/src/github.com/k8snetworkplumbingwg/whereabouts
 ENV CGO_ENABLED=1
 ENV GO111MODULE=on
-RUN go build -mod vendor -o bin/whereabouts cmd/whereabouts.go
+RUN go build -mod vendor -o bin/whereabouts     cmd/whereabouts.go
+RUN go build -mod vendor -o bin/ip-reconciler   cmd/reconciler/ip.go cmd/reconciler/errors.go
 WORKDIR /
 
 FROM openshift/origin-base
 RUN mkdir -p /usr/src/whereabouts/images && \
        mkdir -p /usr/src/whereabouts/bin
-COPY --from=builder /go/src/github.com/k8snetworkplumbingwg/whereabouts/bin/whereabouts /usr/src/whereabouts/bin
+COPY --from=builder /go/src/github.com/k8snetworkplumbingwg/whereabouts/bin/whereabouts   /usr/src/whereabouts/bin
+COPY --from=builder /go/src/github.com/k8snetworkplumbingwg/whereabouts/bin/ip-reconciler /usr/src/whereabouts/bin
 
 LABEL org.opencontainers.image.source https://github.com/k8snetworkplumbingwg/whereabouts
 LABEL io.k8s.display-name="Whereabouts CNI" \
