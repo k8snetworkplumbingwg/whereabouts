@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"strings"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/tools/cache"
 
 	nadv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 	nadlister "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/client/listers/k8s.cni.cncf.io/v1"
@@ -20,14 +22,26 @@ import (
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 )
 
+const (
+	defaultMountPath      = "/host"
+	whereaboutsConfigPath = "/etc/cni/net.d/whereabouts.d/whereabouts.conf"
+)
+
+type gargageCollector func(ctx context.Context, mode int, ipamConf types.IPAMConfig, containerID string, podRef string) (net.IPNet, error)
+
 type handler struct {
 	netAttachDefLister nadlister.NetworkAttachmentDefinitionLister
 	ipPoolsLister      wblister.IPPoolLister
+	mountPath          string
+	cleanupFunc        gargageCollector
 }
 
 func (h *handler) deletePodHandler(obj interface{}) {
-	oldPod := obj.(*v1.Pod)
-	if oldPod == nil {
+	oldPod, err := podFromTombstone(obj)
+	if err != nil {
+		logging.Errorf("error casting payload to Pod: %v", err)
+		return
+	} else if oldPod == nil {
 		_ = logging.Errorf("pod deleted but could not unmarshall into struct: %v", obj)
 		return
 	}
@@ -53,8 +67,12 @@ func (h *handler) deletePodHandler(obj interface{}) {
 			return
 		}
 
+		mountPath := defaultMountPath
+		if h.mountPath != "" {
+			mountPath = h.mountPath
+		}
 		logging.Verbosef("the NAD's config: %s", nad.Spec)
-		ipamConfig, err := ipamConfiguration(nad, podNamespace, podName)
+		ipamConfig, err := ipamConfiguration(nad, podNamespace, podName, mountPath)
 		if err != nil {
 			logging.Errorf("failed to create an IPAM configuration for the pod %s iface %s: %+v", podID(podNamespace, podName), ifaceStatus.Name, err)
 			return
@@ -68,12 +86,30 @@ func (h *handler) deletePodHandler(obj interface{}) {
 
 		logging.Verbosef("pool range [%s]", pool.Spec.Range)
 		for _, allocation := range pool.Spec.Allocations {
-			if err := removeStaleIPAllocation(allocation, podNamespace, podName, ipamConfig); err != nil {
-				logging.Errorf("failed to remove the allocation %v: %v", allocation, err)
-				return
+			if allocation.PodRef == podID(podNamespace, podName) {
+				logging.Verbosef("stale allocation to cleanup: %+v", allocation)
+
+				if _, err := h.cleanupFunc(context.TODO(), types.Deallocate, *ipamConfig, allocation.ContainerID, podID(podNamespace, podName)); err != nil {
+					logging.Errorf("failed to cleanup allocation: %v", err)
+				}
 			}
 		}
 	}
+}
+
+func podFromTombstone(obj interface{}) (*v1.Pod, error) {
+	pod, isPod := obj.(*v1.Pod)
+	if !isPod {
+		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
+		if !ok {
+			return nil, fmt.Errorf("received unexpected object: %v", obj)
+		}
+		pod, ok = tombstone.Obj.(*v1.Pod)
+		if !ok {
+			return nil, fmt.Errorf("deletedFinalStateUnknown contained non-Pod object: %v", tombstone.Obj)
+		}
+	}
+	return pod, nil
 }
 
 func (h *handler) ifaceNetAttachDef(ifaceStatus nadv1.NetworkStatus) (*nadv1.NetworkAttachmentDefinition, error) {
@@ -117,9 +153,8 @@ func podNetworkStatus(pod *v1.Pod) ([]nadv1.NetworkStatus, error) {
 	return ifaceStatuses, nil
 }
 
-func ipamConfiguration(nad *nadv1.NetworkAttachmentDefinition, podNamespace string, podName string) (*types.IPAMConfig, error) {
-	const mountPath = "/host"
-	const mounterWhereaboutsConfigFilePath = mountPath + "/etc/cni/net.d/whereabouts.d/whereabouts.conf"
+func ipamConfiguration(nad *nadv1.NetworkAttachmentDefinition, podNamespace string, podName string, mountPath string) (*types.IPAMConfig, error) {
+	mounterWhereaboutsConfigFilePath := mountPath + whereaboutsConfigPath
 
 	ipamConfig, err := config.LoadIPAMConfiguration([]byte(nad.Spec.Config), "", mounterWhereaboutsConfigFilePath)
 	if err != nil {
@@ -130,17 +165,6 @@ func ipamConfiguration(nad *nadv1.NetworkAttachmentDefinition, podNamespace stri
 	ipamConfig.Kubernetes.KubeConfigPath = mountPath + ipamConfig.Kubernetes.KubeConfigPath // must use the mount path
 
 	return ipamConfig, nil
-}
-
-func removeStaleIPAllocation(allocation whereaboutsv1alpha1.IPAllocation, podNamespace string, podName string, ipamConfig *types.IPAMConfig) error {
-	if allocation.PodRef == podID(podNamespace, podName) {
-		logging.Verbosef("stale allocation to cleanup: %+v", allocation)
-
-		if _, err := wbclient.IPManagement(context.TODO(), types.Deallocate, *ipamConfig, allocation.ContainerID, podID(podNamespace, podName)); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func ipPoolsNamespace() string {

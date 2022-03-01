@@ -13,6 +13,7 @@ import (
 
 	wbinformers "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/informers/externalversions"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
+	wbclient "github.com/k8snetworkplumbingwg/whereabouts/pkg/storage/kubernetes"
 )
 
 const (
@@ -30,14 +31,15 @@ type PodController struct {
 	broadcaster             record.EventBroadcaster
 	recorder                record.EventRecorder
 	workqueue               workqueue.RateLimitingInterface
+	handler                 *handler
 }
 
 // NewPodController ...
 func NewPodController(k8sCoreInformerFactory v1coreinformerfactory.SharedInformerFactory, wbSharedInformerFactory wbinformers.SharedInformerFactory, netAttachDefInformerFactory nadinformers.SharedInformerFactory, broadcaster record.EventBroadcaster, recorder record.EventRecorder) *PodController {
-	return newPodController(k8sCoreInformerFactory, wbSharedInformerFactory, netAttachDefInformerFactory, broadcaster, recorder)
+	return newPodController(k8sCoreInformerFactory, wbSharedInformerFactory, netAttachDefInformerFactory, broadcaster, recorder, wbclient.IPManagement)
 }
 
-func newPodController(k8sCoreInformerFactory v1coreinformerfactory.SharedInformerFactory, wbSharedInformerFactory wbinformers.SharedInformerFactory, netAttachDefInformerFactory nadinformers.SharedInformerFactory, broadcaster record.EventBroadcaster, recorder record.EventRecorder) *PodController {
+func newPodController(k8sCoreInformerFactory v1coreinformerfactory.SharedInformerFactory, wbSharedInformerFactory wbinformers.SharedInformerFactory, netAttachDefInformerFactory nadinformers.SharedInformerFactory, broadcaster record.EventBroadcaster, recorder record.EventRecorder, cleanupFunc gargageCollector) *PodController {
 	k8sPodFilteredInformer := k8sCoreInformerFactory.Core().V1().Pods().Informer()
 	ipPoolInformer := wbSharedInformerFactory.Whereabouts().V1alpha1().IPPools()
 	netAttachDefInformer := netAttachDefInformerFactory.K8sCniCncfIo().V1().NetworkAttachmentDefinitions()
@@ -50,6 +52,7 @@ func newPodController(k8sCoreInformerFactory v1coreinformerfactory.SharedInforme
 	deleteFuncHanler := handler{
 		netAttachDefLister: netAttachDefLister,
 		ipPoolsLister:      ipPoolLister,
+		cleanupFunc:        cleanupFunc,
 	}
 
 	k8sPodFilteredInformer.AddEventHandler(
@@ -69,6 +72,7 @@ func newPodController(k8sCoreInformerFactory v1coreinformerfactory.SharedInforme
 		workqueue: workqueue.NewNamedRateLimitingQueue(
 			workqueue.DefaultControllerRateLimiter(),
 			ipReconcilerQueueName),
+		handler: &deleteFuncHanler,
 	}
 }
 
