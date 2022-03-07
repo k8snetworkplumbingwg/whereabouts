@@ -13,14 +13,19 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	nettypes "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
-	netclient "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/client/clientset/versioned/typed/k8s.cni.cncf.io/v1"
-
+	v1 "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+
+	nettypes "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
+	netclient "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/client/clientset/versioned/typed/k8s.cni.cncf.io/v1"
+
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
+	wbclient "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/clientset/versioned"
+	wbstorage "github.com/k8snetworkplumbingwg/whereabouts/pkg/storage/kubernetes"
 )
 
 const (
@@ -87,6 +92,76 @@ var _ = Describe("Whereabouts functionality", func() {
 				Expect(inRange(ipv4TestRange, secondaryIfaceIP)).To(Succeed())
 			})
 		})
+
+		Context("stateful set tests", func() {
+			const (
+				initialReplicaNumber = 20
+				ipPoolNamespace      = "kube-system"
+				namespace            = "default"
+				serviceName          = "web"
+				selector             = "app=" + serviceName
+				statefulSetName      = "statefulthingy"
+			)
+
+			podList := func(podList *core.PodList) []core.Pod { return podList.Items }
+
+			BeforeEach(func() {
+				var err error
+				_, err = clientInfo.provisionStatefulSet(statefulSetName, namespace, serviceName, initialReplicaNumber)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(
+					clientInfo.Client.CoreV1().Pods(namespace).List(
+						context.TODO(), metav1.ListOptions{LabelSelector: selector})).To(
+					WithTransform(podList, HaveLen(initialReplicaNumber)))
+			})
+
+			AfterEach(func() {
+				Expect(clientInfo.deleteStatefulSet(namespace, serviceName, selector)).To(Succeed())
+				Expect(
+					clientInfo.Client.CoreV1().Pods(namespace).List(
+						context.TODO(), metav1.ListOptions{LabelSelector: selector})).To(
+					WithTransform(podList, BeEmpty()))
+
+				poolAllocations := func(ipPool *v1alpha1.IPPool) map[string]v1alpha1.IPAllocation {
+					return ipPool.Spec.Allocations
+				}
+				Expect(
+					clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(
+						context.TODO(),
+						wbstorage.NormalizeRange(ipv4TestRange),
+						metav1.GetOptions{})).To(
+					WithTransform(poolAllocations, BeEmpty()))
+			})
+
+			It("IPPools feature allocations", func() {
+				ipPool, err := clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(context.TODO(), wbstorage.NormalizeRange(ipv4TestRange), metav1.GetOptions{})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(ipPool.Spec.Allocations).To(HaveLen(initialReplicaNumber))
+			})
+
+			When("the statefulset is scaled up then down", func() {
+				const deltaInstances = 5
+
+				BeforeEach(func() {
+					Expect(clientInfo.scaleStatefulSet(serviceName, namespace, deltaInstances)).To(Succeed())
+					Expect(clientInfo.scaleStatefulSet(serviceName, namespace, -deltaInstances)).To(Succeed())
+				})
+
+				It("scale down then up does not leave stale addresses", func() {
+					const scaleTimeout = createTimeout * 2
+
+					Eventually(func() (map[string]v1alpha1.IPAllocation, error) {
+						ipPool, err := clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(
+							context.TODO(), wbstorage.NormalizeRange(ipv4TestRange), metav1.GetOptions{})
+						if err != nil {
+							return map[string]v1alpha1.IPAllocation{}, err
+						}
+
+						return ipPool.Spec.Allocations, nil
+					}, scaleTimeout).Should(HaveLen(initialReplicaNumber), "we should have one allocation for each live pod")
+				})
+			})
+		})
 	})
 })
 
@@ -119,6 +194,7 @@ func podNetworkSelectionElements(networkNames ...string) map[string]string {
 type ClientInfo struct {
 	Client    *kubernetes.Clientset
 	NetClient netclient.K8sCniCncfIoV1Interface
+	WbClient  wbclient.Interface
 }
 
 func NewClientInfo(config *rest.Config) (*ClientInfo, error) {
@@ -131,9 +207,15 @@ func NewClientInfo(config *rest.Config) (*ClientInfo, error) {
 		return nil, err
 	}
 
+	wbClient, err := wbclient.NewForConfig(config)
+	if err != nil {
+		return nil, err
+	}
+
 	return &ClientInfo{
 		Client:    clientSet,
 		NetClient: netClient,
+		WbClient:  wbClient,
 	}, nil
 }
 
@@ -146,7 +228,7 @@ func (c *ClientInfo) delNetAttachDef(netattach *nettypes.NetworkAttachmentDefini
 }
 
 func (c *ClientInfo) provisionPod(label, annotations map[string]string) (*core.Pod, error) {
-	pod := podObject(label, annotations)
+	pod := podObject("wa-e2e-pod", label, annotations)
 	pod, err := c.Client.CoreV1().Pods(pod.Namespace).Create(context.Background(), pod, metav1.CreateOptions{})
 	if err != nil {
 		return nil, err
@@ -170,6 +252,50 @@ func (c *ClientInfo) deletePod(pod *core.Pod) error {
 	}
 
 	if err := WaitForPodToDisappear(c.Client, pod.GetNamespace(), pod.GetName(), deleteTimeout); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *ClientInfo) provisionStatefulSet(statefulSetName string, namespace string, serviceName string, replicas int) (*v1.StatefulSet, error) {
+	const statefulSetCreateTimeout = 2 * createTimeout
+	statefulSet, err := c.Client.AppsV1().StatefulSets(namespace).Create(
+		context.TODO(),
+		statefulSetSpec(statefulSetName, serviceName, replicas, podNetworkSelectionElements(testNetworkName)),
+		metav1.CreateOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	if err := WaitForStatefulSetReady(
+		c.Client,
+		namespace,
+		serviceName,
+		replicas,
+		statefulSetCreateTimeout); err != nil {
+		return nil, err
+	}
+	return statefulSet, nil
+}
+
+func (c *ClientInfo) deleteStatefulSet(namespace string, serviceName string, labelSelector string) error {
+	const statefulSetDeleteTimeout = 2 * deleteTimeout
+	if err := c.Client.AppsV1().StatefulSets(namespace).Delete(context.TODO(), serviceName, metav1.DeleteOptions{}); err != nil {
+		return err
+	}
+
+	return WaitForStatefulSetGone(c.Client, namespace, serviceName, labelSelector, statefulSetDeleteTimeout)
+}
+
+func (c *ClientInfo) scaleStatefulSet(statefulSetName string, namespace string, deltaInstance int) error {
+	statefulSet, err := c.Client.AppsV1().StatefulSets(namespace).Get(context.TODO(), statefulSetName, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	newReplicas := *statefulSet.Spec.Replicas + int32(deltaInstance)
+	statefulSet.Spec.Replicas = &newReplicas
+
+	if _, err := c.Client.AppsV1().StatefulSets(namespace).Update(context.TODO(), statefulSet, metav1.UpdateOptions{}); err != nil {
 		return err
 	}
 	return nil
@@ -216,22 +342,53 @@ func macvlanNetworkWithWhereaboutsIPAMNetwork() *nettypes.NetworkAttachmentDefin
 	return generateNetAttachDefSpec(testNetworkName, testNamespace, macvlanConfig)
 }
 
-func podObject(label, annotations map[string]string) *core.Pod {
+func podObject(podName string, label, annotations map[string]string) *core.Pod {
 	return &core.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        "wa-e2e-pod",
-			Namespace:   testNamespace,
-			Labels:      label,
-			Annotations: annotations,
-		},
-		Spec: core.PodSpec{
-			Containers: []core.Container{
-				{
-					Name:    "samplepod",
-					Command: containerCmd(),
-					Image:   testImage,
-				},
+		ObjectMeta: podMeta(podName, label, annotations),
+		Spec:       podSpec("samplepod"),
+	}
+}
+
+func podSpec(containerName string) core.PodSpec {
+	return core.PodSpec{
+		Containers: []core.Container{
+			{
+				Name:    containerName,
+				Command: containerCmd(),
+				Image:   testImage,
 			},
+		},
+	}
+}
+
+func podMeta(podName string, label map[string]string, annotations map[string]string) metav1.ObjectMeta {
+	return metav1.ObjectMeta{
+		Name:        podName,
+		Namespace:   testNamespace,
+		Labels:      label,
+		Annotations: annotations,
+	}
+}
+
+func statefulSetSpec(statefulSetName string, serviceName string, replicaNumber int, annotations map[string]string) *v1.StatefulSet {
+	const labelKey = "app"
+
+	replicas := int32(replicaNumber)
+	webAppLabels := map[string]string{labelKey: serviceName}
+	return &v1.StatefulSet{
+		TypeMeta:   metav1.TypeMeta{},
+		ObjectMeta: metav1.ObjectMeta{Name: serviceName},
+		Spec: v1.StatefulSetSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: webAppLabels,
+			},
+			Template: core.PodTemplateSpec{
+				ObjectMeta: podMeta(statefulSetName, webAppLabels, annotations),
+				Spec:       podSpec(statefulSetName),
+			},
+			ServiceName:         serviceName,
+			PodManagementPolicy: v1.ParallelPodManagement,
 		},
 	}
 }
