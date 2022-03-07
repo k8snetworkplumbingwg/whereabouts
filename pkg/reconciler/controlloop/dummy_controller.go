@@ -72,7 +72,7 @@ func newDummyPodController(
 	netAttachDefInformerFactory.Start(stopChannel)
 	wbInformerFactory.Start(stopChannel)
 
-	podController.handler.mountPath = mountPath
+	podController.mountPath = mountPath
 
 	controller := &dummyPodController{
 		PodController: podController,
