@@ -11,6 +11,7 @@ import (
 	v1coreinformerfactory "k8s.io/client-go/informers"
 	k8sclient "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/record"
 
 	nadclient "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/client/clientset/versioned"
 	nadinformers "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/client/informers/externalversions"
@@ -33,7 +34,8 @@ func newDummyPodController(
 	wbClient wbclient.Interface,
 	nadClient nadclient.Interface,
 	stopChannel chan struct{},
-	mountPath string) (*dummyPodController, error) {
+	mountPath string,
+	recorder record.EventRecorder) (*dummyPodController, error) {
 
 	const noResyncPeriod = 0
 	netAttachDefInformerFactory := nadinformers.NewSharedInformerFactory(nadClient, noResyncPeriod)
@@ -45,7 +47,7 @@ func newDummyPodController(
 		wbInformerFactory,
 		netAttachDefInformerFactory,
 		nil,
-		nil,
+		recorder,
 		func(_ context.Context, _ int, _ types.IPAMConfig, _ string, podRef string) (net.IPNet, error) {
 			ipPools := castToIPPool(wbInformerFactory.Whereabouts().V1alpha1().IPPools().Informer().GetStore().List())
 			for _, pool := range ipPools {

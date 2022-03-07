@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	nadinformers "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/client/informers/externalversions"
 	nadlister "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/client/listers/k8s.cni.cncf.io/v1"
 
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/allocate"
 	whereaboutsv1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
 	wbinformers "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/informers/externalversions"
 	wblister "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/listers/whereabouts.cni.cncf.io/v1alpha1"
@@ -36,6 +38,11 @@ const (
 	syncPeriod            = time.Second
 	whereaboutsConfigPath = "/etc/cni/net.d/whereabouts.d/whereabouts.conf"
 	maxRetries            = 2
+)
+
+const (
+	addressGarbageCollected        = "IPAddressGarbageCollected"
+	addressGarbageCollectionFailed = "IPAddressGarbageCollectionFailed"
 )
 
 type garbageCollector func(ctx context.Context, mode int, ipamConf types.IPAMConfig, containerID string, podRef string) (net.IPNet, error)
@@ -170,12 +177,15 @@ func (pc *PodController) garbageCollectPodIPs(pod *v1.Pod) error {
 		}
 
 		logging.Verbosef("pool range [%s]", pool.Spec.Range)
-		for _, allocation := range pool.Spec.Allocations {
+		for allocationIndex, allocation := range pool.Spec.Allocations {
 			if allocation.PodRef == podID(podNamespace, podName) {
 				logging.Verbosef("stale allocation to cleanup: %+v", allocation)
 
 				if _, err := pc.cleanupFunc(context.TODO(), types.Deallocate, *ipamConfig, allocation.ContainerID, podID(podNamespace, podName)); err != nil {
 					logging.Errorf("failed to cleanup allocation: %v", err)
+				}
+				if err := pc.addressGarbageCollected(pod, nad.GetName(), pool.Spec.Range, allocationIndex); err != nil {
+					logging.Errorf("failed to issue event for successful IP address cleanup: %v", err)
 				}
 			}
 		}
@@ -202,12 +212,7 @@ func (pc *PodController) handleResult(pod *v1.Pod, err error) {
 		return
 	}
 
-	logging.Errorf(
-		"dropping pod [%s] deletion out of the queue - could not reconcile IP: %+v",
-		podID(podNamespace, podName),
-		err)
-
-	pc.workqueue.Forget(pod)
+	pc.addressGarbageCollectionFailed(pod, err)
 }
 
 func (pc *PodController) ifaceNetAttachDef(ifaceStatus nadv1.NetworkStatus) (*nadv1.NetworkAttachmentDefinition, error) {
@@ -238,6 +243,45 @@ func (pc *PodController) ipPool(cidr string) (*whereaboutsv1alpha1.IPPool, error
 		return nil, err
 	}
 	return pool, nil
+}
+
+func (pc *PodController) addressGarbageCollected(pod *v1.Pod, networkName string, ipRange string, allocationIndex string) error {
+	if pc.recorder != nil {
+		ip, _, err := net.ParseCIDR(ipRange)
+		if err != nil {
+			return err
+		}
+		index, err := strconv.Atoi(allocationIndex)
+		if err != nil {
+			return err
+		}
+		pc.recorder.Eventf(
+			pod,
+			v1.EventTypeNormal,
+			addressGarbageCollected,
+			"successful cleanup of IP address [%s] from network %s",
+			allocate.IPAddOffset(ip, uint64(index)),
+			networkName)
+	}
+	return nil
+}
+
+func (pc *PodController) addressGarbageCollectionFailed(pod *v1.Pod, err error) {
+	logging.Errorf(
+		"dropping pod [%s] deletion out of the queue - could not reconcile IP: %+v",
+		podID(pod.GetNamespace(), pod.GetName()),
+		err)
+
+	pc.workqueue.Forget(pod)
+
+	if pc.recorder != nil {
+		pc.recorder.Eventf(
+			pod,
+			v1.EventTypeWarning,
+			addressGarbageCollectionFailed,
+			"failed to garbage collect addresses for pod %s",
+			podID(pod.GetNamespace(), pod.GetName()))
+	}
 }
 
 func onPodDelete(queue workqueue.RateLimitingInterface, obj interface{}) {

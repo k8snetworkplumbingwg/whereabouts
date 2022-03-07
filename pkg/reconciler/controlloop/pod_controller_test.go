@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8sclient "k8s.io/client-go/kubernetes"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/tools/record"
 
 	nad "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 	nadclient "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/client/clientset/versioned"
@@ -79,6 +80,7 @@ var _ = Describe("IPControlLoop", func() {
 		var (
 			dummyNetworkPool *v1alpha1.IPPool
 			stopChannel      chan struct{}
+			eventRecorder    *record.FakeRecorder
 		)
 
 		BeforeEach(func() {
@@ -86,7 +88,9 @@ var _ = Describe("IPControlLoop", func() {
 			dummyNetworkPool = ipPool(dummyNetIPRange, ipPoolsNamespace(), podReference(pod))
 			wbClient = fakewbclient.NewSimpleClientset(dummyNetworkPool)
 
-			Expect(newDummyPodController(k8sClient, wbClient, netAttachDefClient, stopChannel, cniConfigDir)).NotTo(BeNil())
+			const maxEvents = 10
+			eventRecorder = record.NewFakeRecorder(maxEvents)
+			Expect(newDummyPodController(k8sClient, wbClient, netAttachDefClient, stopChannel, cniConfigDir, eventRecorder)).NotTo(BeNil())
 
 			// assure the pool features an allocated address
 			ipPool, err := wbClient.WhereaboutsV1alpha1().IPPools(dummyNetworkPool.GetNamespace()).Get(context.TODO(), dummyNetworkPool.GetName(), metav1.GetOptions{})
@@ -109,6 +113,10 @@ var _ = Describe("IPControlLoop", func() {
 						context.TODO(), dummyNetworkPool.GetName(), metav1.GetOptions{})
 					return ipPool.Spec.Allocations, err
 				}).Should(BeEmpty(), "the ip control loop should have removed this stale address")
+			})
+
+			It("registers an event over the event recorder", func() {
+				Eventually(<-eventRecorder.Events).Should(Equal("Normal IPAddressGarbageCollected successful cleanup of IP address [192.168.2.0] from network meganet"))
 			})
 		})
 	})
