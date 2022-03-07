@@ -34,7 +34,7 @@ jobs:
       #run: diff -u <(echo -n) <(gofmt -d -s .)
 
     - name: Run go vet
-      run: go vet ./...
+      run: go vet --tags=test ./...
 
     - name: Install static check
       run: go install honnef.co/go/tools/cmd/staticcheck@latest
