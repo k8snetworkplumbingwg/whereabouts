@@ -11,6 +11,7 @@ import (
 	"time"
 
 	. "github.com/onsi/ginkgo"
+	"github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
 	v1 "k8s.io/api/apps/v1"
@@ -120,7 +121,8 @@ var _ = Describe("Whereabouts functionality", func() {
 				Expect(
 					clientInfo.Client.CoreV1().Pods(namespace).List(
 						context.TODO(), metav1.ListOptions{LabelSelector: selector})).To(
-					WithTransform(podList, BeEmpty()))
+					WithTransform(podList, BeEmpty()),
+					"cannot have leaked pods in the system")
 
 				poolAllocations := func(ipPool *v1alpha1.IPPool) map[string]v1alpha1.IPAllocation {
 					return ipPool.Spec.Allocations
@@ -130,7 +132,8 @@ var _ = Describe("Whereabouts functionality", func() {
 						context.TODO(),
 						wbstorage.NormalizeRange(ipv4TestRange),
 						metav1.GetOptions{})).To(
-					WithTransform(poolAllocations, BeEmpty()))
+					WithTransform(poolAllocations, BeEmpty()),
+					"cannot have leaked IPAllocations in the system")
 			})
 
 			It("IPPools feature allocations", func() {
@@ -139,28 +142,47 @@ var _ = Describe("Whereabouts functionality", func() {
 				Expect(ipPool.Spec.Allocations).To(HaveLen(initialReplicaNumber))
 			})
 
-			When("the statefulset is scaled up then down", func() {
-				const deltaInstances = 5
+			table.DescribeTable("stateful sets scale up / down", func(testSetup func(int), instanceDelta int) {
+				const scaleTimeout = createTimeout * 6
 
-				BeforeEach(func() {
+				testSetup(instanceDelta)
+
+				Eventually(func() (int, error) {
+					ipPool, err := clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(
+						context.TODO(), wbstorage.NormalizeRange(ipv4TestRange), metav1.GetOptions{})
+					if err != nil {
+						return -1, err
+					}
+
+					return len(ipPool.Spec.Allocations), nil
+				}, scaleTimeout).Should(
+					Equal(initialReplicaNumber), "we should have one allocation for each live pod")
+			},
+				table.Entry("scale up then down 5 replicas", func(deltaInstances int) {
 					Expect(clientInfo.scaleStatefulSet(serviceName, namespace, deltaInstances)).To(Succeed())
 					Expect(clientInfo.scaleStatefulSet(serviceName, namespace, -deltaInstances)).To(Succeed())
-				})
-
-				It("scale down then up does not leave stale addresses", func() {
-					const scaleTimeout = createTimeout * 2
-
-					Eventually(func() (map[string]v1alpha1.IPAllocation, error) {
-						ipPool, err := clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(
-							context.TODO(), wbstorage.NormalizeRange(ipv4TestRange), metav1.GetOptions{})
-						if err != nil {
-							return map[string]v1alpha1.IPAllocation{}, err
-						}
-
-						return ipPool.Spec.Allocations, nil
-					}, scaleTimeout).Should(HaveLen(initialReplicaNumber), "we should have one allocation for each live pod")
-				})
-			})
+				}, 5),
+				table.Entry("scale up then down 10 replicas", func(deltaInstances int) {
+					Expect(clientInfo.scaleStatefulSet(serviceName, namespace, deltaInstances)).To(Succeed())
+					Expect(clientInfo.scaleStatefulSet(serviceName, namespace, -deltaInstances)).To(Succeed())
+				}, 10),
+				table.Entry("scale up then down 20 replicas", func(deltaInstances int) {
+					Expect(clientInfo.scaleStatefulSet(serviceName, namespace, deltaInstances)).To(Succeed())
+					Expect(clientInfo.scaleStatefulSet(serviceName, namespace, -deltaInstances)).To(Succeed())
+				}, 20),
+				table.Entry("scale down then up 5 replicas", func(deltaInstances int) {
+					Expect(clientInfo.scaleStatefulSet(serviceName, namespace, -deltaInstances)).To(Succeed())
+					Expect(clientInfo.scaleStatefulSet(serviceName, namespace, deltaInstances)).To(Succeed())
+				}, 5),
+				table.Entry("scale down then up 10 replicas", func(deltaInstances int) {
+					Expect(clientInfo.scaleStatefulSet(serviceName, namespace, -deltaInstances)).To(Succeed())
+					Expect(clientInfo.scaleStatefulSet(serviceName, namespace, deltaInstances)).To(Succeed())
+				}, 10),
+				table.Entry("scale down then up 20 replicas", func(deltaInstances int) {
+					Expect(clientInfo.scaleStatefulSet(serviceName, namespace, -deltaInstances)).To(Succeed())
+					Expect(clientInfo.scaleStatefulSet(serviceName, namespace, deltaInstances)).To(Succeed())
+				}, 20),
+			)
 		})
 	})
 })
@@ -258,7 +280,7 @@ func (c *ClientInfo) deletePod(pod *core.Pod) error {
 }
 
 func (c *ClientInfo) provisionStatefulSet(statefulSetName string, namespace string, serviceName string, replicas int) (*v1.StatefulSet, error) {
-	const statefulSetCreateTimeout = 2 * createTimeout
+	const statefulSetCreateTimeout = 6 * createTimeout
 	statefulSet, err := c.Client.AppsV1().StatefulSets(namespace).Create(
 		context.TODO(),
 		statefulSetSpec(statefulSetName, serviceName, replicas, podNetworkSelectionElements(testNetworkName)),
@@ -279,8 +301,9 @@ func (c *ClientInfo) provisionStatefulSet(statefulSetName string, namespace stri
 }
 
 func (c *ClientInfo) deleteStatefulSet(namespace string, serviceName string, labelSelector string) error {
-	const statefulSetDeleteTimeout = 2 * deleteTimeout
-	if err := c.Client.AppsV1().StatefulSets(namespace).Delete(context.TODO(), serviceName, metav1.DeleteOptions{}); err != nil {
+	const statefulSetDeleteTimeout = 6 * deleteTimeout
+	rightNow := int64(0)
+	if err := c.Client.AppsV1().StatefulSets(namespace).Delete(context.TODO(), serviceName, metav1.DeleteOptions{GracePeriodSeconds: &rightNow}); err != nil {
 		return err
 	}
 
@@ -321,13 +344,13 @@ func generateNetAttachDefSpec(name, namespace, config string) *nettypes.NetworkA
 func macvlanNetworkWithWhereaboutsIPAMNetwork() *nettypes.NetworkAttachmentDefinition {
 	macvlanConfig := `{
         "cniVersion": "0.3.0",
-      	"disableCheck": true,
+        "disableCheck": true,
         "plugins": [
             {
                 "type": "macvlan",
-              	"master": "eth0",
-              	"mode": "bridge",
-              	"ipam": {
+                "master": "eth0",
+                "mode": "bridge",
+                "ipam": {
                     "type": "whereabouts",
                     "leader_lease_duration": 1500,
                     "leader_renew_deadline": 1000,
@@ -335,7 +358,7 @@ func macvlanNetworkWithWhereaboutsIPAMNetwork() *nettypes.NetworkAttachmentDefin
                     "range": "10.10.0.0/16",
                     "log_level": "debug",
                     "log_file": "/tmp/wb"
-              	}
+                }
             }
         ]
     }`
