@@ -98,4 +98,41 @@ var _ = Describe("Allocation operations", func() {
 
 	})
 
+	It("can load a config list", func() {
+		conf := `{
+        "cniVersion": "0.3.0",
+        "disableCheck": true,
+        "plugins": [
+            {
+                "type": "macvlan",
+                "master": "eth0",
+                "mode": "bridge",
+                "ipam": {
+                    "type": "whereabouts",
+                    "leader_lease_duration": 1500,
+                    "leader_renew_deadline": 1000,
+                    "leader_retry_period": 500,
+                    "range": "192.168.1.5-192.168.1.25/24",
+                    "gateway": "192.168.10.1",
+                    "log_level": "debug",
+                    "log_file": "/tmp/whereabouts.log",
+                    "etcd_host": "foo"
+                }
+            }
+        ]
+    }`
+
+		ipamconfig, err := LoadIPAMConfiguration([]byte(conf), "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ipamconfig.LogLevel).To(Equal("debug"))
+		Expect(ipamconfig.LogFile).To(Equal("/tmp/whereabouts.log"))
+		Expect(ipamconfig.Range).To(Equal("192.168.1.0/24"))
+		Expect(ipamconfig.EtcdHost).To(Equal("foo"))
+		Expect(ipamconfig.RangeStart).To(Equal(net.ParseIP("192.168.1.5")))
+		Expect(ipamconfig.RangeEnd).To(Equal(net.ParseIP("192.168.1.25")))
+		Expect(ipamconfig.Gateway).To(Equal(net.ParseIP("192.168.10.1")))
+		Expect(ipamconfig.LeaderLeaseDuration).To(Equal(1500))
+		Expect(ipamconfig.LeaderRenewDeadline).To(Equal(1000))
+		Expect(ipamconfig.LeaderRetryPeriod).To(Equal(500))
+	})
 })

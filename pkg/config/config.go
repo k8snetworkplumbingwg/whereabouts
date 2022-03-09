@@ -294,3 +294,51 @@ func handleEnvArgs(n *types.Net, numV6 int, numV4 int, args types.IPAMEnvArgs) (
 	return numV6, numV4, nil
 
 }
+
+func LoadIPAMConfiguration(bytes []byte, envArgs string, extraConfigPaths ...string) (*types.IPAMConfig, error) {
+	pluginConfig, err := loadPluginConfig(bytes)
+	if err != nil {
+		return nil, err
+	}
+
+	if pluginConfig.Type == "" {
+		pluginConfigList, err := loadPluginConfigList(bytes)
+		if err != nil {
+			return nil, err
+		}
+
+		pluginConfigList.Plugins[0].CNIVersion = pluginConfig.CNIVersion
+		firstPluginBytes, err := json.Marshal(pluginConfigList.Plugins[0])
+		if err != nil {
+			return nil, err
+		}
+		ipamConfig, _, err := LoadIPAMConfig(firstPluginBytes, envArgs, extraConfigPaths...)
+		if err != nil {
+			return nil, err
+		}
+		return ipamConfig, nil
+	}
+
+	ipamConfig, _, err := LoadIPAMConfig(bytes, envArgs, extraConfigPaths...)
+	if err != nil {
+		return nil, err
+	}
+	return ipamConfig, nil
+}
+
+func loadPluginConfigList(bytes []byte) (*types.NetConfList, error) {
+	var netConfList types.NetConfList
+	if err := json.Unmarshal(bytes, &netConfList); err != nil {
+		return nil, err
+	}
+
+	return &netConfList, nil
+}
+
+func loadPluginConfig(bytes []byte) (*cnitypes.NetConf, error) {
+	var pluginConfig cnitypes.NetConf
+	if err := json.Unmarshal(bytes, &pluginConfig); err != nil {
+		return nil, err
+	}
+	return &pluginConfig, nil
+}
