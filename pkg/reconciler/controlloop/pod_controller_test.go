@@ -38,13 +38,7 @@ var _ = Describe("IPControlLoop", func() {
 		namespace       = "default"
 	)
 
-	var (
-		k8sClient          k8sclient.Interface
-		cniConfigDir       string
-		netAttachDefClient nadclient.Interface
-		pod                *v1.Pod
-		wbClient           wbclient.Interface
-	)
+	var cniConfigDir string
 
 	BeforeEach(func() {
 		const configFilePermissions = 0755
@@ -58,65 +52,129 @@ var _ = Describe("IPControlLoop", func() {
 			[]byte(dummyWhereaboutsConfig()), configFilePermissions)).To(Succeed())
 	})
 
-	BeforeEach(func() {
+	AfterEach(func() {
+		Expect(os.RemoveAll(cniConfigDir)).To(Succeed())
+	})
+
+	Context("a running pod", func() {
 		const (
 			networkName = "meganet"
 			podName     = "tiny-winy-pod"
 		)
 
-		pod = podSpec(podName, namespace, networkName)
-		k8sClient = fakek8sclient.NewSimpleClientset(pod)
-
-		var err error
-		netAttachDefClient, err = newFakeNetAttachDefClient(namespace, netAttachDef(networkName, namespace, dummyNetSpec(networkName, dummyNetIPRange)))
-		Expect(err).NotTo(HaveOccurred())
-	})
-
-	AfterEach(func() {
-		Expect(os.RemoveAll(cniConfigDir)).To(Succeed())
-	})
-
-	Context("IPPool featuring an allocation for the pod", func() {
 		var (
-			dummyNetworkPool *v1alpha1.IPPool
-			stopChannel      chan struct{}
-			eventRecorder    *record.FakeRecorder
+			k8sClient k8sclient.Interface
+			pod       *v1.Pod
 		)
 
 		BeforeEach(func() {
-			stopChannel = make(chan struct{})
-			dummyNetworkPool = ipPool(dummyNetIPRange, ipPoolsNamespace(), podReference(pod))
-			wbClient = fakewbclient.NewSimpleClientset(dummyNetworkPool)
-
-			const maxEvents = 10
-			eventRecorder = record.NewFakeRecorder(maxEvents)
-			Expect(newDummyPodController(k8sClient, wbClient, netAttachDefClient, stopChannel, cniConfigDir, eventRecorder)).NotTo(BeNil())
-
-			// assure the pool features an allocated address
-			ipPool, err := wbClient.WhereaboutsV1alpha1().IPPools(dummyNetworkPool.GetNamespace()).Get(context.TODO(), dummyNetworkPool.GetName(), metav1.GetOptions{})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(ipPool.Spec.Allocations).NotTo(BeEmpty())
+			pod = podSpec(podName, namespace, networkName)
+			k8sClient = fakek8sclient.NewSimpleClientset(pod)
 		})
 
-		AfterEach(func() {
-			stopChannel <- struct{}{}
-		})
+		Context("IPPool featuring an allocation for the pod", func() {
+			var (
+				dummyNetworkPool *v1alpha1.IPPool
+				wbClient         wbclient.Interface
+			)
 
-		When("the associated pod is deleted", func() {
 			BeforeEach(func() {
-				Expect(k8sClient.CoreV1().Pods(namespace).Delete(context.TODO(), pod.GetName(), metav1.DeleteOptions{})).To(Succeed())
+				dummyNetworkPool = ipPool(dummyNetIPRange, ipPoolsNamespace(), podReference(pod))
+				wbClient = fakewbclient.NewSimpleClientset(dummyNetworkPool)
 			})
 
-			It("stale IP addresses are garbage collected", func() {
-				Eventually(func() (map[string]v1alpha1.IPAllocation, error) {
-					ipPool, err := wbClient.WhereaboutsV1alpha1().IPPools(dummyNetworkPool.GetNamespace()).Get(
-						context.TODO(), dummyNetworkPool.GetName(), metav1.GetOptions{})
-					return ipPool.Spec.Allocations, err
-				}).Should(BeEmpty(), "the ip control loop should have removed this stale address")
+			Context("the network attachment is available", func() {
+				var (
+					eventRecorder      *record.FakeRecorder
+					netAttachDefClient nadclient.Interface
+					stopChannel        chan struct{}
+				)
+
+				BeforeEach(func() {
+					var err error
+					netAttachDefClient, err = newFakeNetAttachDefClient(namespace, netAttachDef(networkName, namespace, dummyNetSpec(networkName, dummyNetIPRange)))
+					Expect(err).NotTo(HaveOccurred())
+
+					const maxEvents = 10
+					stopChannel = make(chan struct{})
+					eventRecorder = record.NewFakeRecorder(maxEvents)
+					Expect(newDummyPodController(k8sClient, wbClient, netAttachDefClient, stopChannel, cniConfigDir, eventRecorder)).NotTo(BeNil())
+
+					// assure the pool features an allocated address
+					ipPool, err := wbClient.WhereaboutsV1alpha1().IPPools(dummyNetworkPool.GetNamespace()).Get(context.TODO(), dummyNetworkPool.GetName(), metav1.GetOptions{})
+					Expect(err).NotTo(HaveOccurred())
+					Expect(ipPool.Spec.Allocations).NotTo(BeEmpty())
+				})
+
+				AfterEach(func() {
+					stopChannel <- struct{}{}
+				})
+
+				When("the associated pod is deleted", func() {
+					BeforeEach(func() {
+						Expect(k8sClient.CoreV1().Pods(namespace).Delete(context.TODO(), pod.GetName(), metav1.DeleteOptions{})).To(Succeed())
+					})
+
+					It("stale IP addresses are garbage collected", func() {
+						Eventually(func() (map[string]v1alpha1.IPAllocation, error) {
+							ipPool, err := wbClient.WhereaboutsV1alpha1().IPPools(dummyNetworkPool.GetNamespace()).Get(
+								context.TODO(), dummyNetworkPool.GetName(), metav1.GetOptions{})
+							return ipPool.Spec.Allocations, err
+						}).Should(BeEmpty(), "the ip control loop should have removed this stale address")
+					})
+
+					It("registers a SUCCESSFUL IP CLEANUP event over the event recorder", func() {
+						Eventually(<-eventRecorder.Events).Should(Equal("Normal IPAddressGarbageCollected successful cleanup of IP address [192.168.2.0] from network meganet"))
+					})
+				})
 			})
 
-			It("registers an event over the event recorder", func() {
-				Eventually(<-eventRecorder.Events).Should(Equal("Normal IPAddressGarbageCollected successful cleanup of IP address [192.168.2.0] from network meganet"))
+			Context("the network attachment was deleted", func() {
+				var (
+					eventRecorder      *record.FakeRecorder
+					netAttachDefClient nadclient.Interface
+					stopChannel        chan struct{}
+				)
+
+				BeforeEach(func() {
+					stopChannel = make(chan struct{})
+
+					var err error
+					netAttachDefClient, err = newFakeNetAttachDefClient(namespace)
+					Expect(err).NotTo(HaveOccurred())
+
+					const maxEvents = 10
+					eventRecorder = record.NewFakeRecorder(maxEvents)
+					Expect(newDummyPodController(k8sClient, wbClient, netAttachDefClient, stopChannel, cniConfigDir, eventRecorder)).NotTo(BeNil())
+
+					// assure the pool features an allocated address
+					ipPool, err := wbClient.WhereaboutsV1alpha1().IPPools(dummyNetworkPool.GetNamespace()).Get(context.TODO(), dummyNetworkPool.GetName(), metav1.GetOptions{})
+					Expect(err).NotTo(HaveOccurred())
+					Expect(ipPool.Spec.Allocations).NotTo(BeEmpty())
+				})
+
+				When("the associated pod is deleted", func() {
+					BeforeEach(func() {
+						Expect(k8sClient.CoreV1().Pods(namespace).Delete(context.TODO(), pod.GetName(), metav1.DeleteOptions{})).To(Succeed())
+					})
+
+					It("stale IP addresses are left in the IPPool", func() {
+						Eventually(func() (map[string]v1alpha1.IPAllocation, error) {
+							ipPool, err := wbClient.WhereaboutsV1alpha1().IPPools(dummyNetworkPool.GetNamespace()).Get(
+								context.TODO(), dummyNetworkPool.GetName(), metav1.GetOptions{})
+							return ipPool.Spec.Allocations, err
+						}).Should(
+							ContainElements(v1alpha1.IPAllocation{PodRef: podID(pod.GetNamespace(), pod.GetName())}),
+							"the ip control loop cannot garbage collect the stale address without accessing the attachment configuration")
+					})
+
+					It("registers a DROP FROM QUEUE event over the event recorder", func() {
+						expectedEventString := fmt.Sprintf(
+							"Warning IPAddressGarbageCollectionFailed failed to garbage collect addresses for pod %s",
+							podID(pod.GetNamespace(), pod.GetName()))
+						Eventually(<-eventRecorder.Events).Should(Equal(expectedEventString))
+					})
+				})
 			})
 		})
 	})
