@@ -83,10 +83,10 @@ jobs:
       - name: Clear test-cache
         run: go clean -testcache
 
-      - name: Execute E2E tests
-        run: NUMBER_OF_THRASH_ITER=20 FILL_PERCENT_CAPACITY=20 ./hack/e2e-test.sh --number-of-compute $NUMBER_OF_COMPUTE_NODES
-
       - name: Execute golang based E2E tests
         run: pushd e2e; go test -v . ; popd
         env:
           KUBECONFIG: /home/runner/.kube/config
+
+      - name: Execute E2E tests
+        run: NUMBER_OF_THRASH_ITER=20 FILL_PERCENT_CAPACITY=20 ./hack/e2e-test.sh --number-of-compute $NUMBER_OF_COMPUTE_NODES
