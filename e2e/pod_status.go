@@ -50,15 +50,23 @@ func isPodGone(cs *kubernetes.Clientset, podName, namespace string) wait.Conditi
 	}
 }
 
-func isStatefulSetRunning(cs *kubernetes.Clientset, serviceName string, namespace string, expectedReplicas int) wait.ConditionFunc {
+func doesStatefulsetComplyWithCondition(cs *kubernetes.Clientset, serviceName string, namespace string, expectedReplicas int, predicate statefulSetPredicate) wait.ConditionFunc {
 	return func() (bool, error) {
 		statefulSet, err := cs.AppsV1().StatefulSets(namespace).Get(context.Background(), serviceName, metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
 
-		return statefulSet.Status.ReadyReplicas == int32(expectedReplicas), nil
+		return predicate(statefulSet, expectedReplicas), nil
 	}
+}
+
+func isStatefulSetReadyPredicate(statefulSet *appsv1.StatefulSet, expectedReplicas int) bool {
+	return statefulSet.Status.ReadyReplicas == int32(expectedReplicas)
+}
+
+func isStatefulSetDegradedPredicate(statefulSet *appsv1.StatefulSet, expectedReplicas int) bool {
+	return statefulSet.Status.ReadyReplicas < int32(expectedReplicas)
 }
 
 func isStatefulSetGone(cs *kubernetes.Clientset, serviceName string, namespace string, labelSelector string) wait.ConditionFunc {
@@ -132,10 +140,10 @@ func WaitForPodBySelector(cs *kubernetes.Clientset, namespace, selector string, 
 	return nil
 }
 
-// WaitForStatefulSetReady polls up to timeout seconds for pod to enter steady state (running or succeeded state).
-// Returns an error if the pod never enters a steady state.
-func WaitForStatefulSetReady(cs *kubernetes.Clientset, namespace, serviceName string, expectedReplicas int, timeout time.Duration) error {
-	return wait.PollImmediate(time.Second, timeout, isStatefulSetRunning(cs, serviceName, namespace, expectedReplicas))
+type statefulSetPredicate func(statefulSet *appsv1.StatefulSet, expectedReplicas int) bool
+
+func WaitForStatefulSetCondition(cs *kubernetes.Clientset, namespace, serviceName string, expectedReplicas int, timeout time.Duration, predicate statefulSetPredicate) error {
+	return wait.PollImmediate(time.Second, timeout, doesStatefulsetComplyWithCondition(cs, serviceName, namespace, expectedReplicas, predicate))
 }
 
 // WaitForStatefulSetGone ...

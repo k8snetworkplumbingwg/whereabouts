@@ -59,7 +59,7 @@ var _ = Describe("Whereabouts functionality", func() {
 			clientInfo, err = NewClientInfo(config)
 			Expect(err).NotTo(HaveOccurred())
 
-			netAttachDef = macvlanNetworkWithWhereaboutsIPAMNetwork()
+			netAttachDef = macvlanNetworkWithWhereaboutsIPAMNetwork(testNetworkName, testNamespace, ipv4TestRange)
 
 			By("creating a NetworkAttachmentDefinition for whereabouts")
 			_, err = clientInfo.addNetAttachDef(netAttachDef)
@@ -106,86 +106,192 @@ var _ = Describe("Whereabouts functionality", func() {
 
 			podList := func(podList *core.PodList) []core.Pod { return podList.Items }
 
-			BeforeEach(func() {
-				var err error
-				_, err = clientInfo.provisionStatefulSet(statefulSetName, namespace, serviceName, initialReplicaNumber)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(
-					clientInfo.Client.CoreV1().Pods(namespace).List(
-						context.TODO(), metav1.ListOptions{LabelSelector: selector})).To(
-					WithTransform(podList, HaveLen(initialReplicaNumber)))
-			})
+			Context("regular sized network", func() {
+				BeforeEach(func() {
+					var err error
+					_, err = clientInfo.provisionStatefulSet(statefulSetName, namespace, serviceName, initialReplicaNumber, testNetworkName)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(
+						clientInfo.Client.CoreV1().Pods(namespace).List(
+							context.TODO(), metav1.ListOptions{LabelSelector: selector})).To(
+						WithTransform(podList, HaveLen(initialReplicaNumber)))
+				})
 
-			AfterEach(func() {
-				Expect(clientInfo.deleteStatefulSet(namespace, serviceName, selector)).To(Succeed())
-				Expect(
-					clientInfo.Client.CoreV1().Pods(namespace).List(
-						context.TODO(), metav1.ListOptions{LabelSelector: selector})).To(
-					WithTransform(podList, BeEmpty()),
-					"cannot have leaked pods in the system")
+				AfterEach(func() {
+					Expect(clientInfo.deleteStatefulSet(namespace, serviceName, selector)).To(Succeed())
+					Expect(
+						clientInfo.Client.CoreV1().Pods(namespace).List(
+							context.TODO(), metav1.ListOptions{LabelSelector: selector})).To(
+						WithTransform(podList, BeEmpty()),
+						"cannot have leaked pods in the system")
 
-				poolAllocations := func(ipPool *v1alpha1.IPPool) map[string]v1alpha1.IPAllocation {
-					return ipPool.Spec.Allocations
-				}
-				Expect(
-					clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(
-						context.TODO(),
-						wbstorage.NormalizeRange(ipv4TestRange),
-						metav1.GetOptions{})).To(
-					WithTransform(poolAllocations, BeEmpty()),
-					"cannot have leaked IPAllocations in the system")
-			})
-
-			It("IPPools feature allocations", func() {
-				ipPool, err := clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(context.TODO(), wbstorage.NormalizeRange(ipv4TestRange), metav1.GetOptions{})
-				Expect(err).NotTo(HaveOccurred())
-				Expect(ipPool.Spec.Allocations).To(HaveLen(initialReplicaNumber))
-			})
-
-			table.DescribeTable("stateful sets scale up / down", func(testSetup func(int), instanceDelta int) {
-				const scaleTimeout = createTimeout * 6
-
-				testSetup(instanceDelta)
-
-				Eventually(func() (int, error) {
-					ipPool, err := clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(
-						context.TODO(), wbstorage.NormalizeRange(ipv4TestRange), metav1.GetOptions{})
-					if err != nil {
-						return -1, err
+					poolAllocations := func(ipPool *v1alpha1.IPPool) map[string]v1alpha1.IPAllocation {
+						return ipPool.Spec.Allocations
 					}
+					Expect(
+						clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(
+							context.TODO(),
+							wbstorage.NormalizeRange(ipv4TestRange),
+							metav1.GetOptions{})).To(
+						WithTransform(poolAllocations, BeEmpty()),
+						"cannot have leaked IPAllocations in the system")
+				})
 
-					return len(ipPool.Spec.Allocations), nil
-				}, scaleTimeout).Should(
-					Equal(initialReplicaNumber), "we should have one allocation for each live pod")
-			},
-				table.Entry("scale up then down 5 replicas", func(deltaInstances int) {
-					Expect(clientInfo.scaleStatefulSet(serviceName, namespace, deltaInstances)).To(Succeed())
-					Expect(clientInfo.scaleStatefulSet(serviceName, namespace, -deltaInstances)).To(Succeed())
-				}, 5),
-				table.Entry("scale up then down 10 replicas", func(deltaInstances int) {
-					Expect(clientInfo.scaleStatefulSet(serviceName, namespace, deltaInstances)).To(Succeed())
-					Expect(clientInfo.scaleStatefulSet(serviceName, namespace, -deltaInstances)).To(Succeed())
-				}, 10),
-				table.Entry("scale up then down 20 replicas", func(deltaInstances int) {
-					Expect(clientInfo.scaleStatefulSet(serviceName, namespace, deltaInstances)).To(Succeed())
-					Expect(clientInfo.scaleStatefulSet(serviceName, namespace, -deltaInstances)).To(Succeed())
-				}, 20),
-				table.Entry("scale down then up 5 replicas", func(deltaInstances int) {
-					Expect(clientInfo.scaleStatefulSet(serviceName, namespace, -deltaInstances)).To(Succeed())
-					Expect(clientInfo.scaleStatefulSet(serviceName, namespace, deltaInstances)).To(Succeed())
-				}, 5),
-				table.Entry("scale down then up 10 replicas", func(deltaInstances int) {
-					Expect(clientInfo.scaleStatefulSet(serviceName, namespace, -deltaInstances)).To(Succeed())
-					Expect(clientInfo.scaleStatefulSet(serviceName, namespace, deltaInstances)).To(Succeed())
-				}, 10),
-				table.Entry("scale down then up 20 replicas", func(deltaInstances int) {
-					Expect(clientInfo.scaleStatefulSet(serviceName, namespace, -deltaInstances)).To(Succeed())
-					Expect(clientInfo.scaleStatefulSet(serviceName, namespace, deltaInstances)).To(Succeed())
-				}, 20),
-			)
+				It("IPPools feature allocations", func() {
+					ipPool, err := clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(context.TODO(), wbstorage.NormalizeRange(ipv4TestRange), metav1.GetOptions{})
+					Expect(err).NotTo(HaveOccurred())
+					Expect(ipPool.Spec.Allocations).To(HaveLen(initialReplicaNumber))
+				})
+
+				table.DescribeTable("stateful sets scale up / down", func(testSetup func(int), instanceDelta int) {
+					const scaleTimeout = createTimeout * 6
+
+					testSetup(instanceDelta)
+
+					Eventually(func() (map[string]v1alpha1.IPAllocation, error) {
+						ipPool, err := clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(
+							context.TODO(), wbstorage.NormalizeRange(ipv4TestRange), metav1.GetOptions{})
+						if err != nil {
+							return map[string]v1alpha1.IPAllocation{}, err
+						}
+
+						return ipPool.Spec.Allocations, nil
+					}, scaleTimeout).Should(
+						HaveLen(initialReplicaNumber), "we should have one allocation for each live pod")
+				},
+					table.Entry("scale up then down 5 replicas", func(deltaInstances int) {
+						Expect(clientInfo.scaleStatefulSet(serviceName, namespace, deltaInstances)).To(Succeed())
+						Expect(clientInfo.scaleStatefulSet(serviceName, namespace, -deltaInstances)).To(Succeed())
+					}, 5),
+					table.Entry("scale up then down 10 replicas", func(deltaInstances int) {
+						Expect(clientInfo.scaleStatefulSet(serviceName, namespace, deltaInstances)).To(Succeed())
+						Expect(clientInfo.scaleStatefulSet(serviceName, namespace, -deltaInstances)).To(Succeed())
+					}, 10),
+					table.Entry("scale up then down 20 replicas", func(deltaInstances int) {
+						Expect(clientInfo.scaleStatefulSet(serviceName, namespace, deltaInstances)).To(Succeed())
+						Expect(clientInfo.scaleStatefulSet(serviceName, namespace, -deltaInstances)).To(Succeed())
+					}, 20),
+					table.Entry("scale down then up 5 replicas", func(deltaInstances int) {
+						Expect(clientInfo.scaleStatefulSet(serviceName, namespace, -deltaInstances)).To(Succeed())
+						Expect(clientInfo.scaleStatefulSet(serviceName, namespace, deltaInstances)).To(Succeed())
+					}, 5),
+					table.Entry("scale down then up 10 replicas", func(deltaInstances int) {
+						Expect(clientInfo.scaleStatefulSet(serviceName, namespace, -deltaInstances)).To(Succeed())
+						Expect(clientInfo.scaleStatefulSet(serviceName, namespace, deltaInstances)).To(Succeed())
+					}, 10),
+					table.Entry("scale down then up 20 replicas", func(deltaInstances int) {
+						Expect(clientInfo.scaleStatefulSet(serviceName, namespace, -deltaInstances)).To(Succeed())
+						Expect(clientInfo.scaleStatefulSet(serviceName, namespace, deltaInstances)).To(Succeed())
+					}, 20),
+				)
+			})
+
+			Context("network with very few IPs", func() {
+				const (
+					namespace                = "default"
+					networkName              = "meganet2000"
+					rangeWithTwoIPs          = "10.10.0.0/30"
+					replicaNumber            = 2
+					statefulSetCreateTimeout = 20 * time.Second
+				)
+
+				var tinyNetwork *nettypes.NetworkAttachmentDefinition
+
+				BeforeEach(func() {
+					var err error
+					tinyNetwork, err = clientInfo.addNetAttachDef(
+						macvlanNetworkWithWhereaboutsIPAMNetwork(networkName, namespace, rangeWithTwoIPs))
+					Expect(err).NotTo(HaveOccurred())
+
+					_, err = clientInfo.provisionStatefulSet(statefulSetName, namespace, serviceName, replicaNumber, networkName)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				AfterEach(func() {
+					Expect(clientInfo.delNetAttachDef(tinyNetwork)).To(Succeed())
+					Expect(clientInfo.deleteStatefulSet(namespace, serviceName, selector)).To(Succeed())
+				})
+
+				It("IPPool is exhausted", func() {
+					const scaleUpReplicas = 1
+					Expect(clientInfo.scaleStatefulSet(serviceName, namespace, scaleUpReplicas)).To(Succeed())
+					Expect(
+						WaitForStatefulSetCondition(
+							clientInfo.Client,
+							namespace,
+							serviceName,
+							replicaNumber+scaleUpReplicas,
+							statefulSetCreateTimeout,
+							isStatefulSetReadyPredicate)).To(HaveOccurred(), "the IPPool is already at its limits")
+				})
+
+				Context("deleting a pod from the statefulset", func() {
+					var (
+						containerID string
+						podRef      string
+					)
+
+					BeforeEach(func() {
+						ipPool, err := clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(
+							context.TODO(),
+							wbstorage.NormalizeRange(rangeWithTwoIPs),
+							metav1.GetOptions{})
+						Expect(err).NotTo(HaveOccurred())
+						Expect(ipPool.Spec.Allocations).NotTo(BeEmpty())
+
+						containerID = ipPool.Spec.Allocations["1"].ContainerID
+						podRef = ipPool.Spec.Allocations["1"].PodRef
+
+						decomposedPodRef := strings.Split(podRef, "/")
+						Expect(decomposedPodRef).To(HaveLen(2))
+						podName := decomposedPodRef[1]
+
+						rightNow := int64(0)
+						Expect(clientInfo.Client.CoreV1().Pods(namespace).Delete(
+							context.TODO(), podName, metav1.DeleteOptions{GracePeriodSeconds: &rightNow})).To(Succeed())
+
+						Expect(WaitForStatefulSetCondition(
+							clientInfo.Client,
+							namespace,
+							serviceName,
+							replicaNumber,
+							time.Second,
+							isStatefulSetDegradedPredicate)).Should(Succeed())
+
+						scaleUpTimeout := 2 * createTimeout
+						Expect(WaitForStatefulSetCondition(
+							clientInfo.Client,
+							namespace,
+							serviceName,
+							replicaNumber,
+							scaleUpTimeout,
+							isStatefulSetReadyPredicate)).Should(Succeed())
+					})
+
+					It("can recover from an exhausted IP pool", func() {
+						ipPool, err := clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(
+							context.TODO(),
+							wbstorage.NormalizeRange(rangeWithTwoIPs),
+							metav1.GetOptions{})
+						Expect(err).NotTo(HaveOccurred())
+						Expect(ipPool.Spec.Allocations).NotTo(BeEmpty())
+
+						Expect(allocationForPodRef(podRef, *ipPool).ContainerID).NotTo(Equal(containerID))
+					})
+				})
+			})
 		})
 	})
 })
+
+func allocationForPodRef(podRef string, ipPool v1alpha1.IPPool) *v1alpha1.IPAllocation {
+	for _, allocation := range ipPool.Spec.Allocations {
+		if allocation.PodRef == podRef {
+			return &allocation
+		}
+	}
+	return nil
+}
 
 func clusterConfig() (*rest.Config, error) {
 	const kubeconfig = "KUBECONFIG"
@@ -279,22 +385,23 @@ func (c *ClientInfo) deletePod(pod *core.Pod) error {
 	return nil
 }
 
-func (c *ClientInfo) provisionStatefulSet(statefulSetName string, namespace string, serviceName string, replicas int) (*v1.StatefulSet, error) {
+func (c *ClientInfo) provisionStatefulSet(statefulSetName string, namespace string, serviceName string, replicas int, networkNames ...string) (*v1.StatefulSet, error) {
 	const statefulSetCreateTimeout = 6 * createTimeout
 	statefulSet, err := c.Client.AppsV1().StatefulSets(namespace).Create(
 		context.TODO(),
-		statefulSetSpec(statefulSetName, serviceName, replicas, podNetworkSelectionElements(testNetworkName)),
+		statefulSetSpec(statefulSetName, serviceName, replicas, podNetworkSelectionElements(networkNames...)),
 		metav1.CreateOptions{})
 	if err != nil {
 		return nil, err
 	}
 
-	if err := WaitForStatefulSetReady(
+	if err := WaitForStatefulSetCondition(
 		c.Client,
 		namespace,
 		serviceName,
 		replicas,
-		statefulSetCreateTimeout); err != nil {
+		statefulSetCreateTimeout,
+		isStatefulSetReadyPredicate); err != nil {
 		return nil, err
 	}
 	return statefulSet, nil
@@ -302,12 +409,21 @@ func (c *ClientInfo) provisionStatefulSet(statefulSetName string, namespace stri
 
 func (c *ClientInfo) deleteStatefulSet(namespace string, serviceName string, labelSelector string) error {
 	const statefulSetDeleteTimeout = 6 * deleteTimeout
-	rightNow := int64(0)
-	if err := c.Client.AppsV1().StatefulSets(namespace).Delete(context.TODO(), serviceName, metav1.DeleteOptions{GracePeriodSeconds: &rightNow}); err != nil {
+
+	if err := c.Client.AppsV1().StatefulSets(namespace).Delete(
+		context.TODO(), serviceName, deleteRightNowAndBlockUntilAssociatedPodsAreGone()); err != nil {
 		return err
 	}
 
 	return WaitForStatefulSetGone(c.Client, namespace, serviceName, labelSelector, statefulSetDeleteTimeout)
+}
+
+func deleteRightNowAndBlockUntilAssociatedPodsAreGone() metav1.DeleteOptions {
+	var (
+		blockUntilAssociatedPodsAreGone = metav1.DeletePropagationForeground
+		rightNow                        = int64(0)
+	)
+	return metav1.DeleteOptions{GracePeriodSeconds: &rightNow, PropagationPolicy: &blockUntilAssociatedPodsAreGone}
 }
 
 func (c *ClientInfo) scaleStatefulSet(statefulSetName string, namespace string, deltaInstance int) error {
@@ -341,8 +457,8 @@ func generateNetAttachDefSpec(name, namespace, config string) *nettypes.NetworkA
 	}
 }
 
-func macvlanNetworkWithWhereaboutsIPAMNetwork() *nettypes.NetworkAttachmentDefinition {
-	macvlanConfig := `{
+func macvlanNetworkWithWhereaboutsIPAMNetwork(networkName string, namespaceName string, ipRange string) *nettypes.NetworkAttachmentDefinition {
+	macvlanConfig := fmt.Sprintf(`{
         "cniVersion": "0.3.0",
         "disableCheck": true,
         "plugins": [
@@ -355,14 +471,14 @@ func macvlanNetworkWithWhereaboutsIPAMNetwork() *nettypes.NetworkAttachmentDefin
                     "leader_lease_duration": 1500,
                     "leader_renew_deadline": 1000,
                     "leader_retry_period": 500,
-                    "range": "10.10.0.0/16",
+                    "range": "%s",
                     "log_level": "debug",
                     "log_file": "/tmp/wb"
                 }
             }
         ]
-    }`
-	return generateNetAttachDefSpec(testNetworkName, testNamespace, macvlanConfig)
+    }`, ipRange)
+	return generateNetAttachDefSpec(networkName, namespaceName, macvlanConfig)
 }
 
 func podObject(podName string, label, annotations map[string]string) *core.Pod {
