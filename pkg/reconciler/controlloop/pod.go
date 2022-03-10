@@ -292,7 +292,7 @@ func onPodDelete(queue workqueue.RateLimitingInterface, obj interface{}) {
 	}
 
 	logging.Verbosef("deleted pod [%s]", podID(pod.GetNamespace(), pod.GetName()))
-	queue.Add(pod)
+	queue.Add(stripPod(pod)) // we only need the pod's metadata & its network-status annotations. Hence we strip it.
 }
 
 func podID(podNamespace string, podName string) string {
@@ -347,4 +347,11 @@ func podFromTombstone(obj interface{}) (*v1.Pod, error) {
 		}
 	}
 	return pod, nil
+}
+
+func stripPod(pod *v1.Pod) *v1.Pod {
+	newPod := pod.DeepCopy()
+	newPod.Spec = v1.PodSpec{}
+	newPod.Status = v1.PodStatus{}
+	return newPod
 }
