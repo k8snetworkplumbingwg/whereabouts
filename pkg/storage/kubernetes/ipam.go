@@ -10,23 +10,22 @@ import (
 	"sync"
 	"time"
 
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/leaderelection"
-	"k8s.io/client-go/tools/leaderelection/resourcelock"
-
-	jsonpatch "gomodules.xyz/jsonpatch/v2"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"k8s.io/client-go/tools/leaderelection"
+	"k8s.io/client-go/tools/leaderelection/resourcelock"
 
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/allocate"
 	whereaboutsv1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
+	wbclient "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/clientset/versioned"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage"
 	whereaboutstypes "github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
+	"gomodules.xyz/jsonpatch/v2"
 )
 
 // NewKubernetesIPAM returns a new KubernetesIPAM Client configured to a kubernetes CRD backend
@@ -126,15 +125,17 @@ func NormalizeRange(ipRange string) string {
 }
 
 func (i *KubernetesIPAM) getPool(ctx context.Context, name string, iprange string) (*whereaboutsv1alpha1.IPPool, error) {
-	pool := &whereaboutsv1alpha1.IPPool{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: i.namespace},
-	}
-	if err := i.client.Get(ctx, types.NamespacedName{Name: name, Namespace: i.namespace}, pool); errors.IsNotFound(err) {
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, storage.RequestTimeout)
+	defer cancel()
+
+	pool, err := i.client.WhereaboutsV1alpha1().IPPools(i.namespace).Get(ctxWithTimeout, name, metav1.GetOptions{})
+	if err != nil && errors.IsNotFound(err) {
 		// pool does not exist, create it
 		pool.ObjectMeta.Name = name
 		pool.Spec.Range = iprange
 		pool.Spec.Allocations = make(map[string]whereaboutsv1alpha1.IPAllocation)
-		if err := i.client.Create(ctx, pool); errors.IsAlreadyExists(err) {
+		_, err = i.client.WhereaboutsV1alpha1().IPPools(i.namespace).Create(ctxWithTimeout, pool, metav1.CreateOptions{})
+		if err != nil && errors.IsAlreadyExists(err) {
 			// the pool was just created -- allow retry
 			return nil, &temporaryError{err}
 		} else if err != nil {
@@ -151,8 +152,7 @@ func (i *KubernetesIPAM) getPool(ctx context.Context, name string, iprange strin
 
 // Status tests connectivity to the kubernetes backend
 func (i *KubernetesIPAM) Status(ctx context.Context) error {
-	list := &whereaboutsv1alpha1.IPPoolList{}
-	err := i.client.List(ctx, list, &client.ListOptions{Namespace: i.namespace})
+	_, err := i.client.WhereaboutsV1alpha1().IPPools(i.namespace).List(ctx, metav1.ListOptions{})
 	return err
 }
 
@@ -163,7 +163,7 @@ func (i *KubernetesIPAM) Close() error {
 
 // KubernetesOverlappingRangeStore represents a OverlappingRangeStore interface
 type KubernetesOverlappingRangeStore struct {
-	client      client.Client
+	client      wbclient.Interface
 	containerID string
 	namespace   string
 }
@@ -181,13 +181,8 @@ func (c *KubernetesOverlappingRangeStore) IsAllocatedInOverlappingRange(ctx cont
 
 	logging.Debugf("OverlappingRangewide allocation check for IP: %v", normalizedip)
 
-	// clusteripres := &whereaboutsv1alpha1.OverlappingRangeIPReservation{
-	// 	ObjectMeta: metav1.ObjectMeta{Name: normalizedip, Namespace: i.namespace},
-	// }
-	clusteripres := &whereaboutsv1alpha1.OverlappingRangeIPReservation{
-		ObjectMeta: metav1.ObjectMeta{Name: normalizedip, Namespace: c.namespace},
-	}
-	if err := c.client.Get(ctx, types.NamespacedName{Name: normalizedip, Namespace: c.namespace}, clusteripres); errors.IsNotFound(err) {
+	_, err := c.client.WhereaboutsV1alpha1().OverlappingRangeIPReservations(c.namespace).Get(ctx, normalizedip, metav1.GetOptions{})
+	if err != nil && errors.IsNotFound(err) {
 		// cluster ip reservation does not exist, this appears to be good news.
 		// logging.Debugf("IP %v is not reserved cluster wide, allowing.", ip)
 		return false, nil
@@ -221,11 +216,12 @@ func (c *KubernetesOverlappingRangeStore) UpdateOverlappingRangeAllocation(ctx c
 			PodRef:      podRef,
 		}
 
-		err = c.client.Create(ctx, clusteripres)
+		_, err = c.client.WhereaboutsV1alpha1().OverlappingRangeIPReservations(c.namespace).Create(
+			ctx, clusteripres, metav1.CreateOptions{})
 
 	case whereaboutstypes.Deallocate:
 		verb = "deallocate"
-		err = c.client.Delete(ctx, clusteripres)
+		err = c.client.WhereaboutsV1alpha1().OverlappingRangeIPReservations(c.namespace).Delete(ctx, clusteripres.GetName(), metav1.DeleteOptions{})
 	}
 
 	if err != nil {
@@ -238,7 +234,7 @@ func (c *KubernetesOverlappingRangeStore) UpdateOverlappingRangeAllocation(ctx c
 
 // KubernetesIPPool represents an IPPool resource and its parsed set of allocations
 type KubernetesIPPool struct {
-	client      client.Client
+	client      wbclient.Interface
 	containerID string
 	firstIP     net.IP
 	pool        *whereaboutsv1alpha1.IPPool
@@ -290,7 +286,7 @@ func (p *KubernetesIPPool) Update(ctx context.Context, reservations []whereabout
 	}
 
 	// apply the patch
-	err = p.client.Patch(ctx, orig, client.RawPatch(types.JSONPatchType, patchData))
+	_, err = p.client.WhereaboutsV1alpha1().IPPools(orig.GetNamespace()).Patch(ctx, orig.GetName(), types.JSONPatchType, patchData, metav1.PatchOptions{})
 	if err != nil {
 		if errors.IsInvalid(err) {
 			// expect "invalid" errors if any of the jsonpatch "test" Operations fail
@@ -304,7 +300,7 @@ func (p *KubernetesIPPool) Update(ctx context.Context, reservations []whereabout
 
 // newLeaderElector creates a new leaderelection.LeaderElector and associated
 // channels by which to observe elections and depositions.
-func newLeaderElector(clientset *kubernetes.Clientset, namespace string, podNamespace string, podID string, leaseDuration int, renewDeadline int, retryPeriod int) (*leaderelection.LeaderElector, chan struct{}, chan struct{}) {
+func newLeaderElector(clientset kubernetes.Interface, namespace string, podNamespace string, podID string, leaseDuration int, renewDeadline int, retryPeriod int) (*leaderelection.LeaderElector, chan struct{}, chan struct{}) {
 	//log.WithField("context", "leaderelection")
 	// leaderOK will block gRPC startup until it's closed.
 	leaderOK := make(chan struct{})
