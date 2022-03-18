@@ -12,23 +12,42 @@ import (
 
 const defaultReconcilerTimeout = 30
 
+// Returns a constant string array of known errors to match against.
+func knownErrors() [3]string {
+	return [3]string{
+		// We ignore timeout errors, as they may be transient.
+		"timeout",
+		// Context deadline exceeded is allowed to happen
+		"context deadline exceeded",
+		// When a connection is refused, we can just bail out on this run.
+		"connection refused",
+	}
+}
+
 // Matches known error cases from which the process should exit cleanly.
 func knownErrorCase(err error) bool {
 
-	// We ignore timeout errors, as they may be transient.
-	if strings.Contains(err.Error(), "timeout") {
-		logging.Verbosef("Timeout error [known error] ignored: %v", err)
-		return true
-	}
+	knownerrs := knownErrors()
 
-	// Context deadline exceeded can happen
-	if strings.Contains(err.Error(), "context deadline exceeded") {
-		logging.Verbosef("context deadline exceeded [known error] ignored: %v", err)
-		return true
+	for _, knownerr := range knownerrs {
+		if strings.Contains(err.Error(), knownerr) {
+			logging.Verbosef("%s [matches known error] ignored: %v", knownerr, err)
+			return true
+		}
 	}
 
 	return false
 
+}
+
+func tolerateKnownErrorCasesOrFail(err error, errmsg string, errorCodeToReturn int) {
+	if knownErrorCase(err) {
+		// We exit zero on known error cases to not raise alarms on sensitive systems.
+		os.Exit(0)
+	} else {
+		_ = logging.Errorf("%s: %v", errmsg, err)
+		os.Exit(errorCodeToReturn)
+	}
 }
 
 func main() {
@@ -47,23 +66,14 @@ func main() {
 		ipReconcileLoop, err = reconciler.NewReconcileLooperWithKubeconfig(context.Background(), *kubeConfigFile, *reconcilerTimeout)
 	}
 	if err != nil {
-		_ = logging.Errorf("failed to create the reconcile looper: %v", err)
-		if knownErrorCase(err) {
-			os.Exit(0)
-		} else {
-			os.Exit(couldNotStartOrphanedIPMonitor)
-		}
+		tolerateKnownErrorCasesOrFail(err, "failed to create the reconcile looper", couldNotStartOrphanedIPMonitor)
 	}
 
 	cleanedUpIps, err := ipReconcileLoop.ReconcileIPPools(context.Background())
 	if err != nil {
-		_ = logging.Errorf("failed to clean up IP for allocations: %v", err)
-		if knownErrorCase(err) {
-			os.Exit(0)
-		} else {
-			os.Exit(failedToReconcileIPPools)
-		}
+		tolerateKnownErrorCasesOrFail(err, "failed to clean up IP for allocations", failedToReconcileIPPools)
 	}
+
 	if len(cleanedUpIps) > 0 {
 		logging.Debugf("successfully cleanup IPs: %+v", cleanedUpIps)
 	} else {
@@ -71,10 +81,6 @@ func main() {
 	}
 
 	if err := ipReconcileLoop.ReconcileOverlappingIPAddresses(context.Background()); err != nil {
-		if knownErrorCase(err) {
-			os.Exit(0)
-		} else {
-			os.Exit(failedToReconcileClusterWideIPs)
-		}
+		tolerateKnownErrorCasesOrFail(err, "failure to ReconcileOverlappingIPAddresses", failedToReconcileClusterWideIPs)
 	}
 }
