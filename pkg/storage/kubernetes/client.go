@@ -7,6 +7,7 @@ import (
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
@@ -21,9 +22,10 @@ type Client struct {
 	client    client.Client
 	clientSet *kubernetes.Clientset
 	retries   int
+	timeout   time.Duration
 }
 
-func NewClient() (*Client, error) {
+func NewClient(timeout time.Duration) (*Client, error) {
 	scheme := runtime.NewScheme()
 	_ = whereaboutsv1alpha1.AddToScheme(scheme)
 
@@ -32,10 +34,10 @@ func NewClient() (*Client, error) {
 		return nil, err
 	}
 
-	return newClient(config, scheme)
+	return newClient(config, scheme, timeout)
 }
 
-func NewClientViaKubeconfig(kubeconfigPath string) (*Client, error) {
+func NewClientViaKubeconfig(kubeconfigPath string, timeout time.Duration) (*Client, error) {
 	scheme := runtime.NewScheme()
 	_ = whereaboutsv1alpha1.AddToScheme(scheme)
 
@@ -47,10 +49,10 @@ func NewClientViaKubeconfig(kubeconfigPath string) (*Client, error) {
 		return nil, err
 	}
 
-	return newClient(config, scheme)
+	return newClient(config, scheme, timeout)
 }
 
-func newClient(config *rest.Config, schema *runtime.Scheme) (*Client, error) {
+func newClient(config *rest.Config, schema *runtime.Scheme, timeout time.Duration) (*Client, error) {
 	clientSet, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		return nil, err
@@ -65,14 +67,18 @@ func newClient(config *rest.Config, schema *runtime.Scheme) (*Client, error) {
 		return nil, err
 	}
 
-	return newKubernetesClient(c, clientSet), nil
+	return newKubernetesClient(c, clientSet, timeout), nil
 }
 
-func newKubernetesClient(k8sClient client.Client, k8sClientSet *kubernetes.Clientset) *Client {
+func newKubernetesClient(k8sClient client.Client, k8sClientSet *kubernetes.Clientset, timeout time.Duration) *Client {
+	if timeout == time.Duration(0) {
+		timeout = storage.RequestTimeout
+	}
 	return &Client{
 		client:    k8sClient,
 		clientSet: k8sClientSet,
 		retries:   storage.DatastoreRetries,
+		timeout:   timeout,
 	}
 }
 
@@ -80,7 +86,7 @@ func (i *Client) ListIPPools(ctx context.Context) ([]storage.IPPool, error) {
 	logging.Debugf("listing IP pools")
 	ipPoolList := &whereaboutsv1alpha1.IPPoolList{}
 
-	ctxWithTimeout, cancel := context.WithTimeout(ctx, storage.RequestTimeout)
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, i.timeout)
 	defer cancel()
 	if err := i.client.List(ctxWithTimeout, ipPoolList, &client.ListOptions{}); err != nil {
 		return nil, err
@@ -100,7 +106,7 @@ func (i *Client) ListIPPools(ctx context.Context) ([]storage.IPPool, error) {
 }
 
 func (i *Client) ListPods(ctx context.Context) ([]v1.Pod, error) {
-	ctxWithTimeout, cancel := context.WithTimeout(ctx, storage.RequestTimeout)
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, i.timeout)
 	defer cancel()
 
 	podList, err := i.clientSet.CoreV1().Pods(metav1.NamespaceAll).List(ctxWithTimeout, metav1.ListOptions{})

@@ -31,7 +31,7 @@ type OrphanedIPReservations struct {
 
 func NewReconcileLooperWithKubeconfig(ctx context.Context, kubeconfigPath string, timeout int) (*ReconcileLooper, error) {
 	logging.Debugf("NewReconcileLooper - Kubernetes config file located at: %s", kubeconfigPath)
-	k8sClient, err := kubernetes.NewClientViaKubeconfig(kubeconfigPath)
+	k8sClient, err := kubernetes.NewClientViaKubeconfig(kubeconfigPath, time.Duration(timeout)*time.Second)
 	if err != nil {
 		return nil, logging.Errorf("failed to instantiate the Kubernetes client: %+v", err)
 	}
@@ -40,7 +40,7 @@ func NewReconcileLooperWithKubeconfig(ctx context.Context, kubeconfigPath string
 
 func NewReconcileLooper(ctx context.Context, timeout int) (*ReconcileLooper, error) {
 	logging.Debugf("NewReconcileLooper - inferred connection data")
-	k8sClient, err := kubernetes.NewClient()
+	k8sClient, err := kubernetes.NewClient(time.Duration(timeout) * time.Second)
 	if err != nil {
 		return nil, logging.Errorf("failed to instantiate the Kubernetes client: %+v", err)
 	}
