@@ -3,13 +3,14 @@ package main
 import (
 	"context"
 	"flag"
-	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage"
 	"os"
 	"strings"
 
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/reconciler"
 )
+
+const defaultReconcilerTimeout = 30
 
 // Matches known error cases from which the process should exit cleanly.
 func knownErrorCase(err error) bool {
@@ -33,19 +34,17 @@ func knownErrorCase(err error) bool {
 func main() {
 	kubeConfigFile := flag.String("kubeconfig", "", "the path to the Kubernetes configuration file")
 	logLevel := flag.String("log-level", "error", "the logging level for the `ip-reconciler` app. Valid values are: \"debug\", \"verbose\", \"error\", and \"panic\".")
+	reconcilerTimeout := flag.Int("timeout", defaultReconcilerTimeout, "the value for a request timeout in seconds.")
 	flag.Parse()
 
 	logging.SetLogLevel(*logLevel)
 
-	ctx, cancel := context.WithTimeout(context.Background(), storage.RequestTimeout)
-	defer cancel()
-
 	var err error
 	var ipReconcileLoop *reconciler.ReconcileLooper
 	if kubeConfigFile == nil {
-		ipReconcileLoop, err = reconciler.NewReconcileLooper(ctx)
+		ipReconcileLoop, err = reconciler.NewReconcileLooper(context.Background(), *reconcilerTimeout)
 	} else {
-		ipReconcileLoop, err = reconciler.NewReconcileLooperWithKubeconfig(*kubeConfigFile, ctx)
+		ipReconcileLoop, err = reconciler.NewReconcileLooperWithKubeconfig(context.Background(), *kubeConfigFile, *reconcilerTimeout)
 	}
 	if err != nil {
 		_ = logging.Errorf("failed to create the reconcile looper: %v", err)
@@ -56,7 +55,7 @@ func main() {
 		}
 	}
 
-	cleanedUpIps, err := ipReconcileLoop.ReconcileIPPools()
+	cleanedUpIps, err := ipReconcileLoop.ReconcileIPPools(context.Background())
 	if err != nil {
 		_ = logging.Errorf("failed to clean up IP for allocations: %v", err)
 		if knownErrorCase(err) {
@@ -71,7 +70,7 @@ func main() {
 		logging.Debugf("no IP addresses to cleanup")
 	}
 
-	if err := ipReconcileLoop.ReconcileOverlappingIPAddresses(); err != nil {
+	if err := ipReconcileLoop.ReconcileOverlappingIPAddresses(context.Background()); err != nil {
 		if knownErrorCase(err) {
 			os.Exit(0)
 		} else {
