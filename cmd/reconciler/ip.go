@@ -13,11 +13,11 @@ const defaultReconcilerTimeout = 30
 
 func main() {
 	kubeConfigFile := flag.String("kubeconfig", "", "the path to the Kubernetes configuration file")
-	logLevel := flag.String("log-level", "error", "the logging level for the `ip-reconciler` app. Valid values are: \"debug\", \"verbose\", \"error\", and \"panic\".")
+	logFile := flag.String("log-file", "/host/var/log/ip-reconciler.log", "File on host for ip-reconciler to log to")
 	reconcilerTimeout := flag.Int("timeout", defaultReconcilerTimeout, "the value for a request timeout in seconds.")
 	flag.Parse()
 
-	logging.SetLogLevel(*logLevel)
+	logging.ConfigureLogger(*logFile)
 
 	var err error
 	var ipReconcileLoop *reconciler.ReconcileLooper

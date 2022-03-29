@@ -8,7 +8,7 @@ metadata:
     app: whereabouts
 spec:
   concurrencyPolicy: Forbid
-  successfulJobsHistoryLimit: 0
+  successfulJobsHistoryLimit: 3
   schedule: "*/5 * * * *"
   jobTemplate:
     spec:
@@ -30,12 +30,16 @@ spec:
                   memory: "50Mi"
               command:
                 - /ip-reconciler
-                - -log-level=verbose
               volumeMounts:
                 - name: cni-net-dir
                   mountPath: /host/etc/cni/net.d
+                - name: reconciler-log
+                  mountPath: /host/var/log
           volumes:
             - name: cni-net-dir
               hostPath:
                 path: /etc/cni/net.d
+            - name: reconciler-log
+              hostPath:
+                path: /var/log
           restartPolicy: OnFailure

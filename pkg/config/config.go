@@ -98,10 +98,7 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 
 	// Logging
 	if n.IPAM.LogFile != "" {
-		logging.SetLogFile(n.IPAM.LogFile)
-	}
-	if n.IPAM.LogLevel != "" {
-		logging.SetLogLevel(n.IPAM.LogLevel)
+		logging.ConfigureLogger(n.IPAM.LogFile)
 	}
 
 	if foundflatfile != "" {
