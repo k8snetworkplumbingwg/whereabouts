@@ -254,36 +254,6 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 		})
 	})
 
-	Context("a pod in pending state, without an IP in its network-status", func() {
-		const poolName = "pool1"
-
-		var pod *v1.Pod
-		var pool *v1alpha1.IPPool
-
-		BeforeEach(func() {
-			var err error
-			pod, err = k8sClientSet.CoreV1().Pods(namespace).Create(
-				context.TODO(),
-				generatePendingPod(namespace, podName),
-				metav1.CreateOptions{})
-			Expect(err).NotTo(HaveOccurred())
-
-			pool = generateIPPoolSpec(ipRange, namespace, poolName, pod.Name)
-			Expect(k8sClient.Create(context.Background(), pool)).NotTo(HaveOccurred())
-
-			reconcileLooper, err = reconciler.NewReconcileLooperWithKubeconfig(context.TODO(), kubeConfigPath, timeout)
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		AfterEach(func() {
-			Expect(k8sClient.Delete(context.Background(), pool)).NotTo(HaveOccurred())
-			Expect(k8sClientSet.CoreV1().Pods(namespace).Delete(context.TODO(), pod.GetName(), metav1.DeleteOptions{}))
-		})
-
-		It("cannot be reconciled", func() {
-			Expect(reconcileLooper.ReconcileIPPools(context.TODO())).To(BeEmpty())
-		})
-	})
 })
 
 func generateIPPoolSpec(ipRange string, namespace string, poolName string, podNames ...string) *v1alpha1.IPPool {
