@@ -31,6 +31,25 @@ func dummyNetSpec(networkName string, ipRange string) string {
     }`, networkName, ipRange)
 }
 
+func dummyNonWhereaboutsIPAMNetSpec(networkName string) string {
+	return fmt.Sprintf(`{
+      "cniVersion": "0.3.0",
+      "name": "%s",
+      "type": "macvlan",
+      "master": "eth0",
+      "mode": "bridge",
+      "ipam": {
+        "type": "static",
+        "addresses": [
+          {
+			"address": "10.10.0.1/24",
+			"gateway": "10.10.0.254"
+		  }
+        ]
+      }
+    }`, networkName)
+}
+
 func podSpec(name string, namespace string, networks ...string) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{

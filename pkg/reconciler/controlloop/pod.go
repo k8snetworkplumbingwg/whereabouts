@@ -167,7 +167,10 @@ func (pc *PodController) garbageCollectPodIPs(pod *v1.Pod) error {
 
 		logging.Verbosef("the NAD's config: %s", nad.Spec)
 		ipamConfig, err := ipamConfiguration(nad, podNamespace, podName, mountPath)
-		if err != nil {
+		if err != nil && isInvalidPluginType(err) {
+			logging.Debugf("error while computing something: %v", err)
+			continue
+		} else if err != nil {
 			return fmt.Errorf("failed to create an IPAM configuration for the pod %s iface %s: %+v", podID(podNamespace, podName), ifaceStatus.Name, err)
 		}
 
@@ -192,6 +195,11 @@ func (pc *PodController) garbageCollectPodIPs(pod *v1.Pod) error {
 	}
 
 	return nil
+}
+
+func isInvalidPluginType(err error) bool {
+	_, isInvalidPluginError := err.(*config.InvalidPluginError)
+	return isInvalidPluginError
 }
 
 func (pc *PodController) handleResult(pod *v1.Pod, err error) {

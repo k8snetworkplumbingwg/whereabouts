@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -174,6 +175,43 @@ var _ = Describe("IPControlLoop", func() {
 							podID(pod.GetNamespace(), pod.GetName()))
 						Eventually(<-eventRecorder.Events).Should(Equal(expectedEventString))
 					})
+				})
+			})
+		})
+
+		Context("with secondary networks whose type is *not* whereabouts", func() {
+			var (
+				wbClient           wbclient.Interface
+				eventRecorder      *record.FakeRecorder
+				netAttachDefClient nadclient.Interface
+				stopChannel        chan struct{}
+			)
+
+			BeforeEach(func() {
+				stopChannel = make(chan struct{})
+
+				wbClient = fakewbclient.NewSimpleClientset()
+				var err error
+				netAttachDefClient, err = newFakeNetAttachDefClient(namespace, netAttachDef(networkName, namespace, dummyNonWhereaboutsIPAMNetSpec(networkName)))
+				Expect(err).NotTo(HaveOccurred())
+
+				const maxEvents = 1
+				eventRecorder = record.NewFakeRecorder(maxEvents)
+				Expect(newDummyPodController(k8sClient, wbClient, netAttachDefClient, stopChannel, cniConfigDir, eventRecorder)).NotTo(BeNil())
+			})
+
+			AfterEach(func() {
+				stopChannel <- struct{}{}
+			})
+
+			When("the pod is deleted", func() {
+				BeforeEach(func() {
+					Expect(k8sClient.CoreV1().Pods(namespace).Delete(context.TODO(), pod.GetName(), metav1.DeleteOptions{})).To(Succeed())
+				})
+
+				It("should not report any event", func() {
+					const eventTimeout = time.Second
+					Consistently(eventRecorder.Events, eventTimeout).ShouldNot(Receive())
 				})
 			})
 		})

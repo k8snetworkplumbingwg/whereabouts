@@ -1,7 +1,7 @@
 package config
 
 import (
-	// "fmt"
+	"fmt"
 	"io/ioutil"
 	"net"
 	// "os"
@@ -134,5 +134,21 @@ var _ = Describe("Allocation operations", func() {
 		Expect(ipamconfig.LeaderLeaseDuration).To(Equal(1500))
 		Expect(ipamconfig.LeaderRenewDeadline).To(Equal(1000))
 		Expect(ipamconfig.LeaderRetryPeriod).To(Equal(500))
+	})
+
+	It("throws an error when passed a non-whereabouts IPAM config", func() {
+		const wrongPluginType = "static"
+		conf := fmt.Sprintf(`{
+      "cniVersion": "0.3.1",
+      "name": "mynet",
+      "type": "ipvlan",
+      "master": "foo0",
+      "ipam": {
+        "type": "%s"
+      }
+      }`, wrongPluginType)
+
+		_, _, err := LoadIPAMConfig([]byte(conf), "")
+		Expect(err).To(MatchError(&InvalidPluginError{ipamType: wrongPluginType}))
 	})
 })
