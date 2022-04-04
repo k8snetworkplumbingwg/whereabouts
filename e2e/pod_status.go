@@ -9,9 +9,12 @@ import (
 	"fmt"
 	"time"
 
+	kubeClient "github.com/k8snetworkplumbingwg/whereabouts/pkg/storage/kubernetes"
+	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 )
@@ -49,16 +52,90 @@ func isPodGone(cs *kubernetes.Clientset, podName, namespace string) wait.Conditi
 	}
 }
 
+func isReplicaSetSteady(cs *kubernetes.Clientset, replicaSetName, namespace, label string) wait.ConditionFunc {
+	return func() (bool, error) {
+		podList, err := ListPods(cs, namespace, label)
+		if err != nil {
+			return false, err
+		}
+
+		replicaSet, err := cs.AppsV1().ReplicaSets(namespace).Get(context.Background(), replicaSetName, metav1.GetOptions{})
+		if err != nil {
+			return false, err
+		}
+
+		if isReplicaSetSynchronized(replicaSet, podList) {
+			return true, nil
+		} else {
+			return false, nil
+		}
+	}
+}
+
+func isReplicaSetGone(cs *kubernetes.Clientset, rsName, namespace string) wait.ConditionFunc {
+	return func() (bool, error) {
+		replicaSet, err := cs.AppsV1().ReplicaSets(namespace).Get(context.Background(), rsName, metav1.GetOptions{})
+		if err != nil && k8serrors.IsNotFound(err) {
+			return true, nil
+		} else if err != nil {
+			return false, fmt.Errorf("something weird happened with the replicaset, which is in state: [%s]. Errors: %w", replicaSet.Status.Conditions, err)
+		}
+
+		return false, nil
+	}
+}
+
+// check two things:
+// 1. number of pods that are ready should equal that of spec
+// 2. number of pods matching replicaSet's selector should equal that of spec
+//    (in 0 replicas case, replicas should finish terminating before this comes true)
+func isReplicaSetSynchronized(replicaSet *apps.ReplicaSet, podList *v1.PodList) bool {
+	return replicaSet.Status.ReadyReplicas == (*replicaSet.Spec.Replicas) && int32(len(podList.Items)) == (*replicaSet.Spec.Replicas)
+}
+
+func isIPPoolAllocationsEmpty(k8sIPAM *kubeClient.KubernetesIPAM, ipPoolName string) wait.ConditionFunc {
+	return func() (bool, error) {
+		ipPool, err := k8sIPAM.GetIPPool(context.Background(), ipPoolName)
+		if err != nil {
+			return false, err
+		}
+
+		if len(ipPool.Allocations()) != 0 {
+			return false, nil
+		}
+
+		return true, nil
+	}
+}
+
 // WaitForPodReady polls up to timeout seconds for pod to enter steady state (running or succeeded state).
 // Returns an error if the pod never enters a steady state.
 func WaitForPodReady(cs *kubernetes.Clientset, namespace, podName string, timeout time.Duration) error {
 	return wait.PollImmediate(time.Second, timeout, isPodRunning(cs, podName, namespace))
 }
 
-// WaitForPodToDisappear polls up to timeout seconds for pod to be gone from the Kubernets cluster.
+// WaitForPodToDisappear polls up to timeout seconds for pod to be gone from the Kubernetes cluster.
 // Returns an error if the pod is never deleted, or if GETing it returns an error other than `NotFound`.
 func WaitForPodToDisappear(cs *kubernetes.Clientset, namespace, podName string, timeout time.Duration) error {
 	return wait.PollImmediate(time.Second, timeout, isPodGone(cs, podName, namespace))
+}
+
+// This function only plays nice with the replicaSet it's being used with.
+// Any pods that might be up still from a previous test may cause unexpected results.
+func WaitForReplicaSetSteadyState(cs *kubernetes.Clientset, namespace, label string, replicaSet *apps.ReplicaSet, timeout time.Duration) error {
+	return wait.PollImmediate(time.Second, timeout, isReplicaSetSteady(cs, replicaSet.Name, namespace, label))
+}
+
+// WaitForReplicaSetToDisappear polls up to timeout seconds for replicaset to be gone from the Kubernetes cluster.
+// Returns an error if the replicaset is never deleted, or if GETing it returns an error other than `NotFound`.
+func WaitForReplicaSetToDisappear(cs *kubernetes.Clientset, namespace, rsName string, timeout time.Duration) error {
+	return wait.PollImmediate(time.Second, timeout, isReplicaSetGone(cs, rsName, namespace))
+}
+
+// WaitForZeroIPPoolAllocations polls up to timeout seconds for IP pool allocations to be gone from the Kubernetes cluster.
+// Returns an error if any IP pool allocations remain after time limit, or if GETing IP pools causes an error.
+func WaitForZeroIPPoolAllocations(k8sIPAM *kubeClient.KubernetesIPAM, ipPoolName string, timeout time.Duration) error {
+	return wait.PollImmediate(time.Second, timeout, isIPPoolAllocationsEmpty(k8sIPAM, ipPoolName))
 }
 
 // ListPods returns the list of currently scheduled or running pods in `namespace` with the given selector
@@ -74,7 +151,7 @@ func ListPods(cs *kubernetes.Clientset, namespace, selector string) (*v1.PodList
 
 // WaitForPodBySelector waits up to timeout seconds for all pods in 'namespace' with given 'selector' to enter provided state
 // If no pods are found, return nil.
-func WaitForPodBySelector(cs *kubernetes.Clientset, namespace, selector string, timeout int) error {
+func WaitForPodBySelector(cs *kubernetes.Clientset, namespace, selector string, timeout time.Duration) error {
 	podList, err := ListPods(cs, namespace, selector)
 	if err != nil {
 		return err
@@ -85,7 +162,7 @@ func WaitForPodBySelector(cs *kubernetes.Clientset, namespace, selector string, 
 	}
 
 	for _, pod := range podList.Items {
-		if err := WaitForPodReady(cs, namespace, pod.Name, time.Duration(timeout)*time.Second); err != nil {
+		if err := WaitForPodReady(cs, namespace, pod.Name, timeout); err != nil {
 			return err
 		}
 	}
