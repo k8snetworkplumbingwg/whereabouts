@@ -27,14 +27,14 @@ jobs:
       run: ./hack/install-kubebuilder-tools.sh
 
     - name: Generate code
-      run: ./hack/generate-code.sh
+      run: ./hack/generate-code.sh && hack/verify-codegen.sh
 
     - name: Run go fmt
       run: go fmt ./...
       #run: diff -u <(echo -n) <(gofmt -d -s .)
 
     - name: Run go vet
-      run: go vet ./...
+      run: go vet --tags=test ./...
 
     - name: Install static check
       run: go install honnef.co/go/tools/cmd/staticcheck@v0.2.2

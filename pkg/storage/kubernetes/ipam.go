@@ -14,17 +14,18 @@ import (
 	"k8s.io/client-go/tools/leaderelection"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 
-	"github.com/k8snetworkplumbingwg/whereabouts/pkg/allocate"
-	whereaboutsv1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/v1alpha1"
-	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
-	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage"
-	whereaboutstypes "github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 	jsonpatch "gomodules.xyz/jsonpatch/v2"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/allocate"
+	whereaboutsv1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage"
+	whereaboutstypes "github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 )
 
 // NewKubernetesIPAM returns a new KubernetesIPAM Client configured to a kubernetes CRD backend
@@ -100,10 +101,7 @@ func toAllocationMap(reservelist []whereaboutstypes.IPReservation, firstip net.I
 
 // GetIPPool returns a storage.IPPool for the given range
 func (i *KubernetesIPAM) GetIPPool(ctx context.Context, ipRange string) (storage.IPPool, error) {
-	// v6 filter
-	normalized := strings.ReplaceAll(ipRange, ":", "-")
-	// replace subnet cidr slash
-	normalized = strings.ReplaceAll(normalized, "/", "-")
+	normalized := NormalizeRange(ipRange)
 
 	pool, err := i.getPool(ctx, normalized, ipRange)
 	if err != nil {
@@ -116,6 +114,14 @@ func (i *KubernetesIPAM) GetIPPool(ctx context.Context, ipRange string) (storage
 	}
 
 	return &KubernetesIPPool{i.client, i.containerID, firstIP, pool}, nil
+}
+
+func NormalizeRange(ipRange string) string {
+	// v6 filter
+	normalized := strings.ReplaceAll(ipRange, ":", "-")
+	// replace subnet cidr slash
+	normalized = strings.ReplaceAll(normalized, "/", "-")
+	return normalized
 }
 
 func (i *KubernetesIPAM) getPool(ctx context.Context, name string, iprange string) (*whereaboutsv1alpha1.IPPool, error) {
