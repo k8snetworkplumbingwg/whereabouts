@@ -21,8 +21,9 @@ require (
 	k8s.io/api v0.22.6
 	k8s.io/apimachinery v0.22.6
 	k8s.io/client-go v0.22.6
+	k8s.io/code-generator v0.20.1
 	k8s.io/klog/v2 v2.10.0 // indirect
-	k8s.io/kube-openapi v0.0.0-20220124234850-424119656bbf // indirect
+	k8s.io/kube-openapi v0.0.0-20220124234850-424119656bbf
 	sigs.k8s.io/controller-runtime v0.8.2
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )

@@ -12,3 +12,4 @@
 *.out
 
 bin/
+/github.com/

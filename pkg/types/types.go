@@ -27,6 +27,15 @@ type Net struct {
 	IPAM       *IPAMConfig `json:"ipam"`
 }
 
+// NetConfList describes an ordered list of networks.
+type NetConfList struct {
+	CNIVersion string `json:"cniVersion,omitempty"`
+
+	Name         string `json:"name,omitempty"`
+	DisableCheck bool   `json:"disableCheck,omitempty"`
+	Plugins      []*Net `json:"plugins,omitempty"`
+}
+
 // IPAMConfig describes the expected json configuration for this plugin
 type IPAMConfig struct {
 	Name                string

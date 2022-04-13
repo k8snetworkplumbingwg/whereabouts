@@ -27,14 +27,14 @@ jobs:
       run: ./hack/install-kubebuilder-tools.sh
 
     - name: Generate code
-      run: ./hack/generate-code.sh
+      run: ./hack/generate-code.sh && hack/verify-codegen.sh
 
     - name: Run go fmt
       run: go fmt ./...
       #run: diff -u <(echo -n) <(gofmt -d -s .)
 
     - name: Run go vet
-      run: go vet ./...
+      run: go vet --tags=test ./...
 
     - name: Install static check
       run: go install honnef.co/go/tools/cmd/staticcheck@v0.2.2
@@ -83,10 +83,10 @@ jobs:
       - name: Clear test-cache
         run: go clean -testcache
 
-      - name: Execute E2E tests
-        run: NUMBER_OF_THRASH_ITER=20 FILL_PERCENT_CAPACITY=20 ./hack/e2e-test.sh --number-of-compute $NUMBER_OF_COMPUTE_NODES
-
       - name: Execute golang based E2E tests
         run: pushd e2e; go test -v . ; popd
         env:
           KUBECONFIG: /home/runner/.kube/config
+
+      - name: Execute E2E tests
+        run: NUMBER_OF_THRASH_ITER=20 FILL_PERCENT_CAPACITY=20 ./hack/e2e-test.sh --number-of-compute $NUMBER_OF_COMPUTE_NODES
