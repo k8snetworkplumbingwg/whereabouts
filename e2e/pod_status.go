@@ -107,7 +107,10 @@ func isReplicaSetSynchronized(replicaSet *appsv1.ReplicaSet, podList *v1.PodList
 func isIPPoolAllocationsEmpty(k8sIPAM *kubeClient.KubernetesIPAM, ipPoolName string) wait.ConditionFunc {
 	return func() (bool, error) {
 		ipPool, err := k8sIPAM.GetIPPool(context.Background(), ipPoolName)
-		if err != nil {
+		noPoolError := fmt.Errorf("k8s pool initialized")
+		if errors.As(err, &noPoolError) {
+			return true, nil
+		} else if err != nil {
 			return false, err
 		}
 

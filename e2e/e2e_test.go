@@ -27,15 +27,13 @@ import (
 
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
 	wbclient "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/clientset/versioned"
-	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
-	"github.com/k8snetworkplumbingwg/whereabouts/pkg/reconciler"
 	wbstorage "github.com/k8snetworkplumbingwg/whereabouts/pkg/storage/kubernetes"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 )
 
 const (
 	wbLabelEqual     = "tier=whereabouts-scale-test"
-	testNamespace    = "kube-system"
+	testNamespace    = "default"
 	createTimeout    = 10 * time.Second
 	deleteTimeout    = 2 * createTimeout
 	rsCreateTimeout  = 600 * time.Second
@@ -57,7 +55,7 @@ var _ = Describe("Whereabouts functionality", func() {
 	Context("Test setup", func() {
 		var (
 			clientInfo   *ClientInfo
-			envVars      *envVars
+			testConfig   *envVars
 			netAttachDef *nettypes.NetworkAttachmentDefinition
 			pod          *core.Pod
 			replicaSet   *v1.ReplicaSet
@@ -69,7 +67,7 @@ var _ = Describe("Whereabouts functionality", func() {
 				err    error
 			)
 
-			envVars, err = environment()
+			testConfig, err = environment()
 			Expect(err).NotTo(HaveOccurred())
 
 			config, err = clusterConfig()
@@ -108,8 +106,6 @@ var _ = Describe("Whereabouts functionality", func() {
 			})
 
 			It("allocates a single pod within the correct IP range", func() {
-				const ipv4TestRange = "10.10.0.0/16"
-
 				By("checking pod IP is within whereabouts IPAM range")
 				secondaryIfaceIP, err := secondaryIfaceIPValue(pod)
 				Expect(err).NotTo(HaveOccurred())
@@ -130,11 +126,12 @@ var _ = Describe("Whereabouts functionality", func() {
 				By("creating a replicaset with whereabouts net-attach-def")
 				var err error
 
+				const ipPoolNamespace = "kube-system"
 				k8sIPAM, err = wbstorage.NewKubernetesIPAMWithNamespace("", types.IPAMConfig{
 					Kubernetes: types.KubernetesConfig{
-						KubeConfigPath: envVars.kubeconfigPath,
+						KubeConfigPath: testConfig.kubeconfigPath,
 					},
-				}, testNamespace)
+				}, ipPoolNamespace)
 				Expect(err).NotTo(HaveOccurred())
 
 				replicaSet, err = clientInfo.provisionReplicaSet(
@@ -155,7 +152,7 @@ var _ = Describe("Whereabouts functionality", func() {
 
 			It("allocates each IP pool entry with a unique pod IP", func() {
 				By("creating max number of pods and checking IP Pool validity")
-				for i := 0; i < envVars.numThrashIter; i++ {
+				for i := 0; i < testConfig.numThrashIter; i++ {
 					Expect(checkZeroIPPoolAllocationsAndReplicas(clientInfo, k8sIPAM, rsName, testNamespace)).To(Succeed())
 
 					// Increase to desired number of replicas for test
@@ -163,7 +160,7 @@ var _ = Describe("Whereabouts functionality", func() {
 					Expect(err).NotTo(HaveOccurred())
 
 					replicaSet, err = clientInfo.updateReplicaSet(replicaSetObject(
-						envVars.maxReplicas(allPods.Items),
+						testConfig.maxReplicas(allPods.Items),
 						podTierLabel(rsName),
 						podNetworkSelectionElements(testNetworkName),
 					))
@@ -171,7 +168,7 @@ var _ = Describe("Whereabouts functionality", func() {
 
 					Expect(WaitForReplicaSetSteadyState(clientInfo.Client, testNamespace, wbLabelEqual, replicaSet, rsSteadyTimeout)).To(Succeed())
 
-					Expect(iPPoolConsistency(envVars.kubeconfigPath, k8sIPAM, clientInfo.Client)).To(Succeed())
+					Expect(iPPoolConsistency(k8sIPAM, clientInfo.Client)).To(Succeed())
 				}
 			})
 		})
@@ -366,13 +363,8 @@ var _ = Describe("Whereabouts functionality", func() {
 	})
 })
 
-func iPPoolConsistency(kubeconfigPath string, k8sIPAM *wbstorage.KubernetesIPAM, cs *kubernetes.Clientset) error {
+func iPPoolConsistency(k8sIPAM *wbstorage.KubernetesIPAM, cs *kubernetes.Clientset) error {
 	By("checking if there are any stale IPs in IP pool or any IPs in IP pool that are not seen attached to a pod")
-
-	By("Forcing reconciliation of the cluster...")
-	if err := runIpReconciler(kubeconfigPath); err != nil {
-		return err
-	}
 
 	By("Comparing pod ip assignments to ippool reservations")
 	ipPool, err := k8sIPAM.GetIPPool(context.Background(), ipPoolName)
@@ -929,30 +921,4 @@ func inRange(cidr string, ip string) error {
 	}
 
 	return fmt.Errorf("ip [%s] is NOT in range %s", ip, cidr)
-}
-
-func runIpReconciler(kubeconfigPath string) error {
-	const defaultReconcilerTimeout = 30
-
-	var err error
-	var ipReconcileLoop *reconciler.ReconcileLooper
-
-	logLevel := "error"
-
-	logging.SetLogLevel(logLevel)
-
-	ipReconcileLoop, err = reconciler.NewReconcileLooperWithKubeconfig(context.Background(), kubeconfigPath, defaultReconcilerTimeout)
-	if err != nil {
-		return fmt.Errorf("failed to create the reconcile looper: %v", err)
-	}
-
-	_, err = ipReconcileLoop.ReconcileIPPools(context.Background())
-	if err != nil {
-		return fmt.Errorf("failed to clean up IP for allocations: %v", err)
-	}
-
-	if err := ipReconcileLoop.ReconcileOverlappingIPAddresses(context.Background()); err != nil {
-		return fmt.Errorf("failed to reconcile clusterwide IPs: %v", err)
-	}
-	return nil
 }
