@@ -24,6 +24,7 @@ import (
 	nettypes "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 	netclient "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/client/clientset/versioned/typed/k8s.cni.cncf.io/v1"
 
+	"github.com/k8snetworkplumbingwg/whereabouts/e2e/entities"
 	testenv "github.com/k8snetworkplumbingwg/whereabouts/e2e/testenvironment"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
 	wbclient "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/clientset/versioned"
@@ -35,7 +36,6 @@ const (
 	createTimeout   = 10 * time.Second
 	deleteTimeout   = 2 * createTimeout
 	rsCreateTimeout = 600 * time.Second
-	testImage       = "quay.io/dougbtv/alpine:latest"
 )
 
 func TestWhereaboutsE2E(t *testing.T) {
@@ -165,7 +165,7 @@ var _ = Describe("Whereabouts functionality", func() {
 					allPods, err := clientInfo.Client.CoreV1().Pods(core.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
 					Expect(err).NotTo(HaveOccurred())
 
-					replicaSet, err = clientInfo.updateReplicaSet(replicaSetObject(
+					replicaSet, err = clientInfo.updateReplicaSet(entities.ReplicaSetObject(
 						testConfig.MaxReplicas(allPods.Items),
 						rsName,
 						testNamespace,
@@ -535,7 +535,7 @@ func (c *ClientInfo) delNetAttachDef(netattach *nettypes.NetworkAttachmentDefini
 }
 
 func (c *ClientInfo) provisionPod(podName string, namespace string, label, annotations map[string]string) (*core.Pod, error) {
-	pod := podObject(podName, namespace, label, annotations)
+	pod := entities.PodObject(podName, namespace, label, annotations)
 	pod, err := c.Client.CoreV1().Pods(pod.Namespace).Create(context.Background(), pod, metav1.CreateOptions{})
 	if err != nil {
 		return nil, err
@@ -569,7 +569,7 @@ func (c *ClientInfo) deletePod(pod *core.Pod) error {
 func (c *ClientInfo) provisionReplicaSet(rsName string, namespace string, replicaCount int32, labels, annotations map[string]string) (*v1.ReplicaSet, error) {
 	replicaSet, err := c.Client.AppsV1().ReplicaSets(namespace).Create(
 		context.Background(),
-		replicaSetObject(replicaCount, rsName, namespace, labels, annotations),
+		entities.ReplicaSetObject(replicaCount, rsName, namespace, labels, annotations),
 		metav1.CreateOptions{})
 	if err != nil {
 		return nil, err
@@ -617,13 +617,14 @@ func checkZeroIPPoolAllocationsAndReplicas(clientInfo *ClientInfo, k8sIPAM *wbst
 	)
 	var err error
 
-	replicaSet, err := clientInfo.updateReplicaSet(replicaSetObject(
-		emptyReplicaSet,
-		rsName,
-		namespace,
-		podTierLabel(rsName),
-		podNetworkSelectionElements(networkNames...),
-	))
+	replicaSet, err := clientInfo.updateReplicaSet(
+		entities.ReplicaSetObject(
+			emptyReplicaSet,
+			rsName,
+			namespace,
+			podTierLabel(rsName),
+			podNetworkSelectionElements(networkNames...),
+		))
 	if err != nil {
 		return err
 	}
@@ -643,7 +644,7 @@ func (c *ClientInfo) provisionStatefulSet(statefulSetName string, namespace stri
 	const statefulSetCreateTimeout = 60 * createTimeout
 	statefulSet, err := c.Client.AppsV1().StatefulSets(namespace).Create(
 		context.TODO(),
-		statefulSetSpec(statefulSetName, namespace, serviceName, replicas, podNetworkSelectionElements(networkNames...)),
+		entities.StatefulSetSpec(statefulSetName, namespace, serviceName, replicas, podNetworkSelectionElements(networkNames...)),
 		metav1.CreateOptions{})
 	if err != nil {
 		return nil, err
@@ -733,99 +734,6 @@ func macvlanNetworkWithWhereaboutsIPAMNetwork(networkName string, namespaceName 
         ]
     }`, ipRange)
 	return generateNetAttachDefSpec(networkName, namespaceName, macvlanConfig)
-}
-
-func podObject(podName string, namespace string, label, annotations map[string]string) *core.Pod {
-	return &core.Pod{
-		ObjectMeta: podMeta(podName, namespace, label, annotations),
-		Spec:       podSpec("samplepod"),
-	}
-}
-
-func podSpec(containerName string) core.PodSpec {
-	return core.PodSpec{
-		Containers: []core.Container{
-			{
-				Name:    containerName,
-				Command: containerCmd(),
-				Image:   testImage,
-			},
-		},
-	}
-}
-
-func podMeta(podName string, namespace string, label map[string]string, annotations map[string]string) metav1.ObjectMeta {
-	return metav1.ObjectMeta{
-		Name:        podName,
-		Namespace:   namespace,
-		Labels:      label,
-		Annotations: annotations,
-	}
-}
-
-func statefulSetSpec(statefulSetName string, namespace string, serviceName string, replicaNumber int, annotations map[string]string) *v1.StatefulSet {
-	const labelKey = "app"
-
-	replicas := int32(replicaNumber)
-	webAppLabels := map[string]string{labelKey: serviceName}
-	return &v1.StatefulSet{
-		TypeMeta:   metav1.TypeMeta{},
-		ObjectMeta: metav1.ObjectMeta{Name: serviceName},
-		Spec: v1.StatefulSetSpec{
-			Replicas: &replicas,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: webAppLabels,
-			},
-			Template: core.PodTemplateSpec{
-				ObjectMeta: podMeta(statefulSetName, namespace, webAppLabels, annotations),
-				Spec:       podSpec(statefulSetName),
-			},
-			ServiceName:         serviceName,
-			PodManagementPolicy: v1.ParallelPodManagement,
-		},
-	}
-}
-
-func replicaSetObject(replicaCount int32, rsName string, namespace string, label map[string]string, annotations map[string]string) *v1.ReplicaSet {
-	numReplicas := &replicaCount
-
-	return &v1.ReplicaSet{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "ReplicaSet",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      rsName,
-			Namespace: namespace,
-			Labels:    label,
-		},
-		Spec: v1.ReplicaSetSpec{
-			Replicas: numReplicas,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: label,
-			},
-			Template: core.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels:      label,
-					Annotations: annotations,
-					Namespace:   namespace,
-				},
-				Spec: core.PodSpec{
-					Containers: []core.Container{
-						{
-							Name:    "samplepod",
-							Command: containerCmd(),
-							Image:   testImage,
-						},
-					},
-				},
-			},
-		},
-	}
-}
-
-func containerCmd() []string {
-	return []string{"/bin/ash", "-c", "trap : TERM INT; sleep infinity & wait"}
 }
 
 func filterNetworkStatus(
