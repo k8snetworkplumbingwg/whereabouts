@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -25,6 +24,7 @@ import (
 	nettypes "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 	netclient "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/client/clientset/versioned/typed/k8s.cni.cncf.io/v1"
 
+	testenv "github.com/k8snetworkplumbingwg/whereabouts/e2e/testenvironment"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
 	wbclient "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/clientset/versioned"
 	wbstorage "github.com/k8snetworkplumbingwg/whereabouts/pkg/storage/kubernetes"
@@ -55,7 +55,7 @@ var _ = Describe("Whereabouts functionality", func() {
 
 		var (
 			clientInfo   *ClientInfo
-			testConfig   *envVars
+			testConfig   *testenv.Configuration
 			netAttachDef *nettypes.NetworkAttachmentDefinition
 			pod          *core.Pod
 			replicaSet   *v1.ReplicaSet
@@ -67,7 +67,7 @@ var _ = Describe("Whereabouts functionality", func() {
 				err    error
 			)
 
-			testConfig, err = environment()
+			testConfig, err = testenv.NewConfig()
 			Expect(err).NotTo(HaveOccurred())
 
 			config, err = clusterConfig()
@@ -130,7 +130,7 @@ var _ = Describe("Whereabouts functionality", func() {
 				const ipPoolNamespace = "kube-system"
 				k8sIPAM, err = wbstorage.NewKubernetesIPAMWithNamespace("", types.IPAMConfig{
 					Kubernetes: types.KubernetesConfig{
-						KubeConfigPath: testConfig.kubeconfigPath,
+						KubeConfigPath: testConfig.KubeconfigPath,
 					},
 				}, ipPoolNamespace)
 				Expect(err).NotTo(HaveOccurred())
@@ -157,7 +157,7 @@ var _ = Describe("Whereabouts functionality", func() {
 
 			It("allocates each IP pool entry with a unique pod IP", func() {
 				By("creating max number of pods and checking IP Pool validity")
-				for i := 0; i < testConfig.numThrashIter; i++ {
+				for i := 0; i < testConfig.NumberOfIterations; i++ {
 					Expect(
 						checkZeroIPPoolAllocationsAndReplicas(
 							clientInfo, k8sIPAM, rsName, testNamespace, ipPoolName, testNetworkName)).To(Succeed())
@@ -166,7 +166,7 @@ var _ = Describe("Whereabouts functionality", func() {
 					Expect(err).NotTo(HaveOccurred())
 
 					replicaSet, err = clientInfo.updateReplicaSet(replicaSetObject(
-						testConfig.maxReplicas(allPods.Items),
+						testConfig.MaxReplicas(allPods.Items),
 						rsName,
 						testNamespace,
 						podTierLabel(rsName),
@@ -463,38 +463,6 @@ func findMissingAllocations(ipPoolAllocations []types.IPReservation, podList *co
 	return nil
 }
 
-type envVars struct {
-	kubeconfigPath      string
-	numComputeNodes     int
-	fillPercentCapacity int
-	numThrashIter       int
-}
-
-func environment() (*envVars, error) {
-	var err error
-
-	kubeconfigPath := kubeConfig()
-	numComputeNodes, err := computeNodes()
-	if err != nil {
-		return nil, err
-	}
-	fillPercentCapacity, err := fillPercent()
-	if err != nil {
-		return nil, err
-	}
-	numThrashIter, err := thrashIter()
-	if err != nil {
-		return nil, err
-	}
-
-	return &envVars{
-		kubeconfigPath:      kubeconfigPath,
-		numComputeNodes:     numComputeNodes,
-		fillPercentCapacity: fillPercentCapacity,
-		numThrashIter:       numThrashIter,
-	}, nil
-}
-
 func allocationForPodRef(podRef string, ipPool v1alpha1.IPPool) *v1alpha1.IPAllocation {
 	for _, allocation := range ipPool.Spec.Allocations {
 		if allocation.PodRef == podRef {
@@ -517,42 +485,6 @@ func clusterConfig() (*rest.Config, error) {
 		return nil, err
 	}
 	return config, nil
-}
-
-func kubeConfig() string {
-	const kubeconfig = "KUBECONFIG"
-	kubeconfigPath, found := os.LookupEnv(kubeconfig)
-	if !found {
-		kubeconfigPath = "${HOME}/.kube/config"
-	}
-	return kubeconfigPath
-}
-
-func computeNodes() (int, error) {
-	const numCompute = "NUMBER_OF_COMPUTE_NODES"
-	numComputeNodes, found := os.LookupEnv(numCompute)
-	if !found {
-		numComputeNodes = "2"
-	}
-	return strconv.Atoi(numComputeNodes)
-}
-
-func fillPercent() (int, error) {
-	const fillCapcity = "FILL_PERCENT_CAPACITY"
-	fillPercentCapacity, found := os.LookupEnv(fillCapcity)
-	if !found {
-		fillPercentCapacity = "50"
-	}
-	return strconv.Atoi(fillPercentCapacity)
-}
-
-func thrashIter() (int, error) {
-	const numThrash = "NUMBER_OF_THRASH_ITER"
-	numThrashIter, found := os.LookupEnv(numThrash)
-	if !found {
-		numThrashIter = "1"
-	}
-	return strconv.Atoi(numThrashIter)
 }
 
 func podTierLabel(podTier string) map[string]string {
@@ -674,12 +606,6 @@ func (c *ClientInfo) deleteReplicaSet(replicaSet *v1.ReplicaSet) error {
 		return err
 	}
 	return nil
-}
-
-func (v envVars) maxReplicas(allPods []core.Pod) int32 {
-	const maxPodsPerNode = 110
-	return int32(
-		(v.numComputeNodes*maxPodsPerNode - (len(allPods))) * v.fillPercentCapacity / 100)
 }
 
 // Waits for all replicas to be fully removed from replicaset, and checks that there are 0 ip pool allocations
