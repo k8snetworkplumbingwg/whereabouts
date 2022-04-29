@@ -27,6 +27,15 @@ type Net struct {
 	IPAM       *IPAMConfig `json:"ipam"`
 }
 
+// NetConfList describes an ordered list of networks.
+type NetConfList struct {
+	CNIVersion string `json:"cniVersion,omitempty"`
+
+	Name         string `json:"name,omitempty"`
+	DisableCheck bool   `json:"disableCheck,omitempty"`
+	Plugins      []*Net `json:"plugins,omitempty"`
+}
+
 // IPAMConfig describes the expected json configuration for this plugin
 type IPAMConfig struct {
 	Name                string
@@ -52,7 +61,7 @@ type IPAMConfig struct {
 	LogFile             string            `json:"log_file"`
 	LogLevel            string            `json:"log_level"`
 	OverlappingRanges   bool              `json:"enable_overlapping_ranges,omitempty"`
-	SleepForRace        bool              `json:"sleep_for_race,omitempty"`
+	SleepForRace        int               `json:"sleep_for_race,omitempty"`
 	Gateway             net.IP
 	Kubernetes          KubernetesConfig `json:"kubernetes,omitempty"`
 	ConfigurationPath   string           `json:"configuration_path"`

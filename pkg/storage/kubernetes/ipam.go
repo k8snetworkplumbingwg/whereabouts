@@ -14,17 +14,18 @@ import (
 	"k8s.io/client-go/tools/leaderelection"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 
-	"github.com/k8snetworkplumbingwg/whereabouts/pkg/allocate"
-	whereaboutsv1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/v1alpha1"
-	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
-	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage"
-	whereaboutstypes "github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 	jsonpatch "gomodules.xyz/jsonpatch/v2"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/allocate"
+	whereaboutsv1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage"
+	whereaboutstypes "github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 )
 
 // NewKubernetesIPAM returns a new KubernetesIPAM Client configured to a kubernetes CRD backend
@@ -38,11 +39,21 @@ func NewKubernetesIPAM(containerID string, ipamConf whereaboutstypes.IPAMConfig)
 		return nil, fmt.Errorf("k8s config: namespace not present in context")
 	}
 
-	kubernetesClient, err := NewClientViaKubeconfig(ipamConf.Kubernetes.KubeConfigPath)
+	kubernetesClient, err := NewClientViaKubeconfig(ipamConf.Kubernetes.KubeConfigPath, storage.RequestTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("failed instantiating kubernetes client: %v", err)
 	}
 	k8sIPAM := newKubernetesIPAM(containerID, ipamConf, namespace, *kubernetesClient)
+	return k8sIPAM, nil
+}
+
+// NewKubernetesIPAMWithNamespace returns a new KubernetesIPAM Client configured to a kubernetes CRD backend
+func NewKubernetesIPAMWithNamespace(containerID string, ipamConf whereaboutstypes.IPAMConfig, namespace string) (*KubernetesIPAM, error) {
+	k8sIPAM, err := NewKubernetesIPAM(containerID, ipamConf)
+	if err != nil {
+		return nil, err
+	}
+	k8sIPAM.namespace = namespace
 	return k8sIPAM, nil
 }
 
@@ -90,10 +101,7 @@ func toAllocationMap(reservelist []whereaboutstypes.IPReservation, firstip net.I
 
 // GetIPPool returns a storage.IPPool for the given range
 func (i *KubernetesIPAM) GetIPPool(ctx context.Context, ipRange string) (storage.IPPool, error) {
-	// v6 filter
-	normalized := strings.ReplaceAll(ipRange, ":", "-")
-	// replace subnet cidr slash
-	normalized = strings.ReplaceAll(normalized, "/", "-")
+	normalized := NormalizeRange(ipRange)
 
 	pool, err := i.getPool(ctx, normalized, ipRange)
 	if err != nil {
@@ -106,6 +114,14 @@ func (i *KubernetesIPAM) GetIPPool(ctx context.Context, ipRange string) (storage
 	}
 
 	return &KubernetesIPPool{i.client, i.containerID, firstIP, pool}, nil
+}
+
+func NormalizeRange(ipRange string) string {
+	// v6 filter
+	normalized := strings.ReplaceAll(ipRange, ":", "-")
+	// replace subnet cidr slash
+	normalized = strings.ReplaceAll(normalized, "/", "-")
+	return normalized
 }
 
 func (i *KubernetesIPAM) getPool(ctx context.Context, name string, iprange string) (*whereaboutsv1alpha1.IPPool, error) {
@@ -412,7 +428,7 @@ func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *Kubernete
 	switch mode {
 	case whereaboutstypes.Allocate, whereaboutstypes.Deallocate:
 	default:
-		return newip, fmt.Errorf("Got an unknown mode passed to IPManagement: %v", mode)
+		return newip, fmt.Errorf("got an unknown mode passed to IPManagement: %v", mode)
 	}
 
 	var overlappingrangestore storage.OverlappingRangeStore
@@ -496,14 +512,14 @@ RETRYLOOP:
 		// Clean out any dummy records from the reservelist...
 		var usereservelist []whereaboutstypes.IPReservation
 		for _, rl := range updatedreservelist {
-			if rl.IsAllocated != true {
+			if !rl.IsAllocated {
 				usereservelist = append(usereservelist, rl)
 			}
 		}
 
 		// Manual race condition testing
-		if ipamConf.SleepForRace {
-			time.Sleep(20 * time.Second)
+		if ipamConf.SleepForRace > 0 {
+			time.Sleep(time.Duration(ipamConf.SleepForRace) * time.Second)
 		}
 
 		err = pool.Update(requestCtx, usereservelist)

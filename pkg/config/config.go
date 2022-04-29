@@ -10,9 +10,9 @@ import (
 
 	cnitypes "github.com/containernetworking/cni/pkg/types"
 	types020 "github.com/containernetworking/cni/pkg/types/020"
+	"github.com/imdario/mergo"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
-	"github.com/imdario/mergo"
 )
 
 // canonicalizeIP makes sure a provided ip is in standard form
@@ -30,13 +30,13 @@ func canonicalizeIP(ip *net.IP) error {
 // LoadIPAMConfig creates IPAMConfig using json encoded configuration provided
 // as `bytes`. At the moment values provided in envArgs are ignored so there
 // is no possibility to overload the json configuration using envArgs
-func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, error) {
+func LoadIPAMConfig(bytes []byte, envArgs string, extraConfigPaths ...string) (*types.IPAMConfig, string, error) {
 
 	// We first load up what we already have, before we start reading a file...
 	n := types.Net{
 		IPAM: &types.IPAMConfig{
 			OverlappingRanges: true,
-			SleepForRace:      false,
+			SleepForRace:      0,
 		},
 	}
 	if err := json.Unmarshal(bytes, &n); err != nil {
@@ -45,6 +45,8 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 
 	if n.IPAM == nil {
 		return nil, "", fmt.Errorf("IPAM config missing 'ipam' key")
+	} else if !isNetworkRelevant(n.IPAM) {
+		return nil, "", NewInvalidPluginError(n.IPAM.Type)
 	}
 
 	args := types.IPAMEnvArgs{}
@@ -56,6 +58,7 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 
 	// Once we have our basics, let's look for our (optional) configuration file
 	confdirs := []string{"/etc/kubernetes/cni/net.d/whereabouts.d/whereabouts.conf", "/etc/cni/net.d/whereabouts.d/whereabouts.conf"}
+	confdirs = append(confdirs, extraConfigPaths...)
 	// We prefix the optional configuration path (so we look there first)
 	if n.IPAM.ConfigurationPath != "" {
 		confdirs = append([]string{n.IPAM.ConfigurationPath}, confdirs...)
@@ -70,7 +73,7 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 			jsonFile, err := os.Open(confpath)
 
 			if err != nil {
-				return nil, "", fmt.Errorf("Error opening flat configuration file @ %s with: %s", confpath, err)
+				return nil, "", fmt.Errorf("error opening flat configuration file @ %s with: %s", confpath, err)
 			}
 
 			defer jsonFile.Close()
@@ -160,7 +163,7 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 	if n.IPAM.GatewayStr != "" {
 		gwip := net.ParseIP(n.IPAM.GatewayStr)
 		if gwip == nil {
-			return nil, "", fmt.Errorf("Couldn't parse gateway IP: %s", n.IPAM.GatewayStr)
+			return nil, "", fmt.Errorf("couldn't parse gateway IP: %s", n.IPAM.GatewayStr)
 		}
 		n.IPAM.Gateway = gwip
 	}
@@ -292,4 +295,69 @@ func handleEnvArgs(n *types.Net, numV6 int, numV4 int, args types.IPAMEnvArgs) (
 
 	return numV6, numV4, nil
 
+}
+
+func LoadIPAMConfiguration(bytes []byte, envArgs string, extraConfigPaths ...string) (*types.IPAMConfig, error) {
+	pluginConfig, err := loadPluginConfig(bytes)
+	if err != nil {
+		return nil, err
+	}
+
+	if pluginConfig.Type == "" {
+		pluginConfigList, err := loadPluginConfigList(bytes)
+		if err != nil {
+			return nil, err
+		}
+
+		pluginConfigList.Plugins[0].CNIVersion = pluginConfig.CNIVersion
+		firstPluginBytes, err := json.Marshal(pluginConfigList.Plugins[0])
+		if err != nil {
+			return nil, err
+		}
+		ipamConfig, _, err := LoadIPAMConfig(firstPluginBytes, envArgs, extraConfigPaths...)
+		if err != nil {
+			return nil, err
+		}
+		return ipamConfig, nil
+	}
+
+	ipamConfig, _, err := LoadIPAMConfig(bytes, envArgs, extraConfigPaths...)
+	if err != nil {
+		return nil, err
+	}
+	return ipamConfig, nil
+}
+
+func loadPluginConfigList(bytes []byte) (*types.NetConfList, error) {
+	var netConfList types.NetConfList
+	if err := json.Unmarshal(bytes, &netConfList); err != nil {
+		return nil, err
+	}
+
+	return &netConfList, nil
+}
+
+func loadPluginConfig(bytes []byte) (*cnitypes.NetConf, error) {
+	var pluginConfig cnitypes.NetConf
+	if err := json.Unmarshal(bytes, &pluginConfig); err != nil {
+		return nil, err
+	}
+	return &pluginConfig, nil
+}
+
+func isNetworkRelevant(ipamConfig *types.IPAMConfig) bool {
+	const relevantIPAMType = "whereabouts"
+	return ipamConfig.Type == relevantIPAMType
+}
+
+type InvalidPluginError struct {
+	ipamType string
+}
+
+func NewInvalidPluginError(ipamType string) *InvalidPluginError {
+	return &InvalidPluginError{ipamType: ipamType}
+}
+
+func (e *InvalidPluginError) Error() string {
+	return fmt.Sprintf("only interested in networks whose IPAM type is 'whereabouts'. This one was: %s", e.ipamType)
 }

@@ -3,9 +3,9 @@ package reconciler
 import (
 	"encoding/json"
 
+	k8snetworkplumbingwgv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage"
-	k8snetworkplumbingwgv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 
 	v1 "k8s.io/api/core/v1"
 )
@@ -18,7 +18,8 @@ const (
 )
 
 type podWrapper struct {
-	ips map[string]void
+	ips   map[string]void
+	phase v1.PodPhase
 }
 
 type void struct{}
@@ -26,6 +27,7 @@ type void struct{}
 func wrapPod(pod v1.Pod) *podWrapper {
 	return &podWrapper{
 		ips: getFlatIPSet(pod),
+		phase: pod.Status.Phase,
 	}
 }
 
@@ -71,10 +73,9 @@ func getFlatIPSet(pod v1.Pod) map[string]void {
 			continue
 		}
 
-		if network.Interface[:multusPrefixSize] == multusInterfaceNamePrefix {
-			for _, ip := range network.IPs {
-				ipSet[ip] = empty
-			}
+		for _, ip := range network.IPs {
+			ipSet[ip] = empty
+			logging.Debugf("Added IP %s for pod %s", ip, composePodRef(pod))
 		}
 	}
 	return ipSet

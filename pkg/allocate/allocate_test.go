@@ -166,8 +166,8 @@ var _ = Describe("Allocation utility functions", func() {
 var _ = Describe("Allocation operations", func() {
 	It("creates an IPv4 range properly for 30 bits network address", func() {
 
-		ip, ipnet, err := net.ParseCIDR("192.168.21.100/30")
-		ip, _ = AddressRange(ipnet)
+		_, ipnet, err := net.ParseCIDR("192.168.21.100/30")
+		ip, _ := AddressRange(ipnet)
 		Expect(err).NotTo(HaveOccurred())
 
 		firstip, lastip, err := GetIPRange(net.ParseIP(ip.String()), *ipnet)
@@ -178,8 +178,8 @@ var _ = Describe("Allocation operations", func() {
 	})
 	It("creates an IPv4 range properly for 24 bits network address with different range start", func() {
 
-		ip, ipnet, err := net.ParseCIDR("192.168.2.200/24")
-		ip = net.ParseIP("192.168.2.23") // range start
+		_, ipnet, err := net.ParseCIDR("192.168.2.200/24")
+		ip := net.ParseIP("192.168.2.23") // range start
 
 		Expect(err).NotTo(HaveOccurred())
 
@@ -192,8 +192,8 @@ var _ = Describe("Allocation operations", func() {
 	})
 	It("creates an IPv4 range properly for 27 bits network address", func() {
 
-		ip, ipnet, err := net.ParseCIDR("192.168.2.200/27")
-		ip, _ = AddressRange(ipnet)
+		_, ipnet, err := net.ParseCIDR("192.168.2.200/27")
+		ip, _ := AddressRange(ipnet)
 
 		Expect(err).NotTo(HaveOccurred())
 
@@ -205,8 +205,8 @@ var _ = Describe("Allocation operations", func() {
 	})
 	It("creates an IPv4 range properly for 24 bits network address", func() {
 
-		ip, ipnet, err := net.ParseCIDR("192.168.2.200/24")
-		ip, _ = AddressRange(ipnet)
+		_, ipnet, err := net.ParseCIDR("192.168.2.200/24")
+		ip, _ := AddressRange(ipnet)
 
 		Expect(err).NotTo(HaveOccurred())
 
@@ -221,8 +221,8 @@ var _ = Describe("Allocation operations", func() {
 	// Handy IPv6 CIDR calculator: https://www.ultratools.com/tools/ipv6CIDRToRangeResult?ipAddress=2001%3A%3A0%2F28
 	It("creates an IPv6 range properly for 116 bits network address", func() {
 
-		ip, ipnet, err := net.ParseCIDR("2001::0/116")
-		ip, _ = AddressRange(ipnet)
+		_, ipnet, err := net.ParseCIDR("2001::0/116")
+		ip, _ := AddressRange(ipnet)
 
 		Expect(err).NotTo(HaveOccurred())
 
@@ -236,8 +236,8 @@ var _ = Describe("Allocation operations", func() {
 
 	It("creates an IPv6 range when the first hextet has leading zeroes", func() {
 
-		ip, ipnet, err := net.ParseCIDR("fd:db8:abcd:0012::0/96")
-		ip, _ = AddressRange(ipnet)
+		_, ipnet, err := net.ParseCIDR("fd:db8:abcd:0012::0/96")
+		ip, _ := AddressRange(ipnet)
 
 		Expect(err).NotTo(HaveOccurred())
 
@@ -260,6 +260,7 @@ var _ = Describe("Allocation operations", func() {
 		var ipres []types.IPReservation
 		var exrange []string
 		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
+		Expect(err).NotTo(HaveOccurred())
 		Expect(fmt.Sprint(newip)).To(Equal("192.168.1.1"))
 
 	})
@@ -275,6 +276,7 @@ var _ = Describe("Allocation operations", func() {
 		var ipres []types.IPReservation
 		var exrange []string
 		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
+		Expect(err).NotTo(HaveOccurred())
 		Expect(fmt.Sprint(newip)).To(Equal("caa5::1"))
 
 	})
@@ -290,6 +292,7 @@ var _ = Describe("Allocation operations", func() {
 		var ipres []types.IPReservation
 		var exrange []string
 		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
+		Expect(err).NotTo(HaveOccurred())
 		Expect(fmt.Sprint(newip)).To(Equal("::1"))
 
 	})
@@ -307,6 +310,7 @@ var _ = Describe("Allocation operations", func() {
 		var ipres []types.IPReservation
 		var exrange []string
 		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
+		Expect(err).NotTo(HaveOccurred())
 		Expect(fmt.Sprint(newip)).To(Equal("fd::1"))
 
 	})
@@ -322,14 +326,14 @@ var _ = Describe("Allocation operations", func() {
 		var ipres []types.IPReservation
 		var exrange []string
 		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
+		Expect(err).NotTo(HaveOccurred())
 		Expect(fmt.Sprint(newip)).To(Equal("100::2:1"))
-
 	})
 
 	It("creates an IPv6 range properly for 96 bits network address", func() {
 
-		ip, ipnet, err := net.ParseCIDR("2001:db8:abcd:0012::0/96")
-		ip, _ = AddressRange(ipnet)
+		_, ipnet, err := net.ParseCIDR("2001:db8:abcd:0012::0/96")
+		ip, _ := AddressRange(ipnet)
 
 		Expect(err).NotTo(HaveOccurred())
 
@@ -342,8 +346,8 @@ var _ = Describe("Allocation operations", func() {
 	})
 	It("creates an IPv6 range properly for 64 bits network address", func() {
 
-		ip, ipnet, err := net.ParseCIDR("2001:db8:abcd:0012::0/64")
-		ip, _ = AddressRange(ipnet)
+		_, ipnet, err := net.ParseCIDR("2001:db8:abcd:0012::0/64")
+		ip, _ := AddressRange(ipnet)
 
 		Expect(err).NotTo(HaveOccurred())
 
@@ -356,8 +360,8 @@ var _ = Describe("Allocation operations", func() {
 	})
 	It("do not fail when the mask meets minimum required", func() {
 
-		badip, badipnet, err := net.ParseCIDR("192.168.21.100/30")
-		badip, _ = AddressRange(badipnet)
+		_, badipnet, err := net.ParseCIDR("192.168.21.100/30")
+		badip, _ := AddressRange(badipnet)
 		Expect(err).NotTo(HaveOccurred())
 
 		_, _, err = GetIPRange(badip, *badipnet)
@@ -366,13 +370,13 @@ var _ = Describe("Allocation operations", func() {
 	})
 	It("fails when the mask is too short", func() {
 
-		badip, badipnet, err := net.ParseCIDR("192.168.21.100/31")
-		badip, _ = AddressRange(badipnet)
+		_, badipnet, err := net.ParseCIDR("192.168.21.100/31")
+		badip, _ := AddressRange(badipnet)
 		Expect(err).NotTo(HaveOccurred())
 
 		_, _, err = GetIPRange(badip, *badipnet)
 		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(HavePrefix("Net mask is too short"))
+		Expect(err.Error()).To(HavePrefix("net mask is too short"))
 
 	})
 })

@@ -172,7 +172,7 @@ func IPManagementEtcd(ctx context.Context, mode int, ipamConf types.IPAMConfig, 
 	switch mode {
 	case types.Allocate, types.Deallocate:
 	default:
-		return newip, fmt.Errorf("Got an unknown mode passed to IPManagement: %v", mode)
+		return newip, fmt.Errorf("got an unknown mode passed to IPManagement: %v", mode)
 	}
 
 	var ipam Store

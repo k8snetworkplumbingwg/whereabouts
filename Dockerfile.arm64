@@ -1,4 +1,4 @@
-FROM golang:1.13
+FROM golang:1.16
 ADD . /usr/src/whereabouts
 
 ENV GOARCH "arm64"
@@ -12,5 +12,7 @@ RUN ./hack/build-go.sh
 FROM arm64v8/alpine:latest
 LABEL org.opencontainers.image.source https://github.com/k8snetworkplumbingwg/whereabouts
 COPY --from=0 /go/src/github.com/k8snetworkplumbingwg/whereabouts/bin/whereabouts .
+COPY --from=0 /go/src/github.com/k8snetworkplumbingwg/whereabouts/bin/ip-control-loop .
+COPY --from=0 /go/src/github.com/k8snetworkplumbingwg/whereabouts/bin/ip-reconciler .
 COPY script/install-cni.sh .
 CMD ["/install-cni.sh"]
