@@ -22,7 +22,7 @@ do
     echo "These instances have no podref:"
     while read index podref
     do
-      ip=`python -c "import ipaddress; print(ipaddress.ip_address(u'$base') + index);"`
+      ip=`python -c "import ipaddress; print(ipaddress.ip_address(u'$base') + $index);"`
       if [[ -z "$podref" ]]
       then
         while IFS= read -r line
