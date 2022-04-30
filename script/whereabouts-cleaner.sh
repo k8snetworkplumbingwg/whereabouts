@@ -19,12 +19,19 @@ do
     echo $ippool
     base=`kubectl get "$ippool" -n kube-system --ignore-not-found -o=jsonpath='{.spec.range}' | cut -d'/' -f1`
     if [[ -z "$base" ]]; then continue; fi
-
+    echo "These instances have no podref:"
     while read index podref
     do
-      if [[ -z "$podref" ]]; then continue; fi
+      ip=`python -c "import ipaddress; print(ipaddress.ip_address(u'$base') + index);"`
+      if [[ -z "$podref" ]]
+      then
+        while IFS= read -r line
+        do
+          echo $line | grep $ip
+        done <<< "$podipmap"
+        continue
+      fi
       found=0
-      ip=`python -c "import ipaddress; print(ipaddress.ip_address(u'$base') + $index);"`
       echo $ip $podref
       ns=`echo $podref | cut -d'/' -f1`
       podname=`echo $podref | cut -d'/' -f2`
@@ -54,8 +61,9 @@ do
         if [[ "$dupns" != "$ns" || "$duppodname" != "$podname" && "$dupip" =~ "$ip" ]]
         then
           dupfound=1
-          echo "-> non-referenced Pod has the same IP: $dupns/$duppodname -> deleting Pod to get new IP"
-          kubectl delete pod -n "$dupns" "$duppodname" --ignore-not-found
+          echo "-> Multiple users are found for IP $ip in $ippool"
+          echo "-> registered pod: $ns/$podname"
+          echo "-> non-referenced pod: $dupns/$duppodname"
         fi
       done <<< "$duppods"
       if [[ $dupfound == 1 ]]; then break 2; fi
