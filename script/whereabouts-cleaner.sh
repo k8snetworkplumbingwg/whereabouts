@@ -4,7 +4,7 @@
 # Licensed under the Apache License 2.0.
 # SPDX-License-Identifier: Apache-2.0
 
-set -o errexit
+#set -o errexit
 set -o pipefail
 
 while true
@@ -16,10 +16,8 @@ do
 
   while read ippool
   do
-    echo $ippool
     base=`kubectl get "$ippool" -n kube-system --ignore-not-found -o=jsonpath='{.spec.range}' | cut -d'/' -f1`
     if [[ -z "$base" ]]; then continue; fi
-    echo "These instances have no podref:"
     while read index podref
     do
       ip=`python -c "import ipaddress; print(ipaddress.ip_address(u'$base') + $index);"`
@@ -28,11 +26,16 @@ do
         while IFS= read -r line
         do
           echo $line | grep $ip
+          if [ $? == 0 ]
+          then
+             echo " ** WARNING **"
+             echo "-> pod $line has no podref"
+          fi
         done <<< "$podipmap"
         continue
       fi
       found=0
-      echo $ip $podref
+      echo "Check podref $podref for its assigned IP: $ip"
       ns=`echo $podref | cut -d'/' -f1`
       podname=`echo $podref | cut -d'/' -f2`
 
@@ -61,9 +64,10 @@ do
         if [[ "$dupns" != "$ns" || "$duppodname" != "$podname" && "$dupip" =~ "$ip" ]]
         then
           dupfound=1
-          echo "-> Multiple users are found for IP $ip in $ippool"
+          echo " ** WARNING **"
+          echo "-> Multiple pods are found for IP $ip in $ippool"
           echo "-> registered pod: $ns/$podname"
-          echo "-> non-referenced pod: $dupns/$duppodname"
+          echo "-> duplicate pod: $dupns/$duppodname"
         fi
       done <<< "$duppods"
       if [[ $dupfound == 1 ]]; then break 2; fi
@@ -74,3 +78,4 @@ do
   echo "-----------------------------------------"
   sleep 10
 done
+
