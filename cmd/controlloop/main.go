@@ -3,8 +3,11 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
+	"net/http"
 	"os"
 	"os/signal"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -19,10 +22,13 @@ import (
 	nadclient "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/client/clientset/versioned"
 	nadinformers "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/client/informers/externalversions"
 
+	"github.com/k8snetworkplumbingwg/whereabouts/cmd/reconciler"
 	wbclient "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/clientset/versioned"
 	wbinformers "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/informers/externalversions"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/reconciler/controlloop"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 const (
@@ -39,6 +45,8 @@ const (
 )
 
 func main() {
+	logging.Verbosef("This is a test... :)")
+
 	logLevel := flag.String("log-level", defaultLogLevel, "Specify the pod controller application logging level")
 	if logLevel != nil && logging.GetLoggingLevel().String() != *logLevel {
 		logging.SetLogLevel(*logLevel)
@@ -46,7 +54,9 @@ func main() {
 	logging.SetLogStderr(true)
 
 	stopChan := make(chan struct{})
+	returnErr := make(chan error)
 	defer close(stopChan)
+	defer close(returnErr)
 	handleSignals(stopChan, os.Interrupt)
 
 	networkController, err := newPodController(stopChan)
@@ -55,7 +65,47 @@ func main() {
 		os.Exit(couldNotCreateController)
 	}
 
-	networkController.Start(stopChan)
+	networkController.Start(stopChan) // code seems to spin here... further code not executed
+
+	logging.Verbosef("2nd test print, doubt this is gonna be reached...") // only gets reached if I ctrl+C during the code's runtime.
+
+	totalReconcilerSuccess := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "reconciler_success_total",
+		Help: "Increments upon successful run of IP reconciler",
+	})
+
+	prometheus.MustRegister(totalReconcilerSuccess)
+
+	http.Handle("/metrics", promhttp.Handler())
+	log.Fatal(http.ListenAndServe(":8080", nil))
+
+	// here's where my for { select {} } loop should go - and use tickers
+	// https://gobyexample.com/tickers
+	// general logic - loop indefinitely, with the following conditions:
+	// a. stopChan sends a value: quit out of the loop and return function
+	// b. ticker ticks: start a goroutine to run ip-reconciler
+	// c. default: continue to spin
+	ticker := time.NewTicker(10 * time.Second) // temp value, will eventually be days/weeks duration
+
+	for i := 0; i < 5; i++ { // iterating 5 times just for the sake of terminating code and getting logfile output
+		logging.Verbosef("iteration #", i)
+		select {
+		case <-stopChan:
+			return
+		case t := <-ticker.C:
+			// fmt.Println("Running ip-reconciler, tick at ", t)
+			logging.Verbosef("time to run reconciler (dummy), tick at ", t)
+			go reconciler.InvokeIPReconciler(returnErr) // need to implement a timeout for this
+		case err := <-returnErr:
+			if err == nil {
+				totalReconcilerSuccess.Inc()
+				logging.Verbosef("ip reconciler success!")
+			} else {
+				logging.Verbosef("ip reconciler failure: ", err)
+			}
+		}
+	}
+	return
 }
 
 func handleSignals(stopChannel chan struct{}, signals ...os.Signal) {

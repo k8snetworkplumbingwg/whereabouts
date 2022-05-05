@@ -9,11 +9,11 @@ require (
 	github.com/coreos/etcd v3.3.13+incompatible
 	github.com/grpc-ecosystem/grpc-gateway v1.11.1 // indirect
 	github.com/imdario/mergo v0.3.10
-	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/k8snetworkplumbingwg/network-attachment-definition-client v1.1.1-0.20210510153419-66a699ae3b05
 	github.com/onsi/ginkgo v1.14.1
 	github.com/onsi/gomega v1.10.2
 	github.com/pkg/errors v0.9.1
+	github.com/prometheus/client_golang v1.12.1
 	golang.org/x/net v0.0.0-20220225172249-27dd8689420f // indirect
 	golang.org/x/sys v0.0.0-20220227234510-4e6760a101f9 // indirect
 	golang.org/x/tools v0.1.9 // indirect
@@ -28,4 +28,7 @@ require (
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )
 
-replace github.com/gogo/protobuf => github.com/gogo/protobuf v1.3.2
+replace (
+	github.com/gogo/protobuf => github.com/gogo/protobuf v1.3.2
+	google.golang.org/grpc => google.golang.org/grpc v1.29.0
+)

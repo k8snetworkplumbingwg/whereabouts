@@ -33,11 +33,12 @@ import (
 )
 
 const (
-	defaultMountPath      = "/host"
-	ipReconcilerQueueName = "pod-updates"
-	syncPeriod            = time.Second
-	whereaboutsConfigPath = "/etc/cni/net.d/whereabouts.d/whereabouts.conf"
-	maxRetries            = 2
+	defaultMountPath         = "/host"
+	ipReconcilerQueueName    = "pod-updates"
+	syncPeriod               = time.Second
+	whereaboutsConfigPath    = "/etc/cni/net.d/whereabouts.d/whereabouts.conf"
+	maxRetries               = 2
+	defaultReconcilerTimeout = 30 // added for reconciler invocation
 )
 
 const (
@@ -116,9 +117,12 @@ func (pc *PodController) Start(stopChan <-chan struct{}) {
 	}
 
 	go wait.Until(pc.worker, syncPeriod, stopChan)
+	// is the code waiting for this goroutine to finish before returning?
+	// i WANT to return back to main, and eventually send a stopChan when code needs to exit for whatever reason.
 
-	<-stopChan
-	logging.Verbosef("shutting down network controller")
+	// <-stopChan
+	// logging.Verbosef("shutting down network controller")
+	// ^^ these two lines need to be removed so i can return execution to main()
 }
 
 func (pc *PodController) worker() {

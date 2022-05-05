@@ -1,5 +1,4 @@
-// package main
-package reconciler
+package controlloop
 
 const (
 	kubeconfigNotFound = iota + 1
@@ -7,3 +6,5 @@ const (
 	failedToReconcileIPPools
 	failedToReconcileClusterWideIPs
 )
+
+// this stuff is used for ip reconciler^^^

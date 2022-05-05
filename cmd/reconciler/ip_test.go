@@ -1,4 +1,8 @@
-package main
+// package main
+package reconciler
+
+// does this code need to exist still? or does it need to be updated? ip.go's code body will just exist as a helper function elsewhere.
+// im just unsure of the architecture of all this. TODO
 
 import (
 	"context"

@@ -1,14 +1,16 @@
-package main
+// package main
+package reconciler
 
 import (
 	"encoding/base64"
 	"fmt"
 	"io/ioutil"
-	"k8s.io/client-go/kubernetes"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"k8s.io/client-go/kubernetes"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
