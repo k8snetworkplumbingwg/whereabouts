@@ -16,7 +16,6 @@ import (
 	v1 "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
@@ -24,6 +23,7 @@ import (
 
 	wbtestclient "github.com/k8snetworkplumbingwg/whereabouts/e2e/client"
 	"github.com/k8snetworkplumbingwg/whereabouts/e2e/entities"
+	"github.com/k8snetworkplumbingwg/whereabouts/e2e/poolconsistency"
 	"github.com/k8snetworkplumbingwg/whereabouts/e2e/retrievers"
 	testenv "github.com/k8snetworkplumbingwg/whereabouts/e2e/testenvironment"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
@@ -178,13 +178,15 @@ var _ = Describe("Whereabouts functionality", func() {
 							entities.ReplicaSetQuery(rsName),
 							replicaSet,
 							rsSteadyTimeout)).To(Succeed())
-					Expect(
-						iPPoolConsistency(
-							k8sIPAM,
-							clientInfo.Client,
-							testNamespace,
-							ipPoolName,
-							entities.ReplicaSetQuery(rsName))).To(Succeed())
+
+					podList, err := wbtestclient.ListPods(clientInfo.Client, testNamespace, entities.ReplicaSetQuery(rsName))
+					Expect(err).NotTo(HaveOccurred())
+					Expect(podList.Items).NotTo(BeEmpty())
+
+					ipPool, err := k8sIPAM.GetIPPool(context.Background(), ipPoolName)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(poolconsistency.NewPoolConsistencyCheck(ipPool, podList.Items).MissingIPs()).To(BeEmpty())
+					Expect(poolconsistency.NewPoolConsistencyCheck(ipPool, podList.Items).StaleIPs()).To(BeEmpty())
 				}
 			})
 		})
@@ -378,88 +380,6 @@ var _ = Describe("Whereabouts functionality", func() {
 		})
 	})
 })
-
-func iPPoolConsistency(k8sIPAM *wbstorage.KubernetesIPAM, cs *kubernetes.Clientset, namespace string, ipPoolName string, podLabel string) error {
-	By("checking if there are any stale IPs in IP pool or any IPs in IP pool that are not seen attached to a pod")
-
-	By("Comparing pod ip assignments to ippool reservations")
-	ipPool, err := k8sIPAM.GetIPPool(context.Background(), ipPoolName)
-	if err != nil {
-		return err
-	}
-
-	ipPoolAllocations := ipPool.Allocations()
-	podList, err := wbtestclient.ListPods(cs, namespace, podLabel)
-	if err != nil {
-		return err
-	}
-
-	if err := findStaleIPAddresses(ipPoolAllocations, podList); err != nil {
-		return err
-	}
-
-	if err := findMissingAllocations(ipPoolAllocations, podList); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func findStaleIPAddresses(ipPoolAllocations []types.IPReservation, podList *core.PodList) error {
-	var found bool
-	var podIP, reservedIP string
-	var err error
-
-	for _, allocation := range ipPoolAllocations {
-		found = false
-		for _, pod := range podList.Items {
-			podIP, err = retrievers.SecondaryIfaceIPValue(&pod)
-			if err != nil {
-				return err
-			}
-			reservedIP = allocation.IP.String()
-
-			if reservedIP == podIP {
-				found = true
-				break
-			}
-		}
-
-		if !found {
-			return fmt.Errorf("Possible stale IP Pool: failed to find pod for IP Pool IP %s\n", allocation.IP)
-		}
-	}
-
-	return nil
-}
-
-func findMissingAllocations(ipPoolAllocations []types.IPReservation, podList *core.PodList) error {
-	var found bool
-	var podIP, reservedIP string
-	var err error
-
-	for _, pod := range podList.Items {
-		found = false
-		for _, allocation := range ipPoolAllocations {
-			podIP, err = retrievers.SecondaryIfaceIPValue(&pod)
-			if err != nil {
-				return err
-			}
-			reservedIP = allocation.IP.String()
-
-			if reservedIP == podIP {
-				found = true
-				break
-			}
-		}
-
-		if !found {
-			return fmt.Errorf("possible pod IP not recorded in IP pool: failed to find IP pool allocation for pod IP %s\n", podIP)
-		}
-	}
-
-	return nil
-}
 
 func allocationForPodRef(podRef string, ipPool v1alpha1.IPPool) *v1alpha1.IPAllocation {
 	for _, allocation := range ipPool.Spec.Allocations {
