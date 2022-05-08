@@ -2,7 +2,6 @@ package whereabouts_e2e
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -25,6 +24,7 @@ import (
 
 	wbtestclient "github.com/k8snetworkplumbingwg/whereabouts/e2e/client"
 	"github.com/k8snetworkplumbingwg/whereabouts/e2e/entities"
+	"github.com/k8snetworkplumbingwg/whereabouts/e2e/retrievers"
 	testenv "github.com/k8snetworkplumbingwg/whereabouts/e2e/testenvironment"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
 	wbstorage "github.com/k8snetworkplumbingwg/whereabouts/pkg/storage/kubernetes"
@@ -106,7 +106,7 @@ var _ = Describe("Whereabouts functionality", func() {
 
 			It("allocates a single pod within the correct IP range", func() {
 				By("checking pod IP is within whereabouts IPAM range")
-				secondaryIfaceIP, err := secondaryIfaceIPValue(pod)
+				secondaryIfaceIP, err := retrievers.SecondaryIfaceIPValue(pod)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(inRange(ipv4TestRange, secondaryIfaceIP)).To(Succeed())
 			})
@@ -413,7 +413,7 @@ func findStaleIPAddresses(ipPoolAllocations []types.IPReservation, podList *core
 	for _, allocation := range ipPoolAllocations {
 		found = false
 		for _, pod := range podList.Items {
-			podIP, err = secondaryIfaceIPValue(&pod)
+			podIP, err = retrievers.SecondaryIfaceIPValue(&pod)
 			if err != nil {
 				return err
 			}
@@ -441,7 +441,7 @@ func findMissingAllocations(ipPoolAllocations []types.IPReservation, podList *co
 	for _, pod := range podList.Items {
 		found = false
 		for _, allocation := range ipPoolAllocations {
-			podIP, err = secondaryIfaceIPValue(&pod)
+			podIP, err = retrievers.SecondaryIfaceIPValue(&pod)
 			if err != nil {
 				return err
 			}
@@ -562,38 +562,6 @@ func macvlanNetworkWithWhereaboutsIPAMNetwork(networkName string, namespaceName 
         ]
     }`, ipRange)
 	return generateNetAttachDefSpec(networkName, namespaceName, macvlanConfig)
-}
-
-func filterNetworkStatus(
-	networkStatuses []nettypes.NetworkStatus, predicate func(nettypes.NetworkStatus) bool) *nettypes.NetworkStatus {
-	for i, networkStatus := range networkStatuses {
-		if predicate(networkStatus) {
-			return &networkStatuses[i]
-		}
-	}
-	return nil
-}
-
-func secondaryIfaceIPValue(pod *core.Pod) (string, error) {
-	podNetStatus, found := pod.Annotations[nettypes.NetworkStatusAnnot]
-	if !found {
-		return "", fmt.Errorf("the pod must feature the `networks-status` annotation")
-	}
-
-	var netStatus []nettypes.NetworkStatus
-	if err := json.Unmarshal([]byte(podNetStatus), &netStatus); err != nil {
-		return "", err
-	}
-
-	secondaryInterfaceNetworkStatus := filterNetworkStatus(netStatus, func(status nettypes.NetworkStatus) bool {
-		return status.Interface == "net1"
-	})
-
-	if len(secondaryInterfaceNetworkStatus.IPs) == 0 {
-		return "", fmt.Errorf("the pod does not have IPs for its secondary interfaces")
-	}
-
-	return secondaryInterfaceNetworkStatus.IPs[0], nil
 }
 
 func inRange(cidr string, ip string) error {
