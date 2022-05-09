@@ -48,15 +48,15 @@ do
       fi
       if [[ $found == 0 ]]
       then
-	  stspod=`kubectl get -n $ns pod $podname --ignore-not-found -o=jsonpath='{.metadata.labels}' | jq -r '."statefulset.kubernetes.io/pod-name"'`
-          if [[ $stspod == $podname ]]
-          then
-            echo "$podref is a statefulset, skip removing IP allocation"
-          else
-            echo "-> Pod not found -> removing IP allocation"
-            kubectl patch "$ippool" -n kube-system --type=merge -p "{\"spec\":{\"allocations\":{\"$index\":null}}}"
-            continue
-	  fi
+        stspod=`kubectl get -n $ns pod $podname --ignore-not-found -o=jsonpath='{.metadata.labels}' | jq -r '."statefulset.kubernetes.io/pod-name"'`
+        if [[ $stspod == $podname ]]
+        then
+          echo "$podref is a statefulset, skip removing IP allocation"
+        else
+          echo "-> Pod not found -> removing IP allocation"
+          kubectl patch "$ippool" -n kube-system --type=merge -p "{\"spec\":{\"allocations\":{\"$index\":null}}}"
+          continue
+        fi
       fi
 
       # check whether the allocated IP is used by any non-referenced Pods (e.g. multiple Pods use the same IP) -> non-referenced Pods need to be deleted
