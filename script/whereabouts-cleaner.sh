@@ -10,7 +10,6 @@ set -o pipefail
 while true
 do
   date
-
   # cache Pod IP usage
   podipmap=`kubectl get pods -A --ignore-not-found -o=jsonpath='{.items[?(@.metadata.annotations.k8s\.v1\.cni\.cncf\.io/networks-status)].metadata}' | jq -r '(.namespace + " " + .name + " " + (.annotations."k8s.v1.cni.cncf.io/networks-status" | fromjson | .[] | select(.name != "") | .ips | join(",") ))'`
 
@@ -35,7 +34,6 @@ do
         continue
       fi
       found=0
-      echo "Check podref $podref for its assigned IP: $ip"
       ns=`echo $podref | cut -d'/' -f1`
       podname=`echo $podref | cut -d'/' -f2`
 
@@ -50,9 +48,15 @@ do
       fi
       if [[ $found == 0 ]]
       then
-        echo "-> Pod not found -> removing IP allocation"
-        kubectl patch "$ippool" -n kube-system --type=merge -p "{\"spec\":{\"allocations\":{\"$index\":null}}}"
-        continue
+	  stspod=`kubectl get -n $ns pod $podname --ignore-not-found -o=jsonpath='{.metadata.labels}' | jq -r '."statefulset.kubernetes.io/pod-name"'`
+          if [[ $stspod == $podname ]]
+          then
+            echo "$podref is a statefulset, skip removing IP allocation"
+          else
+            echo "-> Pod not found -> removing IP allocation"
+            kubectl patch "$ippool" -n kube-system --type=merge -p "{\"spec\":{\"allocations\":{\"$index\":null}}}"
+            continue
+	  fi
       fi
 
       # check whether the allocated IP is used by any non-referenced Pods (e.g. multiple Pods use the same IP) -> non-referenced Pods need to be deleted
@@ -68,6 +72,12 @@ do
           echo "-> Multiple pods are found for IP $ip in $ippool"
           echo "-> registered pod: $ns/$podname"
           echo "-> duplicate pod: $dupns/$duppodname"
+	  dupstspod=`kubectl get -n $dupns pod $duppodname --ignore-not-found -o=jsonpath='{.metadata.labels}' | jq -r '."statefulset.kubernetes.io/pod-name"'`
+	  if [[  $dupstspod != $duppodname ]]
+          then
+            echo "-> duplicate pod $dupns/$duppodname is not statefulset -> deleting"
+	    kubectl delete pod -n "$dupns" "$duppodname" --ignore-not-found
+          fi          
         fi
       done <<< "$duppods"
       if [[ $dupfound == 1 ]]; then break 2; fi
@@ -75,7 +85,6 @@ do
     done < <(kubectl get "$ippool" -n kube-system --ignore-not-found -o=jsonpath='{.spec.allocations}' | jq -r 'to_entries | .[] | .key + " " + .value.podref')
   done < <(kubectl get ippools -n kube-system --no-headers --ignore-not-found -o=name)
 
-  echo "-----------------------------------------"
-  sleep 10
+  sleep 45
 done
 
