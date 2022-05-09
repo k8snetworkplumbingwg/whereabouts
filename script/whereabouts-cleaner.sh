@@ -13,6 +13,7 @@ do
 
   # cache Pod IP usage
   podipmap=`kubectl get pods -A --ignore-not-found -o=jsonpath='{.items[?(@.metadata.annotations.k8s\.v1\.cni\.cncf\.io/networks-status)].metadata}' | jq -r '(.namespace + " " + .name + " " + (.annotations."k8s.v1.cni.cncf.io/networks-status" | fromjson | .[] | select(.name != "") | .ips | join(",") ))'`
+  podstslist=`kubectl get pods -A --ignore-not-found -o=jsonpath='{.items[?(@.metadata.annotations.k8s\.v1\.cni\.cncf\.io/networks-status)].metadata}' | jq -r '(.namespace) + "/" + (.labels."statefulset.kubernetes.io/pod-name")'`
 
   while read ippool
   do
@@ -50,9 +51,14 @@ do
       fi
       if [[ $found == 0 ]]
       then
-        echo "-> Pod not found -> removing IP allocation"
-        kubectl patch "$ippool" -n kube-system --type=merge -p "{\"spec\":{\"allocations\":{\"$index\":null}}}"
-        continue
+        if [[ "${podstslist[*]}" =~ "${podref}" ]]
+        then
+          echo "$podref is a statefulset, skip removing IP allocation"
+        else
+          echo "-> Pod not found -> removing IP allocation"
+          kubectl patch "$ippool" -n kube-system --type=merge -p "{\"spec\":{\"allocations\":{\"$index\":null}}}"
+          continue
+	fi
       fi
 
       # check whether the allocated IP is used by any non-referenced Pods (e.g. multiple Pods use the same IP) -> non-referenced Pods need to be deleted
@@ -68,6 +74,11 @@ do
           echo "-> Multiple pods are found for IP $ip in $ippool"
           echo "-> registered pod: $ns/$podname"
           echo "-> duplicate pod: $dupns/$duppodname"
+	  if [[ ! "${podstslist[*]}" =~ "${podref}" ]]
+          then
+            echo "-> duplicate pod $dupns/$duppodname is not statefulset -> deleting"
+	    kubectl delete pod -n "$dupns" "$duppodname" --ignore-not-found
+          fi          
         fi
       done <<< "$duppods"
       if [[ $dupfound == 1 ]]; then break 2; fi
@@ -76,6 +87,6 @@ do
   done < <(kubectl get ippools -n kube-system --no-headers --ignore-not-found -o=name)
 
   echo "-----------------------------------------"
-  sleep 10
+  sleep 45
 done
 
