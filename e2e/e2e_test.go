@@ -436,7 +436,7 @@ func checkZeroIPPoolAllocationsAndReplicas(clientInfo *wbtestclient.ClientInfo, 
 		return err
 	}
 
-	if err = WaitForZeroIPPoolAllocations(k8sIPAM, ipPoolName, zeroIPPoolTimeout); err != nil {
+	if err = wbtestclient.WaitForZeroIPPoolAllocations(k8sIPAM, ipPoolName, zeroIPPoolTimeout); err != nil {
 		return err
 	}
 

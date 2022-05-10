@@ -1,7 +1,7 @@
 // This code is based on code from the following repository
 // https://github.com/bcreane/k8sutils
 
-package whereabouts_e2e
+package client
 
 import (
 	"context"
