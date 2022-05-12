@@ -19,6 +19,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/allocate"
@@ -34,7 +35,7 @@ func NewKubernetesIPAM(containerID string, ipamConf whereaboutstypes.IPAMConfig)
 	if cfg, err := clientcmd.LoadFromFile(ipamConf.Kubernetes.KubeConfigPath); err != nil {
 		return nil, err
 	} else if ctx, ok := cfg.Contexts[cfg.CurrentContext]; ok && ctx != nil {
-		namespace = ctx.Namespace
+		namespace = wbNamespaceFromCtx(ctx)
 	} else {
 		return nil, fmt.Errorf("k8s config: namespace not present in context")
 	}
@@ -542,4 +543,12 @@ RETRYLOOP:
 	}
 
 	return newip, err
+}
+
+func wbNamespaceFromCtx(ctx *clientcmdapi.Context) string {
+	namespace := ctx.Namespace
+	if namespace == "" {
+		return metav1.NamespaceSystem
+	}
+	return namespace
 }
