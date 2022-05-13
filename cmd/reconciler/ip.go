@@ -4,44 +4,47 @@ package reconciler
 import (
 	"context"
 	"errors"
-	"flag"
 	"time"
 
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/reconciler"
 )
 
-const defaultReconcilerTimeout = 30
+const (
+	defaultReconcilerTimeout = 30
+	// reconcilerTimeout        = flag.Int("timeout", defaultReconcilerTimeout, "the value for a request timeout in seconds.") // what about this is not constant? >:(
+)
 
 func InvokeIPReconciler(returnErr chan error) {
 	go func() {
 		doInvokeIPReconciler(returnErr)
 	}()
 	select {
-	case <-time.After(5 * time.Second):
-		returnErr <- errors.New("timed out (this is the 5 sec test timeout, nbd)")
+	case <-time.After(5 * time.Minute):
+		returnErr <- errors.New("ip reconciler timed out")
 		return
 	case <-returnErr:
+		logging.Verbosef("finishing ip reconciler run")
 		return
 	}
 }
 
+// TODO: get ip_test.go working with this - currently idk if it does...
 func doInvokeIPReconciler(returnErr chan error) {
-	reconcilerTimeout := flag.Int("timeout", defaultReconcilerTimeout, "the value for a request timeout in seconds.")
-	ipReconcileLoop, err := reconciler.NewReconcileLooper(context.Background(), *reconcilerTimeout)
-
+	ipReconcileLoop, err := reconciler.NewReconcileLooper(context.Background(), defaultReconcilerTimeout)
 	if err != nil {
 		_ = logging.Errorf("failed to create the reconcile looper: %v", err)
 		returnErr <- err
-		return //returns might not even be necessary thanks to timeout code in InvokeIPReconciler
+		return
 	}
 
 	cleanedUpIps, err := ipReconcileLoop.ReconcileIPPools(context.Background())
 	if err != nil {
 		_ = logging.Errorf("failed to clean up IP for allocations: %v", err)
 		returnErr <- err
-		return //returns might not even be necessary thanks to timeout code in InvokeIPReconciler
+		return
 	}
+
 	if len(cleanedUpIps) > 0 {
 		logging.Debugf("successfully cleanup IPs: %+v", cleanedUpIps)
 	} else {
@@ -50,11 +53,12 @@ func doInvokeIPReconciler(returnErr chan error) {
 
 	if err := ipReconcileLoop.ReconcileOverlappingIPAddresses(context.Background()); err != nil {
 		returnErr <- err
-		return //returns might not even be necessary thanks to timeout code in InvokeIPReconciler
+		return
 	}
 
-	// increment success metric here - no error occurred.
+	logging.Verbosef("no errors with ip reconciler...returning in a sec")
 	returnErr <- err
+	return
 }
 
 // i think this function will get deleted

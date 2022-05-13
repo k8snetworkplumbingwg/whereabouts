@@ -45,8 +45,6 @@ const (
 )
 
 func main() {
-	logging.Verbosef("This is a test... :)")
-
 	logLevel := flag.String("log-level", defaultLogLevel, "Specify the pod controller application logging level")
 	if logLevel != nil && logging.GetLoggingLevel().String() != *logLevel {
 		logging.SetLogLevel(*logLevel)
@@ -65,9 +63,7 @@ func main() {
 		os.Exit(couldNotCreateController)
 	}
 
-	networkController.Start(stopChan) // code seems to spin here... further code not executed
-
-	logging.Verbosef("2nd test print, doubt this is gonna be reached...") // only gets reached if I ctrl+C during the code's runtime.
+	networkController.Start(stopChan)
 
 	totalReconcilerSuccess := prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "reconciler_success_total",
@@ -77,7 +73,10 @@ func main() {
 	prometheus.MustRegister(totalReconcilerSuccess)
 
 	http.Handle("/metrics", promhttp.Handler())
-	log.Fatal(http.ListenAndServe(":8080", nil))
+
+	go func() {
+		log.Fatal(http.ListenAndServe(":1337", nil)) // ListenAndServe is a blocking call.
+	}()
 
 	// here's where my for { select {} } loop should go - and use tickers
 	// https://gobyexample.com/tickers
@@ -87,24 +86,29 @@ func main() {
 	// c. default: continue to spin
 	ticker := time.NewTicker(10 * time.Second) // temp value, will eventually be days/weeks duration
 
-	for i := 0; i < 5; i++ { // iterating 5 times just for the sake of terminating code and getting logfile output
-		logging.Verbosef("iteration #", i)
+	i := 0
+	for /*i := 0; i < 5; i++*/ {
+		i++
+		logging.Verbosef("iteration #%d", i)
 		select {
 		case <-stopChan:
 			return
 		case t := <-ticker.C:
-			// fmt.Println("Running ip-reconciler, tick at ", t)
-			logging.Verbosef("time to run reconciler (dummy), tick at ", t)
-			go reconciler.InvokeIPReconciler(returnErr) // need to implement a timeout for this
-		case err := <-returnErr:
+			fmt.Println("Running ip-reconciler, tick at ", t)
+			go reconciler.InvokeIPReconciler(returnErr)
+		case err := <-returnErr: // why is this case only reached one time?
+			logging.Verbosef("reached counter decision")
 			if err == nil {
 				totalReconcilerSuccess.Inc()
 				logging.Verbosef("ip reconciler success!")
 			} else {
-				logging.Verbosef("ip reconciler failure: ", err)
+				logging.Verbosef("ip reconciler failure: %s", err)
 			}
 		}
 	}
+
+	logging.Verbosef("loop ended...you have one minute to curl for counter results.")
+	time.Sleep(1 * time.Minute)
 	return
 }
 

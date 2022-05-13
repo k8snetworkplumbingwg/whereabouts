@@ -117,12 +117,6 @@ func (pc *PodController) Start(stopChan <-chan struct{}) {
 	}
 
 	go wait.Until(pc.worker, syncPeriod, stopChan)
-	// is the code waiting for this goroutine to finish before returning?
-	// i WANT to return back to main, and eventually send a stopChan when code needs to exit for whatever reason.
-
-	// <-stopChan
-	// logging.Verbosef("shutting down network controller")
-	// ^^ these two lines need to be removed so i can return execution to main()
 }
 
 func (pc *PodController) worker() {
