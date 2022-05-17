@@ -122,6 +122,15 @@ var _ = Describe("Pod Wrapper operations", func() {
 			}
 			Expect(wrapPod(pod).ips).To(BeEmpty())
 		})
+
+		It("returns an empty list when a pod does not feature network status annotations", func() {
+			pod := v1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{},
+				},
+			}
+			Expect(wrapPod(pod).ips).To(BeEmpty())
+		})
 	})
 
 	Context("the index pods operation", func() {
