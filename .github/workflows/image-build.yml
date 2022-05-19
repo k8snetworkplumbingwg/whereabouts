@@ -20,7 +20,7 @@ jobs:
           file: Dockerfile
 
   build-openshift:
-    name: Image build/amd64
+    name: Image build/openshift
     runs-on: ubuntu-latest
     steps:
       - name: Check out code into the Go module directory
