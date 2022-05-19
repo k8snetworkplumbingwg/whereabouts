@@ -48,14 +48,14 @@ func NewReconcileLooper(ctx context.Context, timeout int) (*ReconcileLooper, err
 }
 
 func newReconcileLooper(ctx context.Context, k8sClient *kubernetes.Client, timeout int) (*ReconcileLooper, error) {
-	pods, err := k8sClient.ListPods(ctx)
-	if err != nil {
-		return nil, err
-	}
-
 	ipPools, err := k8sClient.ListIPPools(ctx)
 	if err != nil {
 		return nil, logging.Errorf("failed to retrieve all IP pools: %v", err)
+	}
+
+	pods, err := k8sClient.ListPods(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	whereaboutsPodRefs := getPodRefsServedByWhereabouts(ipPools)
