@@ -14,10 +14,12 @@ require (
 	github.com/onsi/ginkgo v1.14.1
 	github.com/onsi/gomega v1.10.2
 	github.com/pkg/errors v0.9.1
+	go.uber.org/zap v1.15.0
 	golang.org/x/net v0.0.0-20220225172249-27dd8689420f // indirect
 	golang.org/x/sys v0.0.0-20220227234510-4e6760a101f9 // indirect
 	golang.org/x/tools v0.1.9 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.1.0
+	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 	k8s.io/api v0.22.6
 	k8s.io/apimachinery v0.22.6
 	k8s.io/client-go v0.22.6
