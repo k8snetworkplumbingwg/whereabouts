@@ -25,8 +25,12 @@ type podWrapper struct {
 type void struct{}
 
 func wrapPod(pod v1.Pod) *podWrapper {
+	podIPSet, err := getFlatIPSet(pod)
+	if err != nil {
+		podIPSet = map[string]void{}
+	}
 	return &podWrapper{
-		ips: getFlatIPSet(pod),
+		ips:   podIPSet,
 		phase: pod.Status.Phase,
 	}
 }
@@ -57,14 +61,18 @@ func indexPods(livePodList []v1.Pod, whereaboutsPodNames map[string]void) map[st
 	return podMap
 }
 
-func getFlatIPSet(pod v1.Pod) map[string]void {
+func getFlatIPSet(pod v1.Pod) (map[string]void, error) {
 	var empty void
 	ipSet := map[string]void{}
-	networkStatusAnnotationValue := []byte(pod.Annotations[MultusNetworkStatusAnnotation])
 	var networkStatusList []k8snetworkplumbingwgv1.NetworkStatus
-	if err := json.Unmarshal(networkStatusAnnotationValue, &networkStatusList); err != nil {
-		_ = logging.Errorf("could not parse network annotation %s for pod: %s; error: %v", networkStatusAnnotationValue, composePodRef(pod), err)
-		return ipSet
+
+	networkStatusAnnotationValue := networkStatusFromPod(pod)
+	if err := json.Unmarshal([]byte(networkStatusAnnotationValue), &networkStatusList); err != nil {
+		return ipSet, logging.Errorf(
+			"could not parse network annotation %s for pod: %s; error: %v",
+			networkStatusAnnotationValue,
+			composePodRef(pod),
+			err)
 	}
 
 	for _, network := range networkStatusList {
@@ -78,5 +86,13 @@ func getFlatIPSet(pod v1.Pod) map[string]void {
 			logging.Debugf("Added IP %s for pod %s", ip, composePodRef(pod))
 		}
 	}
-	return ipSet
+	return ipSet, nil
+}
+
+func networkStatusFromPod(pod v1.Pod) string {
+	networkStatusAnnotationValue, isStatusAnnotationPresent := pod.Annotations[MultusNetworkStatusAnnotation]
+	if !isStatusAnnotationPresent || len(networkStatusAnnotationValue) == 0 {
+		return "[]"
+	}
+	return networkStatusAnnotationValue
 }
