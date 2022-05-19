@@ -17,7 +17,13 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	k8stypes "k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/runtime"
+	k8sclient "k8s.io/client-go/kubernetes"
+	fakek8sclient "k8s.io/client-go/kubernetes/fake"
+
+	wbclient "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/clientset/versioned"
+	fakewbclient "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/clientset/versioned/fake"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage/kubernetes"
 )
 
 func TestIPReconciler(t *testing.T) {
@@ -37,32 +43,28 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 
 	var (
 		reconcileLooper *ReconcileLooper
+		k8sClientSet    k8sclient.Interface
 	)
 
 	Context("reconciling IP pools with a single running pod", func() {
 		var pod *v1.Pod
 
 		BeforeEach(func() {
-			var err error
-			pod, err = k8sClientSet.CoreV1().Pods(namespace).Create(
-				context.TODO(),
-				generatePod(namespace, podName, ipInNetwork{ip: firstIPInRange, networkName: networkName}),
-				metav1.CreateOptions{})
-			Expect(err).NotTo(HaveOccurred())
+			pod = generatePod(namespace, podName, ipInNetwork{ip: firstIPInRange, networkName: networkName})
+			k8sClientSet = fakek8sclient.NewSimpleClientset(pod)
 		})
 
 		Context("with IP from a single IPPool", func() {
 			const poolName = "pool1"
 
-			var pool *v1alpha1.IPPool
+			var (
+				pool     *v1alpha1.IPPool
+				wbClient wbclient.Interface
+			)
 
 			BeforeEach(func() {
 				pool = generateIPPoolSpec(ipRange, namespace, poolName, pod.Name)
-				Expect(k8sClient.Create(context.Background(), pool)).NotTo(HaveOccurred())
-			})
-
-			AfterEach(func() {
-				Expect(k8sClient.Delete(context.Background(), pool)).NotTo(HaveOccurred())
+				wbClient = fakewbclient.NewSimpleClientset(pool)
 			})
 
 			Context("the pod dies", func() {
@@ -73,7 +75,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 				Context("reconciling the IPPool", func() {
 					BeforeEach(func() {
 						var err error
-						reconcileLooper, err = NewReconcileLooperWithKubeconfig(context.TODO(), kubeConfigPath, timeout)
+						reconcileLooper, err = NewReconcileLooperWithClient(context.TODO(), kubernetes.NewKubernetesClient(wbClient, k8sClientSet, timeout), timeout)
 						Expect(err).NotTo(HaveOccurred())
 					})
 
@@ -84,9 +86,8 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 					It("the pool's orphaned IP should be deleted after the reconcile loop", func() {
 						_, err := reconcileLooper.ReconcileIPPools(context.TODO())
 						Expect(err).NotTo(HaveOccurred())
-						var poolAfterCleanup v1alpha1.IPPool
-						poolKey := k8stypes.NamespacedName{Namespace: namespace, Name: pool.Name}
-						Expect(k8sClient.Get(context.Background(), poolKey, &poolAfterCleanup)).To(Succeed())
+						poolAfterCleanup, err := wbClient.WhereaboutsV1alpha1().IPPools(namespace).Get(context.TODO(), pool.GetName(), metav1.GetOptions{})
+						Expect(err).NotTo(HaveOccurred())
 						Expect(poolAfterCleanup.Spec.Allocations).To(BeEmpty())
 					})
 				})
@@ -104,6 +105,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 		var pods []v1.Pod
 
 		BeforeEach(func() {
+			pods = nil
 			ips := []string{firstIPInRange, secondIPInRange}
 			for i := 0; i < numberOfPods; i++ {
 				pod := generatePod(namespace, fmt.Sprintf("pod%d", i+1), ipInNetwork{
@@ -111,22 +113,19 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 					networkName: networkName,
 				})
 				if i == livePodIndex {
-					_, err := k8sClientSet.CoreV1().Pods(namespace).Create(context.TODO(), pod, metav1.CreateOptions{})
-					Expect(err).NotTo(HaveOccurred())
+					k8sClientSet = fakek8sclient.NewSimpleClientset(pod)
 				}
 				pods = append(pods, *pod)
 			}
 		})
 
-		AfterEach(func() {
-			Expect(k8sClientSet.CoreV1().Pods(namespace).Delete(context.TODO(), pods[livePodIndex].Name, metav1.DeleteOptions{})).NotTo(HaveOccurred())
-			pods = nil
-		})
-
 		Context("each with IP from the same IPPool", func() {
 			const poolName = "pool1"
 
-			var pool *v1alpha1.IPPool
+			var (
+				pool     *v1alpha1.IPPool
+				wbClient wbclient.Interface
+			)
 
 			BeforeEach(func() {
 				var podNames []string
@@ -134,17 +133,13 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 					podNames = append(podNames, pod.Name)
 				}
 				pool = generateIPPoolSpec(ipRange, namespace, poolName, podNames...)
-				Expect(k8sClient.Create(context.Background(), pool)).NotTo(HaveOccurred())
-			})
-
-			AfterEach(func() {
-				Expect(k8sClient.Delete(context.Background(), pool)).NotTo(HaveOccurred())
+				wbClient = fakewbclient.NewSimpleClientset(pool)
 			})
 
 			Context("reconciling the IPPool", func() {
 				BeforeEach(func() {
 					var err error
-					reconcileLooper, err = NewReconcileLooperWithKubeconfig(context.TODO(), kubeConfigPath, timeout)
+					reconcileLooper, err = NewReconcileLooperWithClient(context.TODO(), kubernetes.NewKubernetesClient(wbClient, k8sClientSet, timeout), timeout)
 					Expect(err).NotTo(HaveOccurred())
 				})
 
@@ -159,9 +154,8 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(deletedIPAddrs).NotTo(BeEmpty())
 
-					var poolAfterCleanup v1alpha1.IPPool
-					poolKey := k8stypes.NamespacedName{Namespace: namespace, Name: pool.Name}
-					Expect(k8sClient.Get(context.Background(), poolKey, &poolAfterCleanup)).To(Succeed())
+					poolAfterCleanup, err := wbClient.WhereaboutsV1alpha1().IPPools(namespace).Get(context.TODO(), pool.GetName(), metav1.GetOptions{})
+					Expect(err).NotTo(HaveOccurred())
 
 					remainingAllocation := map[string]v1alpha1.IPAllocation{
 						"2": {
@@ -188,9 +182,20 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 			thirdIPInRange     = "10.10.10.3"
 		)
 
-		var pods []v1.Pod
-		var pools []v1alpha1.IPPool
-		var clusterWideIPs []v1alpha1.OverlappingRangeIPReservation
+		var (
+			pods           []*v1.Pod
+			pools          []v1alpha1.IPPool
+			clusterWideIPs []v1alpha1.OverlappingRangeIPReservation
+			wbClient       wbclient.Interface
+		)
+
+		wrapToRuntimeObject := func(pods ...*v1.Pod) []runtime.Object {
+			var runtimeObjects []runtime.Object
+			for _, pod := range pods {
+				runtimeObjects = append(runtimeObjects, pod)
+			}
+			return runtimeObjects
+		}
 
 		BeforeEach(func() {
 			ips := []string{firstIPInRange, secondIPInRange, thirdIPInRange}
@@ -200,17 +205,15 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 					ip:          ips[i],
 					networkName: networks[i%2], // pod1 and pod3 connected to network1; pod2 connected to network2
 				})
-				_, err := k8sClientSet.CoreV1().Pods(namespace).Create(context.TODO(), pod, metav1.CreateOptions{})
-				Expect(err).NotTo(HaveOccurred())
-				pods = append(pods, *pod)
+				pods = append(pods, pod)
 			}
+			k8sClientSet = fakek8sclient.NewSimpleClientset(wrapToRuntimeObject(pods...)...)
 		})
 
 		BeforeEach(func() {
 			firstPool := generateIPPoolSpec(firstNetworkRange, namespace, firstPoolName, pods[0].GetName(), pods[2].GetName())
 			secondPool := generateIPPoolSpec(secondNetworkRange, namespace, secondPoolName, pods[1].GetName())
-			Expect(k8sClient.Create(context.Background(), firstPool)).NotTo(HaveOccurred())
-			Expect(k8sClient.Create(context.Background(), secondPool)).NotTo(HaveOccurred())
+			wbClient = fakewbclient.NewSimpleClientset(firstPool, secondPool)
 			pools = append(pools, *firstPool, *secondPool)
 		})
 
@@ -219,43 +222,21 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 			for i := 0; i < numberOfPods; i++ {
 				var clusterWideIP v1alpha1.OverlappingRangeIPReservation
 				ownerPodRef := fmt.Sprintf("%s/%s", namespace, pods[i].GetName())
-				Expect(k8sClient.Create(context.TODO(), generateClusterWideIPReservation(namespace, podIPs[i], ownerPodRef))).To(Succeed())
+				_, err := wbClient.WhereaboutsV1alpha1().OverlappingRangeIPReservations(namespace).Create(context.TODO(), generateClusterWideIPReservation(namespace, podIPs[i], ownerPodRef), metav1.CreateOptions{})
+				Expect(err).NotTo(HaveOccurred())
 				clusterWideIPs = append(clusterWideIPs, clusterWideIP)
 			}
 		})
 
-		AfterEach(func() {
-			podIPs := []string{firstIPInRange, secondIPInRange, thirdIPInRange}
-			for i := podIndexToRemove + 1; i < numberOfPods; i++ {
-				ownerPodRef := fmt.Sprintf("%s/%s", namespace, pods[i].GetName())
-				Expect(k8sClient.Delete(context.TODO(), generateClusterWideIPReservation(namespace, podIPs[i], ownerPodRef))).To(Succeed())
-			}
-			clusterWideIPs = nil
-		})
-
-		AfterEach(func() {
-			for i := podIndexToRemove + 1; i < numberOfPods; i++ {
-				Expect(k8sClientSet.CoreV1().Pods(namespace).Delete(context.TODO(), pods[i].Name, metav1.DeleteOptions{})).NotTo(HaveOccurred())
-			}
-			pods = nil
-		})
-
-		AfterEach(func() {
-			for i := range pools {
-				Expect(k8sClient.Delete(context.Background(), &pools[i])).NotTo(HaveOccurred())
-			}
-			pools = nil
-		})
-
 		It("will delete an orphaned IP address", func() {
 			Expect(k8sClientSet.CoreV1().Pods(namespace).Delete(context.TODO(), pods[podIndexToRemove].Name, metav1.DeleteOptions{})).NotTo(HaveOccurred())
-			newReconciler, err := NewReconcileLooperWithKubeconfig(context.TODO(), kubeConfigPath, timeout)
+			newReconciler, err := NewReconcileLooperWithClient(context.TODO(), kubernetes.NewKubernetesClient(wbClient, k8sClientSet, timeout), timeout)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(newReconciler.ReconcileOverlappingIPAddresses(context.TODO())).To(Succeed())
 
 			expectedClusterWideIPs := 2
-			var clusterWideIPAllocations v1alpha1.OverlappingRangeIPReservationList
-			Expect(k8sClient.List(context.TODO(), &clusterWideIPAllocations)).To(Succeed())
+			clusterWideIPAllocations, err := wbClient.WhereaboutsV1alpha1().OverlappingRangeIPReservations(namespace).List(context.TODO(), metav1.ListOptions{})
+			Expect(err).NotTo(HaveOccurred())
 			Expect(clusterWideIPAllocations.Items).To(HaveLen(expectedClusterWideIPs))
 		})
 	})
@@ -263,8 +244,11 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 	Context("a pod in pending state, without an IP in its network-status", func() {
 		const poolName = "pool1"
 
-		var pod *v1.Pod
-		var pool *v1alpha1.IPPool
+		var (
+			pod      *v1.Pod
+			pool     *v1alpha1.IPPool
+			wbClient wbclient.Interface
+		)
 
 		BeforeEach(func() {
 			var err error
@@ -275,15 +259,9 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			pool = generateIPPoolSpec(ipRange, namespace, poolName, pod.Name)
-			Expect(k8sClient.Create(context.Background(), pool)).NotTo(HaveOccurred())
-
-			reconcileLooper, err = NewReconcileLooperWithKubeconfig(context.TODO(), kubeConfigPath, timeout)
+			wbClient = fakewbclient.NewSimpleClientset(pool)
+			reconcileLooper, err = NewReconcileLooperWithClient(context.TODO(), kubernetes.NewKubernetesClient(wbClient, k8sClientSet, timeout), timeout)
 			Expect(err).NotTo(HaveOccurred())
-		})
-
-		AfterEach(func() {
-			Expect(k8sClient.Delete(context.Background(), pool)).NotTo(HaveOccurred())
-			Expect(k8sClientSet.CoreV1().Pods(namespace).Delete(context.TODO(), pod.GetName(), metav1.DeleteOptions{}))
 		})
 
 		It("cannot be reconciled", func() {
@@ -411,7 +389,7 @@ func generateIPPoolSpec(ipRange string, namespace string, poolName string, podNa
 		}
 	}
 	return &v1alpha1.IPPool{
-		ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: poolName},
+		ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: poolName, ResourceVersion: "1"},
 		Spec: v1alpha1.IPPoolSpec{
 			Range:       ipRange,
 			Allocations: allocations,
