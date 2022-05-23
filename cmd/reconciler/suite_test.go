@@ -39,7 +39,6 @@ func TestAPIs(t *testing.T) {
 	RunSpecsWithDefaultAndCustomReporters(t,
 		"Whereabouts IP reconciler Suite",
 		[]Reporter{})
-	//[]Reporter{envtest.NewlineReporter{}})
 }
 
 var _ = BeforeSuite(func(done Done) {
@@ -61,7 +60,7 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(etcdURL).ToNot(BeNil())
 
 	Expect(testEnv.ControlPlane.APIServer).ToNot(BeNil())
-	apiURL := testEnv.ControlPlane.APIServer.URL.String()
+	apiURL := testEnv.ControlPlane.APIServer.SecureServing.URL("https", "/").String()
 	Expect(apiURL).ToNot(BeNil())
 
 	var caContents string

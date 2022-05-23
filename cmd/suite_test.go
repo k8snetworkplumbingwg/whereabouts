@@ -35,7 +35,6 @@ func TestAPIs(t *testing.T) {
 
 	RunSpecsWithDefaultAndCustomReporters(t,
 		"Whereabouts Suite",
-		//[]Reporter{envtest.NewlineReporter{}})
 		[]Reporter{})
 }
 
@@ -59,7 +58,7 @@ var _ = BeforeSuite(func(done Done) {
 	etcdHost = etcdURL.String()
 
 	Expect(testEnv.ControlPlane.APIServer).ToNot(BeNil())
-	apiURL := testEnv.ControlPlane.APIServer.URL.String()
+	apiURL := testEnv.ControlPlane.APIServer.SecureServing.URL("https", "/").String()
 	Expect(apiURL).ToNot(BeNil())
 
 	var caContents string
