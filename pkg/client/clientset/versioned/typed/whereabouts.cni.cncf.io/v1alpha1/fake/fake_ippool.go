@@ -104,7 +104,7 @@ func (c *FakeIPPools) Update(ctx context.Context, iPPool *v1alpha1.IPPool, opts 
 // Delete takes name of the iPPool and deletes it. Returns an error if one occurs.
 func (c *FakeIPPools) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	_, err := c.Fake.
-		Invokes(testing.NewDeleteAction(ippoolsResource, c.ns, name), &v1alpha1.IPPool{})
+		Invokes(testing.NewDeleteActionWithOptions(ippoolsResource, c.ns, name, opts), &v1alpha1.IPPool{})
 
 	return err
 }

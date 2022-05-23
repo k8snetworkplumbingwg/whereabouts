@@ -73,7 +73,10 @@ func (c *Clientset) Tracker() testing.ObjectTracker {
 	return c.tracker
 }
 
-var _ clientset.Interface = &Clientset{}
+var (
+	_ clientset.Interface = &Clientset{}
+	_ testing.FakeClient  = &Clientset{}
+)
 
 // WhereaboutsV1alpha1 retrieves the WhereaboutsV1alpha1Client
 func (c *Clientset) WhereaboutsV1alpha1() whereaboutsv1alpha1.WhereaboutsV1alpha1Interface {
