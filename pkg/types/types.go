@@ -1,6 +1,7 @@
 package types
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"time"
@@ -67,6 +68,91 @@ type IPAMConfig struct {
 	ConfigurationPath   string           `json:"configuration_path"`
 	PodName             string
 	PodNamespace        string
+}
+
+func (ic *IPAMConfig) UnmarshalJSON(data []byte) error {
+	type IPAMConfigAlias struct {
+		Name                string
+		Type                string            `json:"type"`
+		Routes              []*cnitypes.Route `json:"routes"`
+		Datastore           string            `json:"datastore"`
+		Addresses           []Address         `json:"addresses,omitempty"`
+		OmitRanges          []string          `json:"exclude,omitempty"`
+		DNS                 cnitypes.DNS      `json:"dns"`
+		Range               string            `json:"range"`
+		RangeStart          string            `json:"range_start,omitempty"`
+		RangeEnd            string            `json:"range_end,omitempty"`
+		GatewayStr          string            `json:"gateway"`
+		EtcdHost            string            `json:"etcd_host,omitempty"`
+		EtcdUsername        string            `json:"etcd_username,omitempty"`
+		EtcdPassword        string            `json:"etcd_password,omitempty"`
+		EtcdKeyFile         string            `json:"etcd_key_file,omitempty"`
+		EtcdCertFile        string            `json:"etcd_cert_file,omitempty"`
+		EtcdCACertFile      string            `json:"etcd_ca_cert_file,omitempty"`
+		LeaderLeaseDuration int               `json:"leader_lease_duration,omitempty"`
+		LeaderRenewDeadline int               `json:"leader_renew_deadline,omitempty"`
+		LeaderRetryPeriod   int               `json:"leader_retry_period,omitempty"`
+		LogFile             string            `json:"log_file"`
+		LogLevel            string            `json:"log_level"`
+		OverlappingRanges   bool              `json:"enable_overlapping_ranges,omitempty"`
+		SleepForRace        int               `json:"sleep_for_race,omitempty"`
+		Gateway             string
+		Kubernetes          KubernetesConfig `json:"kubernetes,omitempty"`
+		ConfigurationPath   string           `json:"configuration_path"`
+		PodName             string
+		PodNamespace        string
+	}
+
+	var ipamConfigAlias IPAMConfigAlias
+	if err := json.Unmarshal(data, &ipamConfigAlias); err != nil {
+		return err
+	}
+
+	var rangeStart, rangeEnd net.IP
+	if rs, err := sanitizeIP(ipamConfigAlias.RangeStart); err == nil {
+		rangeStart = rs
+	}
+	if re, err := sanitizeIP(ipamConfigAlias.RangeEnd); err == nil {
+		rangeEnd = re
+	}
+
+	var gateway net.IP
+	if gw, err := sanitizeIP(ipamConfigAlias.Gateway); err == nil {
+		gateway = gw
+	}
+
+	*ic = IPAMConfig{
+		Name:                ipamConfigAlias.Name,
+		Type:                ipamConfigAlias.Type,
+		Routes:              ipamConfigAlias.Routes,
+		Datastore:           ipamConfigAlias.Datastore,
+		Addresses:           ipamConfigAlias.Addresses,
+		OmitRanges:          ipamConfigAlias.OmitRanges,
+		DNS:                 ipamConfigAlias.DNS,
+		Range:               ipamConfigAlias.Range,
+		RangeStart:          rangeStart,
+		RangeEnd:            rangeEnd,
+		GatewayStr:          ipamConfigAlias.GatewayStr,
+		EtcdHost:            ipamConfigAlias.EtcdHost,
+		EtcdUsername:        ipamConfigAlias.EtcdUsername,
+		EtcdPassword:        ipamConfigAlias.EtcdPassword,
+		EtcdKeyFile:         ipamConfigAlias.EtcdKeyFile,
+		EtcdCertFile:        ipamConfigAlias.EtcdCertFile,
+		EtcdCACertFile:      ipamConfigAlias.EtcdCACertFile,
+		LeaderLeaseDuration: ipamConfigAlias.LeaderLeaseDuration,
+		LeaderRenewDeadline: ipamConfigAlias.LeaderRenewDeadline,
+		LeaderRetryPeriod:   ipamConfigAlias.LeaderRetryPeriod,
+		LogFile:             ipamConfigAlias.LogFile,
+		LogLevel:            ipamConfigAlias.LogLevel,
+		OverlappingRanges:   ipamConfigAlias.OverlappingRanges,
+		SleepForRace:        ipamConfigAlias.SleepForRace,
+		Gateway:             gateway,
+		Kubernetes:          ipamConfigAlias.Kubernetes,
+		ConfigurationPath:   ipamConfigAlias.ConfigurationPath,
+		PodName:             ipamConfigAlias.PodName,
+		PodNamespace:        ipamConfigAlias.PodNamespace,
+	}
+	return nil
 }
 
 // IPAMEnvArgs are the environment vars we expect
