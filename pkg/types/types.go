@@ -11,13 +11,15 @@ import (
 
 // Datastore types
 const (
-	DatastoreETCD              = "etcd"
-	DatastoreKubernetes        = "kubernetes"
-	DefaultLeaderLeaseDuration = 1500
-	DefaultLeaderRenewDeadline = 1000
-	DefaultLeaderRetryPeriod   = 500
-	AddTimeLimit               = 2 * time.Minute
-	DelTimeLimit               = 1 * time.Minute
+	DatastoreETCD                 = "etcd"
+	DatastoreKubernetes           = "kubernetes"
+	DefaultLeaderLeaseDuration    = 1500
+	DefaultLeaderRenewDeadline    = 1000
+	DefaultLeaderRetryPeriod      = 500
+	AddTimeLimit                  = 2 * time.Minute
+	DelTimeLimit                  = 1 * time.Minute
+	DefaultOverlappingIPsFeatures = true
+	DefaultSleepForRace           = 0
 )
 
 // Net is The top-level network config - IPAM plugins are passed the full configuration
@@ -103,22 +105,12 @@ func (ic *IPAMConfig) UnmarshalJSON(data []byte) error {
 		PodNamespace        string
 	}
 
-	var ipamConfigAlias IPAMConfigAlias
+	ipamConfigAlias := IPAMConfigAlias{
+		OverlappingRanges: DefaultOverlappingIPsFeatures,
+		SleepForRace:      DefaultSleepForRace,
+	}
 	if err := json.Unmarshal(data, &ipamConfigAlias); err != nil {
 		return err
-	}
-
-	var rangeStart, rangeEnd net.IP
-	if rs, err := sanitizeIP(ipamConfigAlias.RangeStart); err == nil {
-		rangeStart = rs
-	}
-	if re, err := sanitizeIP(ipamConfigAlias.RangeEnd); err == nil {
-		rangeEnd = re
-	}
-
-	var gateway net.IP
-	if gw, err := sanitizeIP(ipamConfigAlias.Gateway); err == nil {
-		gateway = gw
 	}
 
 	*ic = IPAMConfig{
@@ -130,8 +122,8 @@ func (ic *IPAMConfig) UnmarshalJSON(data []byte) error {
 		OmitRanges:          ipamConfigAlias.OmitRanges,
 		DNS:                 ipamConfigAlias.DNS,
 		Range:               ipamConfigAlias.Range,
-		RangeStart:          rangeStart,
-		RangeEnd:            rangeEnd,
+		RangeStart:          backwardsCompatibleIPAddress(ipamConfigAlias.RangeStart),
+		RangeEnd:            backwardsCompatibleIPAddress(ipamConfigAlias.RangeEnd),
 		GatewayStr:          ipamConfigAlias.GatewayStr,
 		EtcdHost:            ipamConfigAlias.EtcdHost,
 		EtcdUsername:        ipamConfigAlias.EtcdUsername,
@@ -146,13 +138,21 @@ func (ic *IPAMConfig) UnmarshalJSON(data []byte) error {
 		LogLevel:            ipamConfigAlias.LogLevel,
 		OverlappingRanges:   ipamConfigAlias.OverlappingRanges,
 		SleepForRace:        ipamConfigAlias.SleepForRace,
-		Gateway:             gateway,
+		Gateway:             backwardsCompatibleIPAddress(ipamConfigAlias.Gateway),
 		Kubernetes:          ipamConfigAlias.Kubernetes,
 		ConfigurationPath:   ipamConfigAlias.ConfigurationPath,
 		PodName:             ipamConfigAlias.PodName,
 		PodNamespace:        ipamConfigAlias.PodNamespace,
 	}
 	return nil
+}
+
+func backwardsCompatibleIPAddress(ip string) net.IP {
+	var ipAddr net.IP
+	if sanitizedIP, err := sanitizeIP(ip); err == nil {
+		ipAddr = sanitizedIP
+	}
+	return ipAddr
 }
 
 // IPAMEnvArgs are the environment vars we expect

@@ -151,7 +151,7 @@ var _ = Describe("Allocation operations", func() {
 		Expect(err).To(MatchError(&InvalidPluginError{ipamType: wrongPluginType}))
 	})
 
-	PIt("allows for leading zeroes in the range in start/end range format", func() {
+	It("allows for leading zeroes in the range in start/end range format", func() {
 		conf := `{
       "cniVersion": "0.3.1",
       "name": "mynet",
@@ -174,7 +174,7 @@ var _ = Describe("Allocation operations", func() {
 		Expect(ipamConfig.RangeEnd).To(Equal(net.ParseIP("192.168.1.25")))
 	})
 
-	PIt("allows for leading zeroes in the range", func() {
+	It("allows for leading zeroes in the range", func() {
 		conf := `{
       "cniVersion": "0.3.1",
       "name": "mynet",
@@ -196,7 +196,7 @@ var _ = Describe("Allocation operations", func() {
 		Expect(ipamConfig.RangeStart).To(Equal(net.ParseIP("192.168.1.0")))
 	})
 
-	PIt("allows for leading zeroes in the range when the start range is provided", func() {
+	It("allows for leading zeroes in the range when the start range is provided", func() {
 		conf := `{
       "cniVersion": "0.3.1",
       "name": "mynet",
@@ -219,7 +219,7 @@ var _ = Describe("Allocation operations", func() {
 		Expect(ipamConfig.RangeStart).To(Equal(net.ParseIP("192.168.1.44")))
 	})
 
-	PIt("allows for leading zeroes in the range when the start and end ranges are provided", func() {
+	It("allows for leading zeroes in the range when the start and end ranges are provided", func() {
 		conf := `{
       "cniVersion": "0.3.1",
       "name": "mynet",

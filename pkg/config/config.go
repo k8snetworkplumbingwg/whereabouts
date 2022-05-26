@@ -11,6 +11,9 @@ import (
 	cnitypes "github.com/containernetworking/cni/pkg/types"
 	types020 "github.com/containernetworking/cni/pkg/types/020"
 	"github.com/imdario/mergo"
+
+	netutils "k8s.io/utils/net"
+
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 )
@@ -32,13 +35,7 @@ func canonicalizeIP(ip *net.IP) error {
 // is no possibility to overload the json configuration using envArgs
 func LoadIPAMConfig(bytes []byte, envArgs string, extraConfigPaths ...string) (*types.IPAMConfig, string, error) {
 
-	// We first load up what we already have, before we start reading a file...
-	n := types.Net{
-		IPAM: &types.IPAMConfig{
-			OverlappingRanges: true,
-			SleepForRace:      0,
-		},
-	}
+	var n types.Net
 	if err := json.Unmarshal(bytes, &n); err != nil {
 		return nil, "", fmt.Errorf("LoadIPAMConfig - JSON Parsing Error: %s / bytes: %s", err, bytes)
 	}
@@ -112,11 +109,11 @@ func LoadIPAMConfig(bytes []byte, envArgs string, extraConfigPaths ...string) (*
 	}
 
 	if r := strings.SplitN(n.IPAM.Range, "-", 2); len(r) == 2 {
-		firstip := net.ParseIP(r[0])
+		firstip := netutils.ParseIPSloppy(r[0])
 		if firstip == nil {
 			return nil, "", fmt.Errorf("invalid range start IP: %s", r[0])
 		}
-		lastip, ipNet, err := net.ParseCIDR(r[1])
+		lastip, ipNet, err := netutils.ParseCIDRSloppy(r[1])
 		if err != nil {
 			return nil, "", fmt.Errorf("invalid CIDR (do you have the 'range' parameter set for Whereabouts?) '%s': %s", r[1], err)
 		}
@@ -127,13 +124,13 @@ func LoadIPAMConfig(bytes []byte, envArgs string, extraConfigPaths ...string) (*
 		n.IPAM.RangeStart = firstip
 		n.IPAM.RangeEnd = lastip
 	} else {
-		firstip, ipNet, err := net.ParseCIDR(n.IPAM.Range)
+		firstip, ipNet, err := netutils.ParseCIDRSloppy(n.IPAM.Range)
 		if err != nil {
 			return nil, "", fmt.Errorf("invalid CIDR %s: %s", n.IPAM.Range, err)
 		}
 		n.IPAM.Range = ipNet.String()
 		if n.IPAM.RangeStart == nil {
-			firstip = net.ParseIP(firstip.Mask(ipNet.Mask).String()) // if range_start is not net then pick the first network address
+			firstip = netutils.ParseIPSloppy(firstip.Mask(ipNet.Mask).String()) // if range_start is not net then pick the first network address
 			n.IPAM.RangeStart = firstip
 		}
 	}
@@ -161,7 +158,7 @@ func LoadIPAMConfig(bytes []byte, envArgs string, extraConfigPaths ...string) (*
 	}
 
 	if n.IPAM.GatewayStr != "" {
-		gwip := net.ParseIP(n.IPAM.GatewayStr)
+		gwip := netutils.ParseIPSloppy(n.IPAM.GatewayStr)
 		if gwip == nil {
 			return nil, "", fmt.Errorf("couldn't parse gateway IP: %s", n.IPAM.GatewayStr)
 		}
@@ -169,7 +166,7 @@ func LoadIPAMConfig(bytes []byte, envArgs string, extraConfigPaths ...string) (*
 	}
 
 	for i := range n.IPAM.OmitRanges {
-		_, _, err := net.ParseCIDR(n.IPAM.OmitRanges[i])
+		_, _, err := netutils.ParseCIDRSloppy(n.IPAM.OmitRanges[i])
 		if err != nil {
 			return nil, "", fmt.Errorf("invalid CIDR in exclude list %s: %s", n.IPAM.OmitRanges[i], err)
 		}
@@ -215,7 +212,7 @@ func configureStatic(n *types.Net, args types.IPAMEnvArgs) error {
 	numV6 := 0
 
 	for i := range n.IPAM.Addresses {
-		ip, addr, err := net.ParseCIDR(n.IPAM.Addresses[i].AddressStr)
+		ip, addr, err := netutils.ParseCIDRSloppy(n.IPAM.Addresses[i].AddressStr)
 		if err != nil {
 			return fmt.Errorf("invalid CIDR in addresses %s: %s", n.IPAM.Addresses[i].AddressStr, err)
 		}
@@ -261,7 +258,7 @@ func handleEnvArgs(n *types.Net, numV6 int, numV4 int, args types.IPAMEnvArgs) (
 		for _, item := range strings.Split(string(args.IP), ",") {
 			ipstr := strings.TrimSpace(item)
 
-			ip, subnet, err := net.ParseCIDR(ipstr)
+			ip, subnet, err := netutils.ParseCIDRSloppy(ipstr)
 			if err != nil {
 				return numV6, numV4, fmt.Errorf("invalid CIDR %s: %s", ipstr, err)
 			}
@@ -280,7 +277,7 @@ func handleEnvArgs(n *types.Net, numV6 int, numV4 int, args types.IPAMEnvArgs) (
 
 	if args.GATEWAY != "" {
 		for _, item := range strings.Split(string(args.GATEWAY), ",") {
-			gwip := net.ParseIP(strings.TrimSpace(item))
+			gwip := netutils.ParseIPSloppy(strings.TrimSpace(item))
 			if gwip == nil {
 				return numV6, numV4, fmt.Errorf("invalid gateway address: %s", item)
 			}
