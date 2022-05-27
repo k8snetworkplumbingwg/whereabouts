@@ -3,7 +3,6 @@ package reconciler
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
@@ -15,30 +14,19 @@ const (
 	// reconcilerTimeout        = flag.Int("timeout", defaultReconcilerTimeout, "the value for a request timeout in seconds.") // what about this is not constant? >:(
 )
 
-func InvokeIPReconciler(returnErr chan error) {
-	go func() {
-		doInvokeIPReconciler(returnErr)
-	}()
-	select {
-	case <-time.After(5 * time.Minute):
-		returnErr <- errors.New("ip reconciler timed out")
-		return
-	case <-returnErr:
-		logging.Verbosef("finishing ip reconciler run")
-		return
-	}
-}
-
 // TODO: get ip_test.go working with this - currently idk if it does...
-func doInvokeIPReconciler(returnErr chan error) {
-	ipReconcileLoop, err := reconciler.NewReconcileLooper(context.Background(), defaultReconcilerTimeout)
+func InvokeIPReconciler(returnErr chan error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(defaultReconcilerTimeout*time.Second))
+	defer cancel()
+
+	ipReconcileLoop, err := reconciler.NewReconcileLooper(ctx, defaultReconcilerTimeout)
 	if err != nil {
 		_ = logging.Errorf("failed to create the reconcile looper: %v", err)
 		returnErr <- err
 		return
 	}
 
-	cleanedUpIps, err := ipReconcileLoop.ReconcileIPPools(context.Background())
+	cleanedUpIps, err := ipReconcileLoop.ReconcileIPPools(ctx)
 	if err != nil {
 		_ = logging.Errorf("failed to clean up IP for allocations: %v", err)
 		returnErr <- err
@@ -51,7 +39,7 @@ func doInvokeIPReconciler(returnErr chan error) {
 		logging.Debugf("no IP addresses to cleanup")
 	}
 
-	if err := ipReconcileLoop.ReconcileOverlappingIPAddresses(context.Background()); err != nil {
+	if err := ipReconcileLoop.ReconcileOverlappingIPAddresses(ctx); err != nil {
 		returnErr <- err
 		return
 	}

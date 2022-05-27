@@ -74,8 +74,9 @@ func main() {
 
 	http.Handle("/metrics", promhttp.Handler())
 
+	// TODO: i want to generalize this - use random ip address instead of a specific one
 	go func() {
-		log.Fatal(http.ListenAndServe(":1337", nil)) // ListenAndServe is a blocking call.
+		log.Fatal(http.ListenAndServe(":1984", nil)) // ListenAndServe is a blocking call.
 	}()
 
 	// here's where my for { select {} } loop should go - and use tickers
