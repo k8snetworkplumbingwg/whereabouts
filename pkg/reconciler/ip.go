@@ -1,4 +1,3 @@
-// package main
 package reconciler
 
 import (

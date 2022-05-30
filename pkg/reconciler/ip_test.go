@@ -12,7 +12,6 @@ import (
 
 	multusv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
-	"github.com/k8snetworkplumbingwg/whereabouts/pkg/reconciler"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -30,7 +29,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 	)
 
 	var (
-		reconcileLooper *reconciler.ReconcileLooper
+		reconcileLooper *ReconcileLooper
 	)
 
 	Context("reconciling IP pools with a single running pod", func() {
@@ -67,7 +66,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 				Context("reconciling the IPPool", func() {
 					BeforeEach(func() {
 						var err error
-						reconcileLooper, err = reconciler.NewReconcileLooperWithKubeconfig(context.TODO(), kubeConfigPath, timeout)
+						reconcileLooper, err = NewReconcileLooperWithKubeconfig(context.TODO(), kubeConfigPath, timeout)
 						Expect(err).NotTo(HaveOccurred())
 					})
 
@@ -138,7 +137,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 			Context("reconciling the IPPool", func() {
 				BeforeEach(func() {
 					var err error
-					reconcileLooper, err = reconciler.NewReconcileLooperWithKubeconfig(context.TODO(), kubeConfigPath, timeout)
+					reconcileLooper, err = NewReconcileLooperWithKubeconfig(context.TODO(), kubeConfigPath, timeout)
 					Expect(err).NotTo(HaveOccurred())
 				})
 
@@ -243,7 +242,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 
 		It("will delete an orphaned IP address", func() {
 			Expect(k8sClientSet.CoreV1().Pods(namespace).Delete(context.TODO(), pods[podIndexToRemove].Name, metav1.DeleteOptions{})).NotTo(HaveOccurred())
-			newReconciler, err := reconciler.NewReconcileLooperWithKubeconfig(context.TODO(), kubeConfigPath, timeout)
+			newReconciler, err := NewReconcileLooperWithKubeconfig(context.TODO(), kubeConfigPath, timeout)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(newReconciler.ReconcileOverlappingIPAddresses(context.TODO())).To(Succeed())
 
@@ -271,7 +270,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 			pool = generateIPPoolSpec(ipRange, namespace, poolName, pod.Name)
 			Expect(k8sClient.Create(context.Background(), pool)).NotTo(HaveOccurred())
 
-			reconcileLooper, err = reconciler.NewReconcileLooperWithKubeconfig(context.TODO(), kubeConfigPath, timeout)
+			reconcileLooper, err = NewReconcileLooperWithKubeconfig(context.TODO(), kubeConfigPath, timeout)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -348,8 +347,8 @@ func generatePodAnnotations(ipNetworks ...ipInNetwork) map[string]string {
 		networks = append(networks, ipNetworkInfo.networkName)
 	}
 	networkAnnotations := map[string]string{
-		reconciler.MultusNetworkAnnotation:       strings.Join(networks, ","),
-		reconciler.MultusNetworkStatusAnnotation: generatePodNetworkStatusAnnotation(ipNetworks...),
+		MultusNetworkAnnotation:       strings.Join(networks, ","),
+		MultusNetworkStatusAnnotation: generatePodNetworkStatusAnnotation(ipNetworks...),
 	}
 	return networkAnnotations
 }
