@@ -33,11 +33,12 @@ import (
 )
 
 const (
-	defaultMountPath      = "/host"
-	ipReconcilerQueueName = "pod-updates"
-	syncPeriod            = time.Second
-	whereaboutsConfigPath = "/etc/cni/net.d/whereabouts.d/whereabouts.conf"
-	maxRetries            = 2
+	defaultMountPath         = "/host"
+	ipReconcilerQueueName    = "pod-updates"
+	syncPeriod               = time.Second
+	whereaboutsConfigPath    = "/etc/cni/net.d/whereabouts.d/whereabouts.conf"
+	maxRetries               = 2
+	defaultReconcilerTimeout = 30 // added for reconciler invocation
 )
 
 const (
@@ -116,9 +117,6 @@ func (pc *PodController) Start(stopChan <-chan struct{}) {
 	}
 
 	go wait.Until(pc.worker, syncPeriod, stopChan)
-
-	<-stopChan
-	logging.Verbosef("shutting down network controller")
 }
 
 func (pc *PodController) worker() {
