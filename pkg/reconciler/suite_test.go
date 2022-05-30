@@ -1,3 +1,5 @@
+// This seems to be a duplicate of the same file under cmd/. I would like to delete this.
+
 // package main
 package reconciler
 

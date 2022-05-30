@@ -26,7 +26,7 @@ type void struct{}
 
 func wrapPod(pod v1.Pod) *podWrapper {
 	return &podWrapper{
-		ips: getFlatIPSet(pod),
+		ips:   getFlatIPSet(pod),
 		phase: pod.Status.Phase,
 	}
 }

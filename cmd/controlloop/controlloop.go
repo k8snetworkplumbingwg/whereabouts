@@ -22,11 +22,11 @@ import (
 	nadclient "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/client/clientset/versioned"
 	nadinformers "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/client/informers/externalversions"
 
-	"github.com/k8snetworkplumbingwg/whereabouts/cmd/reconciler"
 	wbclient "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/clientset/versioned"
 	wbinformers "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/informers/externalversions"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/controlloop"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
-	"github.com/k8snetworkplumbingwg/whereabouts/pkg/reconciler/controlloop"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/reconciler"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -76,7 +76,7 @@ func main() {
 
 	// TODO: i want to generalize this - use random ip address instead of a specific one
 	go func() {
-		log.Fatal(http.ListenAndServe(":1984", nil)) // ListenAndServe is a blocking call.
+		log.Fatal(http.ListenAndServe(":1984", nil)) // I might need to be using port 8443? Not sure
 	}()
 
 	// here's where my for { select {} } loop should go - and use tickers
