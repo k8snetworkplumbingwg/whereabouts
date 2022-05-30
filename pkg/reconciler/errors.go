@@ -1,4 +1,4 @@
-package main
+package reconciler
 
 const (
 	kubeconfigNotFound = iota + 1

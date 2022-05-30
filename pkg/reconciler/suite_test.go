@@ -1,4 +1,4 @@
-package main
+package reconciler
 
 import (
 	"encoding/base64"

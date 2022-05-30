@@ -72,7 +72,6 @@ type dialOptions struct {
 	// we need to be able to configure this in tests.
 	resolveNowBackoff func(int) time.Duration
 	resolvers         []resolver.Builder
-	withProxy         bool
 }
 
 // DialOption configures how we set up the connection.
@@ -305,16 +304,6 @@ func WithBlock() DialOption {
 func WithInsecure() DialOption {
 	return newFuncDialOption(func(o *dialOptions) {
 		o.insecure = true
-	})
-}
-
-// WithNoProxy returns a DialOption which disables the use of proxies for this
-// ClientConn. This is ignored if WithDialer or WithContextDialer are used.
-//
-// This API is EXPERIMENTAL.
-func WithNoProxy() DialOption {
-	return newFuncDialOption(func(o *dialOptions) {
-		o.withProxy = false
 	})
 }
 
@@ -568,7 +557,6 @@ func defaultDialOptions() dialOptions {
 			ReadBufferSize:  defaultReadBufSize,
 		},
 		resolveNowBackoff: internalbackoff.DefaultExponential.Backoff,
-		withProxy:         true,
 	}
 }
 
