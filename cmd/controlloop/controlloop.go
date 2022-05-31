@@ -107,10 +107,6 @@ func main() {
 			}
 		}
 	}
-
-	logging.Verbosef("loop ended...you have one minute to curl for counter results.")
-	time.Sleep(1 * time.Minute)
-	return
 }
 
 func handleSignals(stopChannel chan struct{}, signals ...os.Signal) {
