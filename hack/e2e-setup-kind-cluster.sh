@@ -98,7 +98,7 @@ trap "rm /tmp/whereabouts-img.tar || true" EXIT
 kind load image-archive --name "$KIND_CLUSTER_NAME" /tmp/whereabouts-img.tar
 
 echo "## install whereabouts"
-for file in "daemonset-install.yaml" "ip-reconciler-job.yaml" "whereabouts.cni.cncf.io_ippools.yaml" "whereabouts.cni.cncf.io_overlappingrangeipreservations.yaml"; do
+for file in "daemonset-install.yaml" "whereabouts.cni.cncf.io_ippools.yaml" "whereabouts.cni.cncf.io_overlappingrangeipreservations.yaml"; do
   retry kubectl apply -f "$ROOT/doc/crds/$file"
 done
 retry kubectl wait -n kube-system --for=condition=ready -l app=whereabouts pod --timeout=$TIMEOUT_K8

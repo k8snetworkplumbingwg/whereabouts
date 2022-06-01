@@ -48,6 +48,7 @@ kubectl apply \
     -f doc/crds/whereabouts.cni.cncf.io_overlappingrangeipreservations.yaml \
     -f doc/crds/ip-reconciler-job.yaml
 ```
+^^^ docs need to be updated to remove mention of ip-reconciler-job.yaml
 
 The daemonset installation requires Kubernetes Version 1.16 or later.
 
