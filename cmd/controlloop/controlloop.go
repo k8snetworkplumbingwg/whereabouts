@@ -74,36 +74,21 @@ func main() {
 
 	http.Handle("/metrics", promhttp.Handler())
 
-	// TODO: i want to generalize this - use random ip address instead of a specific one
 	go func() {
-		log.Fatal(http.ListenAndServe(":1984", nil)) // I might need to be using port 8443? Not sure
+		log.Fatal(http.ListenAndServe(":1984", nil))
 	}()
 
-	// here's where my for { select {} } loop should go - and use tickers
-	// https://gobyexample.com/tickers
-	// general logic - loop indefinitely, with the following conditions:
-	// a. stopChan sends a value: quit out of the loop and return function
-	// b. ticker ticks: start a goroutine to run ip-reconciler
-	// c. default: continue to spin
-	ticker := time.NewTicker(10 * time.Second) // temp value, will eventually be days/weeks duration
+	ticker := time.NewTicker(15 * time.Minute)
 
-	i := 0
-	for /*i := 0; i < 5; i++*/ {
-		i++
-		logging.Verbosef("iteration #%d", i)
+	for {
 		select {
 		case <-stopChan:
 			return
-		case t := <-ticker.C:
-			fmt.Println("Running ip-reconciler, tick at ", t)
+		case <-ticker.C:
 			go reconciler.InvokeIPReconciler(returnErr)
-		case err := <-returnErr: // why is this case only reached one time?
-			logging.Verbosef("reached counter decision")
+		case err := <-returnErr:
 			if err == nil {
 				totalReconcilerSuccess.Inc()
-				logging.Verbosef("ip reconciler success!")
-			} else {
-				logging.Verbosef("ip reconciler failure: %s", err)
 			}
 		}
 	}

@@ -11,7 +11,6 @@ const (
 	defaultReconcilerTimeout = 30
 )
 
-// TODO: get ip_test.go working with this - currently idk if it does...
 func InvokeIPReconciler(returnErr chan error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(defaultReconcilerTimeout*time.Second))
 	defer cancel()
@@ -41,7 +40,6 @@ func InvokeIPReconciler(returnErr chan error) {
 		return
 	}
 
-	logging.Verbosef("no errors with ip reconciler...returning in a sec")
 	returnErr <- err
 	return
 }
