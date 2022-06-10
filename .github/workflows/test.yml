@@ -37,7 +37,7 @@ jobs:
       run: go vet --tags=test ./...
 
     - name: Install static check
-      run: go install honnef.co/go/tools/cmd/staticcheck@v0.2.2
+      run: go install honnef.co/go/tools/cmd/staticcheck@latest
 
     - name: Test
       run: sudo PATH=${PATH}:./bin ./hack/test-go.sh
