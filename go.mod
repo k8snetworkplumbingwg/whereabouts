@@ -69,7 +69,7 @@ require (
 	k8s.io/apiextensions-apiserver v0.20.1 // indirect
 	k8s.io/gengo v0.0.0-20210813121822-485abfe95c7c // indirect
 	k8s.io/klog/v2 v2.10.0 // indirect
-	k8s.io/utils v0.0.0-20210819203725-bdf08cb9a70a // indirect
+	k8s.io/utils v0.0.0-20211116205334-6203023598ed
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.1 // indirect
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )

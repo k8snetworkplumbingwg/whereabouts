@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
-	// "os"
 	"testing"
 
 	. "github.com/onsi/ginkgo"
@@ -150,5 +149,98 @@ var _ = Describe("Allocation operations", func() {
 
 		_, _, err := LoadIPAMConfig([]byte(conf), "")
 		Expect(err).To(MatchError(&InvalidPluginError{ipamType: wrongPluginType}))
+	})
+
+	It("allows for leading zeroes in the range in start/end range format", func() {
+		conf := `{
+      "cniVersion": "0.3.1",
+      "name": "mynet",
+      "type": "ipvlan",
+      "master": "foo0",
+        "ipam": {
+          "type": "whereabouts",
+          "log_file" : "/tmp/whereabouts.log",
+          "log_level" : "debug",
+          "etcd_host": "foo",
+          "range": "00192.00168.1.5-000000192.168.1.25/24",
+          "gateway": "192.168.10.1"
+        }
+      }`
+
+		ipamConfig, _, err := LoadIPAMConfig([]byte(conf), "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ipamConfig.Range).To(Equal("192.168.1.0/24"))
+		Expect(ipamConfig.RangeStart).To(Equal(net.ParseIP("192.168.1.5")))
+		Expect(ipamConfig.RangeEnd).To(Equal(net.ParseIP("192.168.1.25")))
+	})
+
+	It("allows for leading zeroes in the range", func() {
+		conf := `{
+      "cniVersion": "0.3.1",
+      "name": "mynet",
+      "type": "ipvlan",
+      "master": "foo0",
+        "ipam": {
+          "type": "whereabouts",
+          "log_file" : "/tmp/whereabouts.log",
+          "log_level" : "debug",
+          "etcd_host": "foo",
+          "range": "00192.00168.1.0/24",
+          "gateway": "192.168.10.1"
+        }
+      }`
+
+		ipamConfig, _, err := LoadIPAMConfig([]byte(conf), "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ipamConfig.Range).To(Equal("192.168.1.0/24"))
+		Expect(ipamConfig.RangeStart).To(Equal(net.ParseIP("192.168.1.0")))
+	})
+
+	It("allows for leading zeroes in the range when the start range is provided", func() {
+		conf := `{
+      "cniVersion": "0.3.1",
+      "name": "mynet",
+      "type": "ipvlan",
+      "master": "foo0",
+        "ipam": {
+          "type": "whereabouts",
+          "log_file" : "/tmp/whereabouts.log",
+          "log_level" : "debug",
+          "etcd_host": "foo",
+          "range": "00192.00168.1.0/24",
+          "range_start": "00192.00168.1.44",
+          "gateway": "192.168.10.1"
+        }
+      }`
+
+		ipamConfig, _, err := LoadIPAMConfig([]byte(conf), "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ipamConfig.Range).To(Equal("192.168.1.0/24"))
+		Expect(ipamConfig.RangeStart).To(Equal(net.ParseIP("192.168.1.44")))
+	})
+
+	It("allows for leading zeroes in the range when the start and end ranges are provided", func() {
+		conf := `{
+      "cniVersion": "0.3.1",
+      "name": "mynet",
+      "type": "ipvlan",
+      "master": "foo0",
+        "ipam": {
+          "type": "whereabouts",
+          "log_file" : "/tmp/whereabouts.log",
+          "log_level" : "debug",
+          "etcd_host": "foo",
+          "range": "00192.00168.1.0/24",
+          "range_start": "00192.00168.1.44",
+          "range_end": "00192.00168.01.209",
+          "gateway": "192.168.10.1"
+        }
+      }`
+
+		ipamConfig, _, err := LoadIPAMConfig([]byte(conf), "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ipamConfig.Range).To(Equal("192.168.1.0/24"))
+		Expect(ipamConfig.RangeStart).To(Equal(net.ParseIP("192.168.1.44")))
+		Expect(ipamConfig.RangeEnd).To(Equal(net.ParseIP("192.168.1.209")))
 	})
 })
