@@ -243,4 +243,32 @@ var _ = Describe("Allocation operations", func() {
 		Expect(ipamConfig.RangeStart).To(Equal(net.ParseIP("192.168.1.44")))
 		Expect(ipamConfig.RangeEnd).To(Equal(net.ParseIP("192.168.1.209")))
 	})
+
+	It("can unmarshall the cronjob expression", func() {
+		conf := `{
+      "cniVersion": "0.3.1",
+      "name": "mynet",
+      "type": "ipvlan",
+      "master": "foo0",
+        "ipam": {
+          "type": "whereabouts",
+          "log_file" : "/tmp/whereabouts.log",
+          "log_level" : "debug",
+          "etcd_host": "foo",
+          "range": "00192.00168.1.0/24",
+          "range_start": "00192.00168.1.44",
+          "range_end": "00192.00168.01.209",
+          "gateway": "192.168.10.1",
+          "reconciler_cron_expression": "30 4 * * *"
+        }
+      }`
+
+		ipamConfig, _, err := LoadIPAMConfig([]byte(conf), "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ipamConfig.Range).To(Equal("192.168.1.0/24"))
+		Expect(ipamConfig.RangeStart).To(Equal(net.ParseIP("192.168.1.44")))
+		Expect(ipamConfig.RangeEnd).To(Equal(net.ParseIP("192.168.1.209")))
+		Expect(ipamConfig.RangeEnd).To(Equal(net.ParseIP("192.168.1.209")))
+		Expect(ipamConfig.ReconcilerCronExpression).To(Equal("30 4 * * *"))
+	})
 })

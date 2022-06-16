@@ -53,41 +53,9 @@ func LoadIPAMConfig(bytes []byte, envArgs string, extraConfigPaths ...string) (*
 	n.IPAM.PodName = string(args.K8S_POD_NAME)
 	n.IPAM.PodNamespace = string(args.K8S_POD_NAMESPACE)
 
-	// Once we have our basics, let's look for our (optional) configuration file
-	confdirs := []string{"/etc/kubernetes/cni/net.d/whereabouts.d/whereabouts.conf", "/etc/cni/net.d/whereabouts.d/whereabouts.conf"}
-	confdirs = append(confdirs, extraConfigPaths...)
-	// We prefix the optional configuration path (so we look there first)
-	if n.IPAM.ConfigurationPath != "" {
-		confdirs = append([]string{n.IPAM.ConfigurationPath}, confdirs...)
-	}
-
-	// Cycle through the path and parse the JSON config
-	flatipam := types.Net{}
-	foundflatfile := ""
-	for _, confpath := range confdirs {
-		if pathExists(confpath) {
-
-			jsonFile, err := os.Open(confpath)
-
-			if err != nil {
-				return nil, "", fmt.Errorf("error opening flat configuration file @ %s with: %s", confpath, err)
-			}
-
-			defer jsonFile.Close()
-
-			jsonBytes, err := ioutil.ReadAll(jsonFile)
-			if err != nil {
-				return nil, "", fmt.Errorf("LoadIPAMConfig Flatfile (%s) - ioutil.ReadAll error: %s", confpath, err)
-			}
-
-			if err := json.Unmarshal(jsonBytes, &flatipam.IPAM); err != nil {
-				return nil, "", fmt.Errorf("LoadIPAMConfig Flatfile (%s) - JSON Parsing Error: %s / bytes: %s", confpath, err, jsonBytes)
-			}
-
-			foundflatfile = confpath
-
-			break
-		}
+	flatipam, foundflatfile, err := GetFlatIPAM(false, n.IPAM, extraConfigPaths...)
+	if err != nil {
+		return nil, "", err
 	}
 
 	// Now let's try to merge the configurations...
@@ -139,7 +107,6 @@ func LoadIPAMConfig(bytes []byte, envArgs string, extraConfigPaths ...string) (*
 		n.IPAM.Datastore = types.DatastoreETCD
 	}
 
-	var err error
 	storageError := "You have not configured the storage engine (looks like you're using an invalid `%s` parameter in your config)"
 	switch n.IPAM.Datastore {
 	case types.DatastoreKubernetes:
@@ -164,7 +131,6 @@ func LoadIPAMConfig(bytes []byte, envArgs string, extraConfigPaths ...string) (*
 		}
 		n.IPAM.Gateway = gwip
 	}
-
 	for i := range n.IPAM.OmitRanges {
 		_, _, err := netutils.ParseCIDRSloppy(n.IPAM.OmitRanges[i])
 		if err != nil {
@@ -250,6 +216,47 @@ func configureStatic(n *types.Net, args types.IPAMEnvArgs) error {
 
 	return nil
 
+}
+
+func GetFlatIPAM(isControlLoop bool, IPAM *types.IPAMConfig, extraConfigPaths ...string) (types.Net, string, error) {
+	// Once we have our basics, let's look for our (optional) configuration file
+	confdirs := []string{"/etc/kubernetes/cni/net.d/whereabouts.d/whereabouts.conf", "/etc/cni/net.d/whereabouts.d/whereabouts.conf", "/host/etc/cni/net.d/whereabouts.d/whereabouts.conf"}
+	confdirs = append(confdirs, extraConfigPaths...)
+	// We prefix the optional configuration path (so we look there first)
+
+	if !isControlLoop && IPAM != nil {
+		if IPAM.ConfigurationPath != "" {
+			confdirs = append([]string{IPAM.ConfigurationPath}, confdirs...)
+		}
+	}
+
+	// Cycle through the path and parse the JSON config
+	flatipam := types.Net{}
+	foundflatfile := ""
+	for _, confpath := range confdirs {
+		if pathExists(confpath) {
+			jsonFile, err := os.Open(confpath)
+			if err != nil {
+				return flatipam, foundflatfile, fmt.Errorf("error opening flat configuration file @ %s with: %s", confpath, err)
+			}
+
+			defer jsonFile.Close()
+
+			jsonBytes, err := ioutil.ReadAll(jsonFile)
+			if err != nil {
+				return flatipam, foundflatfile, fmt.Errorf("LoadIPAMConfig Flatfile (%s) - ioutil.ReadAll error: %s", confpath, err)
+			}
+
+			if err := json.Unmarshal(jsonBytes, &flatipam.IPAM); err != nil {
+				return flatipam, foundflatfile, fmt.Errorf("LoadIPAMConfig Flatfile (%s) - JSON Parsing Error: %s / bytes: %s", confpath, err, jsonBytes)
+			}
+
+			foundflatfile = confpath
+			return flatipam, foundflatfile, err
+		}
+	}
+	var err error
+	return flatipam, foundflatfile, err
 }
 
 func handleEnvArgs(n *types.Net, numV6 int, numV4 int, args types.IPAMEnvArgs) (int, int, error) {
