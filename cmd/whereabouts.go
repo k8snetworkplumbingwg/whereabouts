@@ -13,7 +13,6 @@ import (
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/allocate"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/config"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
-	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage/kubernetes"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/version"
@@ -40,7 +39,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 		logging.Errorf("IPAM configuration load failed: %s", err)
 		return err
 	}
-	logging.Debugf("ADD - IPAM configuration successfully read: %+v", filterConf(*ipamConf))
+	logging.Debugf("ADD - IPAM configuration successfully read: %+v", *ipamConf)
 
 	// Initialize our result, and assign DNS & routing.
 	result := &current.Result{}
@@ -53,12 +52,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 	ctx, cancel := context.WithTimeout(context.Background(), types.AddTimeLimit)
 	defer cancel()
 
-	switch ipamConf.Datastore {
-	case types.DatastoreETCD:
-		newip, err = storage.IPManagementEtcd(ctx, types.Allocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
-	case types.DatastoreKubernetes:
-		newip, err = kubernetes.IPManagement(ctx, types.Allocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
-	}
+	newip, err = kubernetes.IPManagement(ctx, types.Allocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
 	if err != nil {
 		logging.Errorf("Error at storage engine: %s", err)
 		return fmt.Errorf("error at storage engine: %w", err)
@@ -94,30 +88,19 @@ func cmdDel(args *skel.CmdArgs) error {
 		logging.Errorf("IPAM configuration load failed: %s", err)
 		return err
 	}
-	logging.Debugf("DEL - IPAM configuration successfully read: %+v", filterConf(*ipamConf))
+	logging.Debugf("DEL - IPAM configuration successfully read: %+v", *ipamConf)
 	logging.Debugf("Beginning delete for ContainerID: %v", args.ContainerID)
 
 	ctx, cancel := context.WithTimeout(context.Background(), types.DelTimeLimit)
 	defer cancel()
 
-	switch ipamConf.Datastore {
-	case types.DatastoreETCD:
-		_, err = storage.IPManagementEtcd(ctx, types.Deallocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
-	case types.DatastoreKubernetes:
-		_, err = kubernetes.IPManagement(ctx, types.Deallocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
-	}
+	_, err = kubernetes.IPManagement(ctx, types.Deallocate, *ipamConf, args.ContainerID, getPodRef(args.Args))
 	if err != nil {
 		logging.Verbosef("WARNING: Problem deallocating IP: %s", err)
 		// return fmt.Errorf("Error deallocating IP: %s", err)
 	}
 
 	return nil
-}
-
-func filterConf(conf types.IPAMConfig) types.IPAMConfig {
-	new := conf
-	new.EtcdPassword = "*********"
-	return new
 }
 
 // GetPodRef constructs the PodRef string from CNI arguments.

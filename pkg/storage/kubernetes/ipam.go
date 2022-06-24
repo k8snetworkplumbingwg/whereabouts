@@ -357,12 +357,12 @@ func IPManagement(ctx context.Context, mode int, ipamConf whereaboutstypes.IPAMC
 
 	ipam, err := NewKubernetesIPAM(containerID, ipamConf)
 	if err != nil {
-		return newip, logging.Errorf("IPAM %s client initialization error: %v", ipamConf.Datastore, err)
+		return newip, logging.Errorf("IPAM client initialization error: %v", err)
 	}
 	defer ipam.Close()
 
 	if ipamConf.PodName == "" {
-		return newip, fmt.Errorf("IPAM %s client initialization error: no pod name", ipamConf.Datastore)
+		return newip, fmt.Errorf("IPAM client initialization error: no pod name")
 	}
 
 	// setup leader election

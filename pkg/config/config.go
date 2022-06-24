@@ -103,25 +103,8 @@ func LoadIPAMConfig(bytes []byte, envArgs string, extraConfigPaths ...string) (*
 		}
 	}
 
-	if n.IPAM.Datastore == "" {
-		n.IPAM.Datastore = types.DatastoreETCD
-	}
-
-	storageError := "You have not configured the storage engine (looks like you're using an invalid `%s` parameter in your config)"
-	switch n.IPAM.Datastore {
-	case types.DatastoreKubernetes:
-		if n.IPAM.Kubernetes.KubeConfigPath == "" {
-			err = fmt.Errorf(storageError, "kubernetes.kubeconfig")
-		}
-	case types.DatastoreETCD:
-		if n.IPAM.EtcdHost == "" {
-			err = fmt.Errorf(storageError, "etcd_host")
-		}
-	default:
-		err = fmt.Errorf(storageError, "datastore")
-	}
-	if err != nil {
-		return nil, "", err
+	if n.IPAM.Kubernetes.KubeConfigPath == "" {
+		return nil, "", storageError()
 	}
 
 	if n.IPAM.GatewayStr != "" {
@@ -364,4 +347,8 @@ func NewInvalidPluginError(ipamType string) *InvalidPluginError {
 
 func (e *InvalidPluginError) Error() string {
 	return fmt.Sprintf("only interested in networks whose IPAM type is 'whereabouts'. This one was: %s", e.ipamType)
+}
+
+func storageError() error {
+	return fmt.Errorf("you have not configured the storage engine (looks like you're using an invalid `kubernetes.kubeconfig` parameter in your config)")
 }
