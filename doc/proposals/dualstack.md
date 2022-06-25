@@ -9,6 +9,7 @@
   - [Changes in Modules](#changes-in-modules)
 - [Alternative Design](#alternative-design)
 - [Summary](#summary)
+- [Discussions and Decisions](#discussions-and-decisions)
 
 <hr>
 
@@ -31,8 +32,8 @@ This is a design proposal document for introducing IPv4/IPv6 DualStack support i
 
 The IPAM configuration format would be updated to include multiple IP configurations.
 
-Rather than having IP related configurations directly as key members of `IPAMConfig` object, the IP configuration would be wrapped in a new struct - let's say `IPConfig`.
-The existing `IPAMConfig` would have an array of `IPConfig` as an attribute.
+Rather than having IP related configurations directly as key members of `IPAMConfig` object, the IP configuration would be wrapped in a new struct - let's say `RangeConfiguration`.
+The existing `IPAMConfig` would have an array of `RangeConfiguration` as an attribute.
 
 ### Changes in IPAM Config
 
@@ -278,3 +279,10 @@ Currently, we have above two approaches for supporting DualStack in whereabouts.
 First approach requires addition on a new _type_ for encapsulating all the IP related information on `IPAMConfig` and requires significant amount of change in the current code. But with this additional effort, it will have additional benefit of allowing us to allocate as many as we required IP addresses of any IP family without any constraints. _(We need to support the existing fields too for backward compatibility)_
 
 Second approach is somewhat simpler. It just adds some additional fields for _secondary_ IP address related configuration (which might be IPv4 or IPv6 depending on stack policy). The downside is that we will limit ourselves to adding at max 2 IP address for a pod. _(TBH, it also seems okay for now, but I prefer the first approach)_
+
+### Discussions and Decisions
+
+- It was decided to go with the first approach considering it also provides the support for adding multiple IPs in the same interface _(not only dualstack)_ and it seems more cleaner and scalable approach.
+- Decisions regarding nomenclature of datatype and attributes:
+  - Struct for encapsulating configurations related to an IP range to be named as `RangeConfiguration`
+  - Attribute of `IPAMConfig` that contains array of `RangeConfiguration` to be named as `IPRanges`
