@@ -56,6 +56,9 @@ func main() {
 	}
 
 	networkController.Start(stopChan)
+	defer networkController.Shutdown()
+	<-stopChan
+	logging.Verbosef("shutting down network controller")
 }
 
 func handleSignals(stopChannel chan struct{}, signals ...os.Signal) {
