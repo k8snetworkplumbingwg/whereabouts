@@ -11,6 +11,10 @@ build:
 docker-build:
 	$(OCI_BIN) build -t ${IMAGE_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} -f Dockerfile .
 
+generate-api:
+	hack/verify-codegen.sh
+	rm -rf github.com
+
 install-tools:
 	hack/install-kubebuilder-tools.sh
 
