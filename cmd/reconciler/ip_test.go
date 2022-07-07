@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net"
+	"strconv"
 	"strings"
 
 	. "github.com/onsi/ginkgo"
@@ -290,7 +292,8 @@ func generateIPPoolSpec(ipRange string, namespace string, poolName string, podNa
 	allocations := map[string]v1alpha1.IPAllocation{}
 	for i, podName := range podNames {
 		allocations[fmt.Sprintf("%d", i+1)] = v1alpha1.IPAllocation{
-			PodRef: fmt.Sprintf("%s/%s", namespace, podName),
+			PodRef:      fmt.Sprintf("%s/%s", namespace, podName),
+			ContainerID: strconv.Itoa(rand.Intn(1000)),
 		}
 	}
 	return &v1alpha1.IPPool{
