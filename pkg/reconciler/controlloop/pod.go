@@ -109,6 +109,7 @@ func newPodController(k8sCoreInformerFactory v1coreinformerfactory.SharedInforme
 // Start runs worker thread after performing cache synchronization
 func (pc *PodController) Start(stopChan <-chan struct{}) {
 	logging.Verbosef("starting network controller")
+	logging.Verbosef("random print 2")
 
 	if ok := cache.WaitForCacheSync(stopChan, pc.arePodsSynched, pc.areNetAttachDefsSynched, pc.areIPPoolsSynched); !ok {
 		logging.Verbosef("failed waiting for caches to sync")

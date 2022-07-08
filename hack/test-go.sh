@@ -12,6 +12,8 @@ ${GO} vet --tags=test ./cmd/... ./pkg/...
 echo "Running golang staticcheck ..."
 staticcheck --tags=test ./...
 
+echo "random print"
+
 echo "Running go tests..."
 KUBEBUILDER_ASSETS="$(pwd)/bin" ${GO} test \
     --tags=test \
