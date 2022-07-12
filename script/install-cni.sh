@@ -102,7 +102,8 @@ EOF
   "datastore": "kubernetes",
   "kubernetes": {
     "kubeconfig": "${WHEREABOUTS_KUBECONFIG_LITERAL}"
-  }
+  },
+  "reconciler_cron_expression": "30 4 * * *"
 }
 EOF
 

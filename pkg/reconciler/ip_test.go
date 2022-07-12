@@ -1,4 +1,4 @@
-package main
+package reconciler
 
 import (
 	"context"
@@ -6,18 +6,24 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"testing"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
 	multusv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
-	"github.com/k8snetworkplumbingwg/whereabouts/pkg/reconciler"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 )
+
+func TestIPReconciler(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "Reconcile IP address allocation in the system")
+}
 
 var _ = Describe("Whereabouts IP reconciler", func() {
 	const (
@@ -30,7 +36,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 	)
 
 	var (
-		reconcileLooper *reconciler.ReconcileLooper
+		reconcileLooper *ReconcileLooper
 	)
 
 	Context("reconciling IP pools with a single running pod", func() {
@@ -67,7 +73,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 				Context("reconciling the IPPool", func() {
 					BeforeEach(func() {
 						var err error
-						reconcileLooper, err = reconciler.NewReconcileLooperWithKubeconfig(context.TODO(), kubeConfigPath, timeout)
+						reconcileLooper, err = NewReconcileLooperWithKubeconfig(context.TODO(), kubeConfigPath, timeout)
 						Expect(err).NotTo(HaveOccurred())
 					})
 
@@ -138,7 +144,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 			Context("reconciling the IPPool", func() {
 				BeforeEach(func() {
 					var err error
-					reconcileLooper, err = reconciler.NewReconcileLooperWithKubeconfig(context.TODO(), kubeConfigPath, timeout)
+					reconcileLooper, err = NewReconcileLooperWithKubeconfig(context.TODO(), kubeConfigPath, timeout)
 					Expect(err).NotTo(HaveOccurred())
 				})
 
@@ -243,7 +249,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 
 		It("will delete an orphaned IP address", func() {
 			Expect(k8sClientSet.CoreV1().Pods(namespace).Delete(context.TODO(), pods[podIndexToRemove].Name, metav1.DeleteOptions{})).NotTo(HaveOccurred())
-			newReconciler, err := reconciler.NewReconcileLooperWithKubeconfig(context.TODO(), kubeConfigPath, timeout)
+			newReconciler, err := NewReconcileLooperWithKubeconfig(context.TODO(), kubeConfigPath, timeout)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(newReconciler.ReconcileOverlappingIPAddresses(context.TODO())).To(Succeed())
 
@@ -271,7 +277,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 			pool = generateIPPoolSpec(ipRange, namespace, poolName, pod.Name)
 			Expect(k8sClient.Create(context.Background(), pool)).NotTo(HaveOccurred())
 
-			reconcileLooper, err = reconciler.NewReconcileLooperWithKubeconfig(context.TODO(), kubeConfigPath, timeout)
+			reconcileLooper, err = NewReconcileLooperWithKubeconfig(context.TODO(), kubeConfigPath, timeout)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -282,6 +288,117 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 
 		It("cannot be reconciled", func() {
 			Expect(reconcileLooper.ReconcileIPPools(context.TODO())).To(BeEmpty())
+		})
+	})
+})
+
+// mock the pool
+type dummyPool struct {
+	orphans []types.IPReservation
+	pool    v1alpha1.IPPool
+}
+
+func (dp dummyPool) Allocations() []types.IPReservation {
+	return dp.orphans
+}
+
+func (dp dummyPool) Update(context.Context, []types.IPReservation) error {
+	return nil
+}
+
+var _ = Describe("IPReconciler", func() {
+	var ipReconciler *ReconcileLooper
+
+	newIPReconciler := func(orphanedIPs ...OrphanedIPReservations) *ReconcileLooper {
+		reconciler := &ReconcileLooper{
+			orphanedIPs: orphanedIPs,
+		}
+
+		return reconciler
+	}
+
+	When("there are no IP addresses to reconcile", func() {
+		BeforeEach(func() {
+			ipReconciler = newIPReconciler()
+		})
+
+		It("does not delete anything", func() {
+			reconciledIPs, err := ipReconciler.ReconcileIPPools(context.TODO())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(reconciledIPs).To(BeEmpty())
+		})
+	})
+
+	When("there are IP addresses to reconcile", func() {
+		const (
+			firstIPInRange = "192.168.14.1"
+			ipCIDR         = "192.168.14.0/24"
+			namespace      = "default"
+			podName        = "pod1"
+		)
+
+		BeforeEach(func() {
+			podRef := "default/pod1"
+			reservations := generateIPReservation(firstIPInRange, podRef)
+
+			pool := generateIPPool(ipCIDR, podRef)
+			orphanedIPAddr := OrphanedIPReservations{
+				Pool:        dummyPool{orphans: reservations, pool: pool},
+				Allocations: reservations,
+			}
+
+			ipReconciler = newIPReconciler(orphanedIPAddr)
+		})
+
+		It("does delete the orphaned IP address", func() {
+			reconciledIPs, err := ipReconciler.ReconcileIPPools(context.TODO())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(reconciledIPs).To(Equal([]net.IP{net.ParseIP(firstIPInRange)}))
+		})
+
+		Context("and they are actually multiple IPs", func() {
+			BeforeEach(func() {
+				podRef := "default/pod2"
+				reservations := generateIPReservation("192.168.14.2", podRef)
+
+				pool := generateIPPool(ipCIDR, podRef, "default/pod2", "default/pod3")
+				orphanedIPAddr := OrphanedIPReservations{
+					Pool:        dummyPool{orphans: reservations, pool: pool},
+					Allocations: reservations,
+				}
+
+				ipReconciler = newIPReconciler(orphanedIPAddr)
+			})
+
+			It("does delete *only the orphaned* the IP address", func() {
+				reconciledIPs, err := ipReconciler.ReconcileIPPools(context.TODO())
+				Expect(err).NotTo(HaveOccurred())
+				Expect(reconciledIPs).To(ConsistOf([]net.IP{net.ParseIP("192.168.14.2")}))
+			})
+		})
+
+		Context("but the IP reservation owner does not match", func() {
+			var reservationPodRef string
+			BeforeEach(func() {
+				reservationPodRef = "default/pod2"
+				podRef := "default/pod1"
+				reservations := generateIPReservation(firstIPInRange, podRef)
+				erroredReservations := generateIPReservation(firstIPInRange, reservationPodRef)
+
+				pool := generateIPPool(ipCIDR, podRef)
+				orphanedIPAddr := OrphanedIPReservations{
+					Pool:        dummyPool{orphans: reservations, pool: pool},
+					Allocations: erroredReservations,
+				}
+
+				ipReconciler = newIPReconciler(orphanedIPAddr)
+			})
+
+			It("errors when attempting to clean up the IP address", func() {
+				reconciledIPs, err := ipReconciler.ReconcileIPPools(context.TODO())
+				Expect(err).To(MatchError(fmt.Sprintf("did not find reserved IP for container %s", reservationPodRef)))
+				Expect(reconciledIPs).To(BeEmpty())
+			})
 		})
 	})
 })
@@ -348,8 +465,8 @@ func generatePodAnnotations(ipNetworks ...ipInNetwork) map[string]string {
 		networks = append(networks, ipNetworkInfo.networkName)
 	}
 	networkAnnotations := map[string]string{
-		reconciler.MultusNetworkAnnotation:       strings.Join(networks, ","),
-		reconciler.MultusNetworkStatusAnnotation: generatePodNetworkStatusAnnotation(ipNetworks...),
+		MultusNetworkAnnotation:       strings.Join(networks, ","),
+		MultusNetworkStatusAnnotation: generatePodNetworkStatusAnnotation(ipNetworks...),
 	}
 	return networkAnnotations
 }
@@ -369,4 +486,27 @@ func generatePodNetworkStatusAnnotation(ipNetworks ...ipInNetwork) string {
 	}
 
 	return string(networkStatusStr)
+}
+
+func generateIPPool(cidr string, podRefs ...string) v1alpha1.IPPool {
+	allocations := map[string]v1alpha1.IPAllocation{}
+	for i, podRef := range podRefs {
+		allocations[fmt.Sprintf("%d", i)] = v1alpha1.IPAllocation{PodRef: podRef}
+	}
+
+	return v1alpha1.IPPool{
+		Spec: v1alpha1.IPPoolSpec{
+			Range:       cidr,
+			Allocations: allocations,
+		},
+	}
+}
+
+func generateIPReservation(ip string, podRef string) []types.IPReservation {
+	return []types.IPReservation{
+		{
+			IP:     net.ParseIP(ip),
+			PodRef: podRef,
+		},
+	}
 }

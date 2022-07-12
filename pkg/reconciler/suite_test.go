@@ -1,15 +1,15 @@
-package main
+package reconciler
 
 import (
 	"fmt"
 	"io/fs"
 	"io/ioutil"
-	"k8s.io/client-go/kubernetes"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
-	"testing"
+
+	"k8s.io/client-go/kubernetes"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -31,14 +31,6 @@ var (
 	testEnv        *envtest.Environment
 	tmpdir         string
 )
-
-func TestAPIs(t *testing.T) {
-	RegisterFailHandler(Fail)
-
-	RunSpecsWithDefaultAndCustomReporters(t,
-		"Whereabouts IP reconciler Suite",
-		[]Reporter{})
-}
 
 var _ = BeforeSuite(func(done Done) {
 	zap.WriteTo(GinkgoWriter)
