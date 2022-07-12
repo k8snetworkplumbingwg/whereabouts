@@ -3,6 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"time"
@@ -28,6 +30,8 @@ import (
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/reconciler"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 const (
@@ -81,6 +85,24 @@ func main() {
 
 	s.StartAsync()
 
+	reconcilerSuccessTotal := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "reconciler_success_total",
+		Help: "Increments upon successful run of IP reconciler",
+	})
+
+	reconcilerAttempted := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "reconciler_attempted",
+		Help: "Increments after each attempt of an IP reconciler run",
+	})
+
+	prometheus.MustRegister(reconcilerSuccessTotal, reconcilerAttempted)
+
+	http.Handle("/metrics", promhttp.Handler())
+
+	go func() {
+		log.Fatal(http.ListenAndServe(":1984", nil))
+	}()
+
 	for {
 		select {
 		case <-stopChan:
@@ -88,8 +110,10 @@ func main() {
 			s.Stop()
 			return
 		case err := <-errorChan:
+			reconcilerAttempted.Inc()
 			if err == nil {
 				logging.Verbosef("reconciler success")
+				reconcilerSuccessTotal.Inc()
 			} else {
 				logging.Verbosef("reconciler failure: %s", err)
 			}
