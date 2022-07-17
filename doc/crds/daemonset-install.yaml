@@ -93,14 +93,33 @@ spec:
       tolerations:
       - operator: Exists
         effect: NoSchedule
+      initContainers:
+        - name: install-cin-bin
+          command: [ "/bin/sh" ]
+          args:
+            - "-c"
+            - "SLEEP=false /install-cni.sh"
+          image: ghcr.io/k8snetworkplumbingwg/whereabouts:latest-amd64
+          env:
+            - name: WHEREABOUTS_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "50Mi"
+            limits:
+              cpu: "100m"
+              memory: "50Mi"
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: cnibin
+              mountPath: /host/opt/cni/bin
       containers:
       - name: whereabouts
-        command: [ "/bin/sh" ]
-        args:
-          - -c
-          - >
-            SLEEP=false /install-cni.sh &&
-            /ip-control-loop -log-level debug
+        command: [ "/ip-control-loop -log-level debug" ]
         image: ghcr.io/k8snetworkplumbingwg/whereabouts:latest-amd64
         env:
         - name: WHEREABOUTS_NAMESPACE
