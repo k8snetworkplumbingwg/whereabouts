@@ -95,10 +95,7 @@ spec:
         effect: NoSchedule
       initContainers:
         - name: install-cin-bin
-          command: [ "/bin/sh" ]
-          args:
-            - "-c"
-            - "SLEEP=false /install-cni.sh"
+          command: [ "/install-bin.sh" ]
           image: ghcr.io/k8snetworkplumbingwg/whereabouts:latest-amd64
           env:
             - name: WHEREABOUTS_NAMESPACE

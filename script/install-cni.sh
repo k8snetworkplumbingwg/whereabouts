@@ -115,11 +115,3 @@ fi
 cp -f /whereabouts $CNI_BIN_DIR
 
 # ---------------------- end Generate a "kube-config".
-
-# Unless told otherwise, sleep forever.
-# This prevents Kubernetes from restarting the pod repeatedly.
-should_sleep=${SLEEP:-"true"}
-echo "Done configuring CNI.  Sleep=$should_sleep"
-while [ "$should_sleep" == "true"  ]; do
-    sleep 1000000000000
-done
