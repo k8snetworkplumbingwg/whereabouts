@@ -7,6 +7,7 @@
 - [Design](#design)
   - [Changes in IPAM Config](#changes-in-ipam-config)
   - [Changes in Modules](#changes-in-modules)
+  - [Backward compatibility](#backward-compatibility)
 - [Alternative Design](#alternative-design)
 - [Summary](#summary)
 - [Discussions and Decisions](#discussions-and-decisions)
@@ -182,6 +183,138 @@ _Note: But at the same time we also need to support the old field (i.e. field du
 ```
 
 Corresponding changes will also be required in `whereabouts/pkg/allocate/allocate.go`, `whereabouts/pkg/config/config.go` etc.
+
+### Backward Compatibility
+
+To support backward compatibility, it is required to support the old configurations eg. `range`, `range_start`, `range_end`, `exclude` etc.
+
+For doing that, internally, the union of old configuration and `IPRanges` is used. Precisely speaking, the old configurations (if present) will be used to create a new object of type `RangeConfiguration` and that will be appended to `IPRanges`. And finally, all the modules will be using only `IPRanges`.
+
+For eg.
+
+<table>
+<tr>
+<th>Type</th>
+<th>IPAM Config provided by user</th>
+<th>IPAM Config converted inside code</th>
+</tr>
+<tr>
+<td>
+Only `range` present in IPAM Config
+</td>
+<td>
+  
+```json
+"ipam": {
+  "type": "whereabouts",
+  "range": "2001::0/116"
+}
+```
+  
+</td>
+<td>
+
+```json
+"ipam": {
+  "type": "whereabouts",
+  "ipRanges": [
+    {
+      "range": "2001::0/116",
+    }
+  ]
+}
+```
+
+</td>
+</tr>
+<tr>
+<td>
+Only `ipRanges` present in IPAM Config
+</td>
+<td>
+  
+```json
+"ipam": {
+  "type": "whereabouts",
+  "ipRanges": [
+    {
+      "range": "192.168.2.225/28",
+      "exclude": [
+         "192.168.2.229/30",
+         "192.168.2.236/32"
+      ]
+    }
+  ]
+}
+```
+  
+</td>
+<td>
+
+```json
+"ipam": {
+  "type": "whereabouts",
+  "ipRanges": [
+    {
+      "range": "192.168.2.225/28",
+      "exclude": [
+         "192.168.2.229/30",
+         "192.168.2.236/32"
+      ]
+    }
+  ]
+}
+```
+
+</td>
+</tr>
+<tr>
+<td>
+Both `ipRanges` and `range` present in IPAM Config
+</td>
+<td>
+  
+```json
+"ipam": {
+  "type": "whereabouts",
+  "range": "2001::0/116",
+  "ipRanges": [
+    {
+      "range": "192.168.2.225/28",
+      "exclude": [
+         "192.168.2.229/30",
+         "192.168.2.236/32"
+      ]
+    }
+  ]
+}
+```
+  
+</td>
+<td>
+
+```json
+"ipam": {
+  "type": "whereabouts",
+  "ipRanges": [
+    {
+      "range": "192.168.2.225/28",
+      "exclude": [
+         "192.168.2.229/30",
+         "192.168.2.236/32"
+      ]
+    },
+    {
+      "range": "2001::0/116",
+    }
+  ]
+}
+```
+
+</td>
+</tr>
+</table>
+```
 
 <hr>
 
