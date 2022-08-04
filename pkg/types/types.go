@@ -70,6 +70,7 @@ type IPAMConfig struct {
 	ConfigurationPath        string           `json:"configuration_path"`
 	PodName                  string
 	PodNamespace             string
+	NetworkName              string           `json:"network_name,omitempty"`
 }
 
 func (ic *IPAMConfig) UnmarshalJSON(data []byte) error {
@@ -105,6 +106,7 @@ func (ic *IPAMConfig) UnmarshalJSON(data []byte) error {
 		ConfigurationPath        string           `json:"configuration_path"`
 		PodName                  string
 		PodNamespace             string
+		NetworkName              string           `json:"network_name,omitempty"`
 	}
 
 	ipamConfigAlias := IPAMConfigAlias{
@@ -140,6 +142,7 @@ func (ic *IPAMConfig) UnmarshalJSON(data []byte) error {
 		ConfigurationPath:        ipamConfigAlias.ConfigurationPath,
 		PodName:                  ipamConfigAlias.PodName,
 		PodNamespace:             ipamConfigAlias.PodNamespace,
+		NetworkName:              ipamConfigAlias.NetworkName,
 	}
 	return nil
 }
