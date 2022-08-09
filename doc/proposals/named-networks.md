@@ -14,9 +14,11 @@
 
 ## Introduction
 
-When whereabouts assigns an IP to a Pod this fact is recorded in a document of kind `IPPool` that has its name derived from the CIDR range in question.
+When whereabouts assigns an IP to a Pod this fact is recorded in a CR of kind `IPPool` that has its name derived from the CIDR range in question.
+
 Should the user configure multiple overlapping ranges, it is possible to configure whereabouts to allow assigning duplicate IPs.
-However, since the storage of the assignments is done in a document that is named like the CIDR range, it is not possible to configure *the same CIDR range* twice and have whereabouts assign from the ranges independently.
+
+However, since the storage of the assignments is done in a CR that is named like the CIDR range, it is not possible to configure *the same CIDR range* twice and have whereabouts assign from the ranges independently.
 
 This is, for example, useful in multi-tenant situations where more than one group is responsible for selecting CIDR ranges.
 
