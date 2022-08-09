@@ -11,8 +11,6 @@ import (
 
 // Datastore types
 const (
-	DatastoreETCD                 = "etcd"
-	DatastoreKubernetes           = "kubernetes"
 	DefaultLeaderLeaseDuration    = 1500
 	DefaultLeaderRenewDeadline    = 1000
 	DefaultLeaderRetryPeriod      = 500
@@ -44,7 +42,6 @@ type IPAMConfig struct {
 	Name                     string
 	Type                     string            `json:"type"`
 	Routes                   []*cnitypes.Route `json:"routes"`
-	Datastore                string            `json:"datastore"`
 	Addresses                []Address         `json:"addresses,omitempty"`
 	OmitRanges               []string          `json:"exclude,omitempty"`
 	DNS                      cnitypes.DNS      `json:"dns"`
@@ -52,12 +49,6 @@ type IPAMConfig struct {
 	RangeStart               net.IP            `json:"range_start,omitempty"`
 	RangeEnd                 net.IP            `json:"range_end,omitempty"`
 	GatewayStr               string            `json:"gateway"`
-	EtcdHost                 string            `json:"etcd_host,omitempty"`
-	EtcdUsername             string            `json:"etcd_username,omitempty"`
-	EtcdPassword             string            `json:"etcd_password,omitempty"`
-	EtcdKeyFile              string            `json:"etcd_key_file,omitempty"`
-	EtcdCertFile             string            `json:"etcd_cert_file,omitempty"`
-	EtcdCACertFile           string            `json:"etcd_ca_cert_file,omitempty"`
 	LeaderLeaseDuration      int               `json:"leader_lease_duration,omitempty"`
 	LeaderRenewDeadline      int               `json:"leader_renew_deadline,omitempty"`
 	LeaderRetryPeriod        int               `json:"leader_retry_period,omitempty"`
@@ -119,7 +110,6 @@ func (ic *IPAMConfig) UnmarshalJSON(data []byte) error {
 		Name:                     ipamConfigAlias.Name,
 		Type:                     ipamConfigAlias.Type,
 		Routes:                   ipamConfigAlias.Routes,
-		Datastore:                ipamConfigAlias.Datastore,
 		Addresses:                ipamConfigAlias.Addresses,
 		OmitRanges:               ipamConfigAlias.OmitRanges,
 		DNS:                      ipamConfigAlias.DNS,
@@ -127,12 +117,6 @@ func (ic *IPAMConfig) UnmarshalJSON(data []byte) error {
 		RangeStart:               backwardsCompatibleIPAddress(ipamConfigAlias.RangeStart),
 		RangeEnd:                 backwardsCompatibleIPAddress(ipamConfigAlias.RangeEnd),
 		GatewayStr:               ipamConfigAlias.GatewayStr,
-		EtcdHost:                 ipamConfigAlias.EtcdHost,
-		EtcdUsername:             ipamConfigAlias.EtcdUsername,
-		EtcdPassword:             ipamConfigAlias.EtcdPassword,
-		EtcdKeyFile:              ipamConfigAlias.EtcdKeyFile,
-		EtcdCertFile:             ipamConfigAlias.EtcdCertFile,
-		EtcdCACertFile:           ipamConfigAlias.EtcdCACertFile,
 		LeaderLeaseDuration:      ipamConfigAlias.LeaderLeaseDuration,
 		LeaderRenewDeadline:      ipamConfigAlias.LeaderRenewDeadline,
 		LeaderRetryPeriod:        ipamConfigAlias.LeaderRetryPeriod,

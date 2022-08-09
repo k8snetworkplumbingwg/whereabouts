@@ -11,26 +11,15 @@ import (
 	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/containernetworking/plugins/pkg/testutils"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/allocate"
-	whereaboutstypes "github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
-func AllocateAndReleaseAddressesTest(ipVersion string, ipRange string, ipGateway string, expectedAddresses []string, datastore string) {
+func AllocateAndReleaseAddressesTest(ipVersion string, ipRange string, ipGateway string, expectedAddresses []string) {
 	const ifname string = "eth0"
 	const nspath string = "/some/where"
 
-	var backend string
-	var store string
-	if datastore == whereaboutstypes.DatastoreKubernetes {
-		backend = fmt.Sprintf(`"kubernetes": {"kubeconfig": "%s"}`, kubeConfigPath)
-		store = datastore
-	} else {
-		backend = fmt.Sprintf(`"etcd_host": "%s"`, etcdHost)
-		store = whereaboutstypes.DatastoreETCD
-	}
-
+	backend := fmt.Sprintf(`"kubernetes": {"kubeconfig": "%s"}`, kubeConfigPath)
 	conf := fmt.Sprintf(`{
 		"cniVersion": "0.3.1",
 		"name": "mynet",
@@ -38,9 +27,8 @@ func AllocateAndReleaseAddressesTest(ipVersion string, ipRange string, ipGateway
 		"master": "foo0",
 		"ipam": {
 		  "type": "whereabouts",
-		  "datastore": "%s",
 		  "log_file" : "/tmp/whereabouts.log",
-				  "log_level" : "debug",
+          "log_level" : "debug",
 		  %s,
 		  "range": "%s",
 		  "gateway": "%s",
@@ -48,7 +36,7 @@ func AllocateAndReleaseAddressesTest(ipVersion string, ipRange string, ipGateway
 			{ "dst": "0.0.0.0/0" }
 		  ]
 		}
-	  }`, store, backend, ipRange, ipGateway)
+	  }`, backend, ipRange, ipGateway)
 
 	addressArgs := []*skel.CmdArgs{}
 
@@ -121,14 +109,14 @@ var _ = Describe("Whereabouts operations", func() {
 		ipRange := "192.168.1.0/24"
 		ipGateway := "192.168.10.1"
 		expectedAddress := "192.168.1.1/24"
-		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, []string{expectedAddress}, whereaboutstypes.DatastoreETCD)
+		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, []string{expectedAddress})
 
 		ipVersion = "6"
 		ipRange = "2001::1/116"
 		ipGateway = "2001::f:1"
 		expectedAddress = "2001::1/116"
 
-		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, []string{expectedAddress}, whereaboutstypes.DatastoreETCD)
+		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, []string{expectedAddress})
 
 	})
 
@@ -153,14 +141,14 @@ var _ = Describe("Whereabouts operations", func() {
 			"192.168.1.22/24",
 		}
 
-		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, expectedAddresses, whereaboutstypes.DatastoreKubernetes)
+		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, expectedAddresses)
 
 		ipVersion = "6"
 		ipRange = "2001::1/116"
 		ipGateway = "2001::f:1"
 		expectedAddress = "2001::1/116"
 
-		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, []string{expectedAddress}, whereaboutstypes.DatastoreKubernetes)
+		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, []string{expectedAddress})
 	})
 
 	It("allocates and releases an IPv6 address with left-hand zeroes on ADD/DEL with a Kubernetes backend", func() {
@@ -170,7 +158,7 @@ var _ = Describe("Whereabouts operations", func() {
 		ipGateway := "fd::f:1"
 		expectedAddress := "fd::1/116"
 
-		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, []string{expectedAddress}, whereaboutstypes.DatastoreKubernetes)
+		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, []string{expectedAddress})
 	})
 
 	It("allocates IPv6 addresses with DNS-1123 conformant naming with a Kubernetes backend", func() {
@@ -180,13 +168,14 @@ var _ = Describe("Whereabouts operations", func() {
 		ipGateway := "2001::f:1"
 		expectedAddress := "fd00:0:0:10:0:0:3:1/64"
 
-		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, []string{expectedAddress}, whereaboutstypes.DatastoreKubernetes)
+		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, []string{expectedAddress})
 	})
 
 	It("excludes a range of addresses", func() {
 		const ifname string = "eth0"
 		const nspath string = "/some/where"
 
+		backend := fmt.Sprintf(`"kubernetes": {"kubeconfig": "%s"}`, kubeConfigPath)
 		conf := fmt.Sprintf(`{
       "cniVersion": "0.3.1",
       "name": "mynet",
@@ -195,8 +184,8 @@ var _ = Describe("Whereabouts operations", func() {
       "ipam": {
         "type": "whereabouts",
         "log_file" : "/tmp/whereabouts.log",
-				"log_level" : "debug",
-        "etcd_host": "%s",
+        "log_level" : "debug",
+        %s,
         "range": "192.168.1.0/24",
         "exclude": [
           "192.168.1.0/28",
@@ -207,13 +196,14 @@ var _ = Describe("Whereabouts operations", func() {
           { "dst": "0.0.0.0/0" }
         ]
       }
-    }`, etcdHost)
+    }`, backend)
 
 		args := &skel.CmdArgs{
 			ContainerID: "dummy",
 			Netns:       nspath,
 			IfName:      ifname,
 			StdinData:   []byte(conf),
+			Args:        "IgnoreUnknown=1;K8S_POD_NAMESPACE=dummyNS;K8S_POD_NAME=dummyPOD",
 		}
 
 		// Allocate the IP
@@ -247,6 +237,7 @@ var _ = Describe("Whereabouts operations", func() {
 		const ifname string = "eth0"
 		const nspath string = "/some/where"
 
+		backend := fmt.Sprintf(`"kubernetes": {"kubeconfig": "%s"}`, kubeConfigPath)
 		conf := fmt.Sprintf(`{
       "cniVersion": "0.3.1",
       "name": "mynet",
@@ -255,8 +246,8 @@ var _ = Describe("Whereabouts operations", func() {
       "ipam": {
         "type": "whereabouts",
         "log_file" : "/tmp/whereabouts.log",
-				"log_level" : "debug",
-        "etcd_host": "%s",
+		"log_level" : "debug",
+        %s,
         "range": "2001::1/116",
         "exclude": [
           "2001::0/128",
@@ -268,13 +259,14 @@ var _ = Describe("Whereabouts operations", func() {
           { "dst": "0.0.0.0/0" }
         ]
       }
-    }`, etcdHost)
+    }`, backend)
 
 		args := &skel.CmdArgs{
 			ContainerID: "dummy",
 			Netns:       nspath,
 			IfName:      ifname,
 			StdinData:   []byte(conf),
+			Args:        "IgnoreUnknown=1;K8S_POD_NAMESPACE=dummyNS;K8S_POD_NAME=dummyPOD",
 		}
 
 		// Allocate the IP
@@ -308,6 +300,7 @@ var _ = Describe("Whereabouts operations", func() {
 		const ifname string = "eth0"
 		const nspath string = "/some/where"
 
+		backend := fmt.Sprintf(`"kubernetes": {"kubeconfig": "%s"}`, kubeConfigPath)
 		conf := fmt.Sprintf(`{
       "cniVersion": "0.3.1",
       "name": "mynet",
@@ -316,22 +309,23 @@ var _ = Describe("Whereabouts operations", func() {
       "ipam": {
         "type": "whereabouts",
         "log_file" : "/tmp/whereabouts.log",
-				"log_level" : "debug",
-        "etcd_host": "%s",
-				"range": "caa5::0/112",
+        "log_level" : "debug",
+        %s,
+		"range": "caa5::0/112",
         "exclude": ["caa5::0/113"],
         "gateway": "2001::f:1",
         "routes": [
           { "dst": "0.0.0.0/0" }
         ]
       }
-    }`, etcdHost)
+    }`, backend)
 
 		args := &skel.CmdArgs{
 			ContainerID: "dummy",
 			Netns:       nspath,
 			IfName:      ifname,
 			StdinData:   []byte(conf),
+			Args:        "IgnoreUnknown=1;K8S_POD_NAMESPACE=dummyNS;K8S_POD_NAME=dummyPOD",
 		}
 
 		// Allocate the IP
@@ -365,6 +359,7 @@ var _ = Describe("Whereabouts operations", func() {
 		const ifname string = "eth0"
 		const nspath string = "/some/where"
 
+		backend := fmt.Sprintf(`"kubernetes": {"kubeconfig": "%s"}`, kubeConfigPath)
 		conf := fmt.Sprintf(`{
       "cniVersion": "0.3.1",
       "name": "mynet",
@@ -372,7 +367,7 @@ var _ = Describe("Whereabouts operations", func() {
       "master": "foo0",
       "ipam": {
         "type": "whereabouts",
-        "etcd_host": "%s",
+        %s,
         "range": "192.168.1.44/28",
         "gateway": "192.168.1.1",
         "addresses": [ {
@@ -393,13 +388,14 @@ var _ = Describe("Whereabouts operations", func() {
           "search": [ "example.com" ]
         }
       }
-    }`, etcdHost)
+    }`, backend)
 
 		args := &skel.CmdArgs{
 			ContainerID: "dummy",
 			Netns:       nspath,
 			IfName:      ifname,
 			StdinData:   []byte(conf),
+			Args:        "IgnoreUnknown=1;K8S_POD_NAMESPACE=dummyNS;K8S_POD_NAME=dummyPOD",
 		}
 
 		// Allocate the IP
@@ -456,6 +452,7 @@ var _ = Describe("Whereabouts operations", func() {
 		const ifname string = "eth0"
 		const nspath string = "/some/where"
 
+		backend := fmt.Sprintf(`"kubernetes": {"kubeconfig": "%s"}`, kubeConfigPath)
 		conf := fmt.Sprintf(`{
 			"cniVersion": "0.3.1",
 			"name": "mynet",
@@ -464,18 +461,19 @@ var _ = Describe("Whereabouts operations", func() {
 			"ipam": {
 			  "type": "whereabouts",
 			  "log_file" : "/tmp/whereabouts.log",
-					  "log_level" : "debug",
-			  "etcd_host": "%s",
+              "log_level" : "debug",
+			  %s,
 			  "range": "192.168.1.5-192.168.1.25/24",
 			  "gateway": "192.168.10.1"
 			}
-		  }`, etcdHost)
+		  }`, backend)
 
 		args := &skel.CmdArgs{
 			ContainerID: "dummy",
 			Netns:       nspath,
 			IfName:      ifname,
 			StdinData:   []byte(conf),
+			Args:        "IgnoreUnknown=1;K8S_POD_NAMESPACE=dummyNS;K8S_POD_NAME=dummyPOD",
 		}
 
 		// Allocate the IP
@@ -509,6 +507,7 @@ var _ = Describe("Whereabouts operations", func() {
 		const ifname string = "eth0"
 		const nspath string = "/some/where"
 
+		backend := fmt.Sprintf(`"kubernetes": {"kubeconfig": "%s"}`, kubeConfigPath)
 		conf := fmt.Sprintf(`{
 			"cniVersion": "0.3.1",
 			"name": "mynet",
@@ -517,19 +516,20 @@ var _ = Describe("Whereabouts operations", func() {
 			"ipam": {
 			  "type": "whereabouts",
 			  "log_file" : "/tmp/whereabouts.log",
-					  "log_level" : "debug",
-			  "etcd_host": "%s",
+              "log_level" : "debug",
+			  %s,
 			  "range": "192.168.1.0/24",
 			  "range_start": "192.168.1.5",
 			  "gateway": "192.168.10.1"
 			}
-		  }`, etcdHost)
+		  }`, backend)
 
 		args := &skel.CmdArgs{
 			ContainerID: "dummy",
 			Netns:       nspath,
 			IfName:      ifname,
 			StdinData:   []byte(conf),
+			Args:        "IgnoreUnknown=1;K8S_POD_NAMESPACE=dummyNS;K8S_POD_NAME=dummyPOD",
 		}
 
 		// Allocate the IP
@@ -563,6 +563,7 @@ var _ = Describe("Whereabouts operations", func() {
 		const ifname string = "eth0"
 		const nspath string = "/some/where"
 
+		backend := fmt.Sprintf(`"kubernetes": {"kubeconfig": "%s"}`, kubeConfigPath)
 		conf := fmt.Sprintf(`{
 			"cniVersion": "0.3.1",
 			"name": "mynet",
@@ -571,14 +572,14 @@ var _ = Describe("Whereabouts operations", func() {
 			"ipam": {
 			  "type": "whereabouts",
 			  "log_file" : "/tmp/whereabouts.log",
-					  "log_level" : "debug",
-			  "etcd_host": "%s",
+			  "log_level" : "debug",
+			  %s,
 			  "range": "192.168.1.0/24",
 			  "range_start": "192.168.1.5",
 			  "range_end": "192.168.1.12",
 			  "gateway": "192.168.10.1"
 			}
-		  }`, etcdHost)
+		  }`, backend)
 
 		var ipArgs []*skel.CmdArgs
 		// allocate 8 IPs (192.168.1.5 - 192.168.1.12); the entirety of the pool defined above
@@ -588,6 +589,7 @@ var _ = Describe("Whereabouts operations", func() {
 				Netns:       nspath,
 				IfName:      ifname,
 				StdinData:   []byte(conf),
+				Args:        "IgnoreUnknown=1;K8S_POD_NAMESPACE=dummyNS;K8S_POD_NAME=dummyPOD",
 			}
 			r, raw, err := testutils.CmdAddWithArgs(args, func() error {
 				return cmdAdd(args)
@@ -614,6 +616,7 @@ var _ = Describe("Whereabouts operations", func() {
 			Netns:       nspath,
 			IfName:      ifname,
 			StdinData:   []byte(conf),
+			Args:        "IgnoreUnknown=1;K8S_POD_NAMESPACE=dummyNS;K8S_POD_NAME=dummyPOD",
 		}
 		_, _, err := testutils.CmdAddWithArgs(args, func() error {
 			return cmdAdd(args)
