@@ -30,84 +30,84 @@ This is, for example, useful in multi-tenant situations where more than one grou
 
 ## Design
 
-The IPAM configuration format would be updated to include an optional field for the name of the network in question.
-If this field is left empty, whereabouts will behave as it does now, without these changes.
+The network configuration already has a field `name`:
 
-### Changes in IPAM Config
+```json
+{
+      "cniVersion": "0.3.0",
+      "name": "whereaboutsexample",
+      "type": "macvlan",
+      "master": "eth0",
+      "mode": "bridge",
+      "ipam": {
+        "type": "whereabouts",
+        "range": "192.168.2.225/28"
+      }
+}
+```
 
-This will lead to change in IPAM config something as follows:
+That is also parsed into the internal representation of the `IPAMConfig`.
+
+This proposal shows three schemes of implementing using that name to distinguish the assignment of IPs:
+
+1. Store the CR with the name of the network configuration instead of the canonicalized CIDR range
+2. Store the CR with the name of the network configuration prepended (or appended) to the canonicalized CIDR range
+3. Add a new field into the `IPAMConfig` to allow users to decide when whereabouts should use the name or the CIDR range for identifying the configuration
+
+### Analysis of the proposed schemes
+
+#### Store the CR under the name of the network configuration
 
 <table>
 <tr>
-<th>Old IPAM Config</th>
-<th>Changes</th>
-<th>New IPAM Config</th>
+<th>Pros</th>
+<th>Cons</th>
 </tr>
 <tr>
 <td>
-  
-```json
-{
-      "cniVersion": "0.3.0",
-      "name": "whereaboutsexample",
-      "type": "macvlan",
-      "master": "eth0",
-      "mode": "bridge",
-      "ipam": {
-        "type": "whereabouts",
-        "range": "192.168.2.225/28",
-        "exclude": [
-           "192.168.2.229/30",
-           "192.168.2.236/32"
-        ]
-      }
-}
-```
-  
+:green_circle: Clean design<br/>
+:green_circle: Ranges are easy to find during debugging<br/>
+:green_circle: No more IP-to-string canonicalization<br/>
 </td>
 <td>
+:red_circle: Not backwards compatible, existing installation would need to carefully migrate the existing `IPPool`s to not get duplicate IPs<br/>
+:red_circle: Unclear semantics when two ranges with the same name but different CIDR-ranges are created<br/>
+</td>
+</tr>
+</table>
 
-```diff
-{
-      "cniVersion": "0.3.0",
-      "name": "whereaboutsexample",
-      "type": "macvlan",
-      "master": "eth0",
-      "mode": "bridge",
-      "ipam": {
-        "type": "whereabouts",
-        "range": "192.168.2.225/28",
-+       "network_name": "whereaboutsexample",
-        "exclude": [
-           "192.168.2.229/30",
-           "192.168.2.236/32"
-        ]
-      }
-}
-```
+#### Store the CR under a name combined from the name of the network configuration and the CIDR range
 
+<table>
+<tr>
+<th>Pros</th>
+<th>Cons</th>
+</tr>
+<tr>
+<td>
+:green_circle: Clean design<br/>
+:green_circle: Ranges are easy to find during debugging<br/>
 </td>
 <td>
+:red_circle: Not backwards compatible, existing installation would need to carefully migrate the existing `IPPool`s to not get duplicate IPs<br/>
+</td>
+</tr>
+</table>
 
-```json
-{
-      "cniVersion": "0.3.0",
-      "name": "whereaboutsexample",
-      "type": "macvlan",
-      "master": "eth0",
-      "mode": "bridge",
-      "ipam": {
-        "type": "whereabouts",
-        "range": "192.168.2.225/28",
-        "network_name": "whereaboutsexample",
-        "exclude": [
-           "192.168.2.229/30",
-           "192.168.2.236/32"
-        ]
-      }
-}
-```
+#### Add a new field to decide whether this is a named range or not
 
+<table>
+<tr>
+<th>Pros</th>
+<th>Cons</th>
+</tr>
+<tr>
+<td>
+:green_circle: Backwards compatible, existing `IPPool`s are still where we left them<br/>
+:yellow_circle: Named ranges are easy to find during debugging, other ranges are unchanged<br/>
+</td>
+<td>
+:red_circle: "API" change<br/>
 </td>
 </tr>
 </table>
@@ -148,7 +148,7 @@ This will lead to change in IPAM config something as follows:
       ConfigurationPath   string               `json:"configuration_path"`
       PodName             string
       PodNamespace        string
-      NetworkName         string               `json:"network_name,omitempty"`
+      ThisIsANamedRange   bool               `json:"named_range,omitempty"`
  }
 ```
 
@@ -163,7 +163,7 @@ This will lead to change in IPAM config something as follows:
     normalized = strings.ReplaceAll(normalized, "/", "-")
 -   return normalized
 
-+   if networkName != "" {
++   if ThisIsANamedRange {
 +       return networkName + "-" + normalized
 +   } else {
 +       return normalized
