@@ -143,6 +143,8 @@ func newPodController(stopChannel chan struct{}) (*controlloop.PodController, er
 			}))
 
 	controller := controlloop.NewPodController(
+		k8sClientSet,
+		wbClientSet,
 		podInformerFactory,
 		ipPoolInformerFactory,
 		netAttachDefInformerFactory,

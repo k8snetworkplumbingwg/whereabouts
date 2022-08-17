@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"k8s.io/client-go/kubernetes"
 	"net"
 	"os"
 	"strconv"
@@ -24,6 +25,7 @@ import (
 
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/allocate"
 	whereaboutsv1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
+	wbclientset "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/clientset/versioned"
 	wbinformers "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/informers/externalversions"
 	wblister "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/listers/whereabouts.cni.cncf.io/v1alpha1"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/config"
@@ -45,9 +47,11 @@ const (
 	addressGarbageCollectionFailed = "IPAddressGarbageCollectionFailed"
 )
 
-type garbageCollector func(ctx context.Context, mode int, ipamConf types.IPAMConfig, containerID string, podRef string) (net.IPNet, error)
+type garbageCollector func(ctx context.Context, mode int, ipamConf types.IPAMConfig, client *wbclient.KubernetesIPAM) (net.IPNet, error)
 
 type PodController struct {
+	k8sClient               kubernetes.Interface
+	wbClient                wbclientset.Interface
 	arePodsSynched          cache.InformerSynced
 	areIPPoolsSynched       cache.InformerSynced
 	areNetAttachDefsSynched cache.InformerSynced
@@ -65,11 +69,11 @@ type PodController struct {
 }
 
 // NewPodController ...
-func NewPodController(k8sCoreInformerFactory v1coreinformerfactory.SharedInformerFactory, wbSharedInformerFactory wbinformers.SharedInformerFactory, netAttachDefInformerFactory nadinformers.SharedInformerFactory, broadcaster record.EventBroadcaster, recorder record.EventRecorder) *PodController {
-	return newPodController(k8sCoreInformerFactory, wbSharedInformerFactory, netAttachDefInformerFactory, broadcaster, recorder, wbclient.IPManagement)
+func NewPodController(k8sCoreClient kubernetes.Interface, wbClient wbclientset.Interface, k8sCoreInformerFactory v1coreinformerfactory.SharedInformerFactory, wbSharedInformerFactory wbinformers.SharedInformerFactory, netAttachDefInformerFactory nadinformers.SharedInformerFactory, broadcaster record.EventBroadcaster, recorder record.EventRecorder) *PodController {
+	return newPodController(k8sCoreClient, wbClient, k8sCoreInformerFactory, wbSharedInformerFactory, netAttachDefInformerFactory, broadcaster, recorder, wbclient.IPManagement)
 }
 
-func newPodController(k8sCoreInformerFactory v1coreinformerfactory.SharedInformerFactory, wbSharedInformerFactory wbinformers.SharedInformerFactory, netAttachDefInformerFactory nadinformers.SharedInformerFactory, broadcaster record.EventBroadcaster, recorder record.EventRecorder, cleanupFunc garbageCollector) *PodController {
+func newPodController(k8sCoreClient kubernetes.Interface, wbClient wbclientset.Interface, k8sCoreInformerFactory v1coreinformerfactory.SharedInformerFactory, wbSharedInformerFactory wbinformers.SharedInformerFactory, netAttachDefInformerFactory nadinformers.SharedInformerFactory, broadcaster record.EventBroadcaster, recorder record.EventRecorder, cleanupFunc garbageCollector) *PodController {
 	k8sPodFilteredInformer := k8sCoreInformerFactory.Core().V1().Pods()
 	ipPoolInformer := wbSharedInformerFactory.Whereabouts().V1alpha1().IPPools()
 	netAttachDefInformer := netAttachDefInformerFactory.K8sCniCncfIo().V1().NetworkAttachmentDefinitions()
@@ -90,6 +94,8 @@ func newPodController(k8sCoreInformerFactory v1coreinformerfactory.SharedInforme
 		})
 
 	return &PodController{
+		k8sClient: k8sCoreClient,
+
 		arePodsSynched:          podsInformer.HasSynced,
 		areIPPoolsSynched:       poolInformer.HasSynced,
 		areNetAttachDefsSynched: networksInformer.HasSynced,
@@ -185,7 +191,17 @@ func (pc *PodController) garbageCollectPodIPs(pod *v1.Pod) error {
 			if allocation.PodRef == podID(podNamespace, podName) {
 				logging.Verbosef("stale allocation to cleanup: %+v", allocation)
 
-				if _, err := pc.cleanupFunc(context.TODO(), types.Deallocate, *ipamConfig, allocation.ContainerID, podID(podNamespace, podName)); err != nil {
+				client := *wbclient.NewKubernetesClient(nil, pc.k8sClient, 0)
+				wbClient := &wbclient.KubernetesIPAM{
+					Client: client,
+					Config: *ipamConfig,
+				}
+
+				if err != nil {
+					logging.Debugf("error while generating the IPAM client: %v", err)
+					continue
+				}
+				if _, err := pc.cleanupFunc(context.TODO(), types.Deallocate, *ipamConfig, wbClient); err != nil {
 					logging.Errorf("failed to cleanup allocation: %v", err)
 				}
 				if err := pc.addressGarbageCollected(pod, nad.GetName(), pool.Spec.Range, allocationIndex); err != nil {

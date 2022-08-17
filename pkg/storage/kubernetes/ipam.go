@@ -59,7 +59,7 @@ func NewKubernetesIPAMWithNamespace(containerID string, ipamConf whereaboutstype
 
 func newKubernetesIPAM(containerID string, ipamConf whereaboutstypes.IPAMConfig, namespace string, kubernetesClient Client) *KubernetesIPAM {
 	return &KubernetesIPAM{
-		config:      ipamConf,
+		Config:      ipamConf,
 		containerID: containerID,
 		namespace:   namespace,
 		Client:      kubernetesClient,
@@ -69,7 +69,7 @@ func newKubernetesIPAM(containerID string, ipamConf whereaboutstypes.IPAMConfig,
 // KubernetesIPAM manages ip blocks in an kubernetes CRD backend
 type KubernetesIPAM struct {
 	Client
-	config      whereaboutstypes.IPAMConfig
+	Config      whereaboutstypes.IPAMConfig
 	containerID string
 	namespace   string
 }
@@ -348,27 +348,22 @@ func newLeaderElector(clientset kubernetes.Interface, namespace string, podNames
 }
 
 // IPManagement manages ip allocation and deallocation from a storage perspective
-func IPManagement(ctx context.Context, mode int, ipamConf whereaboutstypes.IPAMConfig, containerID string, podRef string) (net.IPNet, error) {
+func IPManagement(ctx context.Context, mode int, ipamConf whereaboutstypes.IPAMConfig, client *KubernetesIPAM) (net.IPNet, error) {
 	var newip net.IPNet
-
-	ipam, err := NewKubernetesIPAM(containerID, ipamConf)
-	if err != nil {
-		return newip, logging.Errorf("IPAM client initialization error: %v", err)
-	}
-	defer ipam.Close()
 
 	if ipamConf.PodName == "" {
 		return newip, fmt.Errorf("IPAM client initialization error: no pod name")
 	}
 
 	// setup leader election
-	le, leader, deposed := newLeaderElector(ipam.clientSet, ipam.namespace, ipamConf.PodNamespace, ipamConf.PodName, ipamConf.LeaderLeaseDuration, ipamConf.LeaderRenewDeadline, ipamConf.LeaderRetryPeriod)
+	le, leader, deposed := newLeaderElector(client.clientSet, client.namespace, ipamConf.PodNamespace, ipamConf.PodName, ipamConf.LeaderLeaseDuration, ipamConf.LeaderRenewDeadline, ipamConf.LeaderRetryPeriod)
 	var wg sync.WaitGroup
 	wg.Add(2)
 
 	stopM := make(chan struct{})
 	result := make(chan error, 2)
 
+	var err error
 	go func() {
 		defer wg.Done()
 		for {
@@ -379,7 +374,7 @@ func IPManagement(ctx context.Context, mode int, ipamConf whereaboutstypes.IPAMC
 				return
 			case <-leader:
 				logging.Debugf("Elected as leader, do processing")
-				newip, err = IPManagementKubernetesUpdate(ctx, mode, ipam, ipamConf, containerID, podRef)
+				newip, err = IPManagementKubernetesUpdate(ctx, mode, client, ipamConf, client.containerID, ipamConf.GetPodRef())
 				stopM <- struct{}{}
 				return
 			case <-deposed:

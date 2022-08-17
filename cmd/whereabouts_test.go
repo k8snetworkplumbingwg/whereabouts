@@ -3,40 +3,37 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io/fs"
+	"io/ioutil"
 	"net"
+	"os"
 	"strings"
+	"testing"
+
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
 	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/containernetworking/plugins/pkg/testutils"
+
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/allocate"
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
 )
 
-func AllocateAndReleaseAddressesTest(ipVersion string, ipRange string, ipGateway string, expectedAddresses []string) {
+const whereaboutsConfigFile = "whereabouts.kubeconfig"
+
+func TestAPIs(t *testing.T) {
+	RegisterFailHandler(Fail)
+
+	RunSpecsWithDefaultAndCustomReporters(t,
+		"Whereabouts Suite",
+		[]Reporter{})
+}
+
+func AllocateAndReleaseAddressesTest(tempDir string, ipVersion string, ipRange string, ipGateway string, expectedAddresses []string) {
 	const ifname string = "eth0"
 	const nspath string = "/some/where"
-
-	backend := fmt.Sprintf(`"kubernetes": {"kubeconfig": "%s"}`, kubeConfigPath)
-	conf := fmt.Sprintf(`{
-		"cniVersion": "0.3.1",
-		"name": "mynet",
-		"type": "ipvlan",
-		"master": "foo0",
-		"ipam": {
-		  "type": "whereabouts",
-		  "log_file" : "/tmp/whereabouts.log",
-          "log_level" : "debug",
-		  %s,
-		  "range": "%s",
-		  "gateway": "%s",
-		  "routes": [
-			{ "dst": "0.0.0.0/0" }
-		  ]
-		}
-	  }`, backend, ipRange, ipGateway)
 
 	addressArgs := []*skel.CmdArgs{}
 
@@ -45,7 +42,7 @@ func AllocateAndReleaseAddressesTest(ipVersion string, ipRange string, ipGateway
 			ContainerID: fmt.Sprintf("dummy-%d", i),
 			Netns:       nspath,
 			IfName:      ifname,
-			StdinData:   []byte(conf),
+			StdinData:   []byte(cniConfigWithRangeAndGateway(tempDir, ipRange, ipGateway)),
 			Args:        "IgnoreUnknown=1;K8S_POD_NAMESPACE=dummyNS;K8S_POD_NAME=dummyPOD",
 		}
 
@@ -104,20 +101,40 @@ func AllocateAndReleaseAddressesTest(ipVersion string, ipRange string, ipGateway
 }
 
 var _ = Describe("Whereabouts operations", func() {
-	It("allocates and releases addresses on ADD/DEL", func() {
+	var (
+		tmpDir         string
+		kubeConfigPath string
+	)
+
+	BeforeEach(func() {
+		var err error
+		tmpDir, err = ioutil.TempDir("/tmp", "whereabouts")
+		Expect(err).ToNot(HaveOccurred())
+		kubeConfigPath = fmt.Sprintf("%s/%s", tmpDir, whereaboutsConfigFile)
+		Expect(os.WriteFile(kubeConfigPath, kubeconfig(), fs.ModePerm)).To(Succeed())
+	})
+
+	AfterEach(func() {
+		defer func() {
+			if err := os.RemoveAll(tmpDir); err != nil {
+				panic("error cleaning up tmp dir. Cannot proceed with tests")
+			}
+		}()
+	})
+
+	FIt("allocates and releases addresses on ADD/DEL", func() {
 		ipVersion := "4"
 		ipRange := "192.168.1.0/24"
 		ipGateway := "192.168.10.1"
 		expectedAddress := "192.168.1.1/24"
-		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, []string{expectedAddress})
+		AllocateAndReleaseAddressesTest(tmpDir, ipVersion, ipRange, ipGateway, []string{expectedAddress})
 
 		ipVersion = "6"
 		ipRange = "2001::1/116"
 		ipGateway = "2001::f:1"
 		expectedAddress = "2001::1/116"
 
-		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, []string{expectedAddress})
-
+		AllocateAndReleaseAddressesTest(tmpDir, ipVersion, ipRange, ipGateway, []string{expectedAddress})
 	})
 
 	It("allocates and releases addresses on ADD/DEL with a Kubernetes backend", func() {
@@ -141,14 +158,14 @@ var _ = Describe("Whereabouts operations", func() {
 			"192.168.1.22/24",
 		}
 
-		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, expectedAddresses)
+		AllocateAndReleaseAddressesTest(tmpDir, ipVersion, ipRange, ipGateway, expectedAddresses)
 
 		ipVersion = "6"
 		ipRange = "2001::1/116"
 		ipGateway = "2001::f:1"
 		expectedAddress = "2001::1/116"
 
-		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, []string{expectedAddress})
+		AllocateAndReleaseAddressesTest(tmpDir, ipVersion, ipRange, ipGateway, []string{expectedAddress})
 	})
 
 	It("allocates and releases an IPv6 address with left-hand zeroes on ADD/DEL with a Kubernetes backend", func() {
@@ -158,7 +175,7 @@ var _ = Describe("Whereabouts operations", func() {
 		ipGateway := "fd::f:1"
 		expectedAddress := "fd::1/116"
 
-		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, []string{expectedAddress})
+		AllocateAndReleaseAddressesTest(tmpDir, ipVersion, ipRange, ipGateway, []string{expectedAddress})
 	})
 
 	It("allocates IPv6 addresses with DNS-1123 conformant naming with a Kubernetes backend", func() {
@@ -168,14 +185,13 @@ var _ = Describe("Whereabouts operations", func() {
 		ipGateway := "2001::f:1"
 		expectedAddress := "fd00:0:0:10:0:0:3:1/64"
 
-		AllocateAndReleaseAddressesTest(ipVersion, ipRange, ipGateway, []string{expectedAddress})
+		AllocateAndReleaseAddressesTest(tmpDir, ipVersion, ipRange, ipGateway, []string{expectedAddress})
 	})
 
 	It("excludes a range of addresses", func() {
 		const ifname string = "eth0"
 		const nspath string = "/some/where"
 
-		backend := fmt.Sprintf(`"kubernetes": {"kubeconfig": "%s"}`, kubeConfigPath)
 		conf := fmt.Sprintf(`{
       "cniVersion": "0.3.1",
       "name": "mynet",
@@ -196,7 +212,7 @@ var _ = Describe("Whereabouts operations", func() {
           { "dst": "0.0.0.0/0" }
         ]
       }
-    }`, backend)
+    }`, configureBackend(tmpDir))
 
 		args := &skel.CmdArgs{
 			ContainerID: "dummy",
@@ -652,11 +668,10 @@ var _ = Describe("Whereabouts operations", func() {
 			  "type": "whereabouts",
 			  "log_file" : "/tmp/whereabouts.log",
 					  "log_level" : "debug",
-			  "etcd_host": "%s",
 			  "range": "192.168.1.5-192.168.2.25/28",
 			  "gateway": "192.168.10.1"
 			}
-		  }`, etcdHost)
+		  }`)
 
 		args := &skel.CmdArgs{
 			ContainerID: "dummy",
@@ -715,18 +730,13 @@ var _ = Describe("Whereabouts operations", func() {
 			"type": "whereabouts",
 			"log_file" : "/tmp/whereabouts.log",
 					"log_level" : "debug",
-			"etcd_host": "%s",
-			"etcd_username": "fakeuser",
-			"etcd_password": "fakepassword",
-			"etcd_key_file": "/tmp/fake/path/to/key",
-			"etcd_cert_file": "/tmp/fake/path/to/cert",
 			"range": "192.168.1.0/24",
 			"gateway": "192.168.10.1",
 			"routes": [
 			  { "dst": "0.0.0.0/0" }
 			]
 		  }
-		}`, etcdHost)
+		}`)
 
 		args := &skel.CmdArgs{
 			ContainerID: "dummy",
@@ -1068,4 +1078,54 @@ func mustCIDR(s string) net.IPNet {
 		Fail(err.Error())
 	}
 	return *n
+}
+
+func cniConfigWithRangeAndGateway(tempDir string, ipRange string, ipGateway string) string {
+	return fmt.Sprintf(`{
+		"cniVersion": "0.3.1",
+		"name": "mynet",
+		"type": "ipvlan",
+		"master": "foo0",
+		"ipam": {
+		  "type": "whereabouts",
+		  "log_file" : "/tmp/whereabouts.log",
+          "log_level" : "debug",
+		  %s,
+		  "range": "%s",
+		  "gateway": "%s",
+		  "routes": [
+			{ "dst": "0.0.0.0/0" }
+		  ]
+		}
+	  }`, configureBackend(tempDir), ipRange, ipGateway)
+}
+
+func configureBackend(dir string) string {
+	return fmt.Sprintf(
+		`"kubernetes": {"kubeconfig": "%s"}`,
+		fmt.Sprintf("%s/%s", dir, whereaboutsConfigFile))
+}
+
+func kubeconfig() []byte {
+	return []byte(`
+apiVersion: v1
+clusters:
+- cluster:
+    certificate-authority-data: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUJzVENDQVZlZ0F3SUJBZ0lCQURBS0JnZ3Foa2pPUFFRREFqQXdNUkF3RGdZRFZRUUtFd2RsYm5aMFpYTjAKTVJ3d0dnWURWUVFERXhObGJuWjBaWE4wTFdWdWRtbHliMjV0Wlc1ME1CNFhEVEl5TURneE5qRTBOVGN3TmxvWApEVE15TURneE16RTBOVGN3Tmxvd01ERVFNQTRHQTFVRUNoTUhaVzUyZEdWemRERWNNQm9HQTFVRUF4TVRaVzUyCmRHVnpkQzFsYm5acGNtOXViV1Z1ZERCWk1CTUdCeXFHU000OUFnRUdDQ3FHU000OUF3RUhBMElBQkJkVzBDKy8KZEpvWE5NOXpreVBOaW5kVlZleUppaVd6MkFLQnlKSjM0eUVWN1lpMVc1ZlhCNXpUZGY5dUhVOUVmZGRpN2NHcAo2Sm5qMTl1N2I5QVQySWVqWWpCZ01BNEdBMVVkRHdFQi93UUVBd0lDcERBUEJnTlZIUk1CQWY4RUJUQURBUUgvCk1CMEdBMVVkRGdRV0JCUit1WU54TEEyMWNsSGdlS082N2dqV3drWThpakFlQmdOVkhSRUVGekFWZ2hObGJuWjAKWlhOMExXVnVkbWx5YjI1dFpXNTBNQW9HQ0NxR1NNNDlCQU1DQTBnQU1FVUNJRU5ZWmxUSklqWlZWUUt5ZDN2YgptcmJBWWpsWFRrUDlzTjVmT1BIWjM0UHZBaUVBdkZESk8xbmNYTVFCWW01RTNhdGpVOFRBSG9ma2EzK0IzM2JkCjhMNnNaZzg9Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K
+    server: https://127.0.0.1:39165
+  name: envtest
+contexts:
+- context:
+    cluster: envtest
+    user: envtest
+  name: envtest
+current-context: envtest
+kind: Config
+preferences: {}
+users:
+- name: envtest
+  user:
+    client-certificate-data: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUJrakNDQVRpZ0F3SUJBZ0lCQVRBS0JnZ3Foa2pPUFFRREFqQXdNUkF3RGdZRFZRUUtFd2RsYm5aMFpYTjAKTVJ3d0dnWURWUVFERXhObGJuWjBaWE4wTFdWdWRtbHliMjV0Wlc1ME1CNFhEVEl5TURneE5qRTBOVGN4TUZvWApEVEl5TURneU16RTBOVGN4TUZvd0t6RVhNQlVHQTFVRUNoTU9jM2x6ZEdWdE9tMWhjM1JsY25NeEVEQU9CZ05WCkJBTVRCMlJsWm1GMWJIUXdXVEFUQmdjcWhrak9QUUlCQmdncWhrak9QUU1CQndOQ0FBVFFiUnF3a1NQeGxkZUQKSDh0WElDN3pRVjN1MU90TE14SStoa1VsN3puaEdXWmh1M1dSV1V4SEFVKzVyY2xUMHlxeEVzUDZ6TFVyNFk1bApEVEE2cDVJeW8wZ3dSakFPQmdOVkhROEJBZjhFQkFNQ0JhQXdFd1lEVlIwbEJBd3dDZ1lJS3dZQkJRVUhBd0l3Ckh3WURWUjBqQkJnd0ZvQVUzQis0dThmOWZkTmxhNU1Td2xPVHlvYmdEVmN3Q2dZSUtvWkl6ajBFQXdJRFNBQXcKUlFJZ2V4b0JWS2pYenppemlKUWtma2F3c2w5aUJWQkl5ZWxXK2dRK2JPV2RFZ0lDSVFEa3lGcjJCR0tSei9lcAp3NGhTSmJDVmtZNjVJdE5ZZ3RKMVJaOGtEeXE2bXc9PQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg==
+    client-key-data: LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1JR0hBZ0VBTUJNR0J5cUdTTTQ5QWdFR0NDcUdTTTQ5QXdFSEJHMHdhd0lCQVFRZ1FwcThkWVB0UlNOa2tUMHQKakh1SXNMYnpCaGU4bkV1R0xzU2x2MDNVVzFhaFJBTkNBQVRRYlJxd2tTUHhsZGVESDh0WElDN3pRVjN1MU90TApNeEkraGtVbDd6bmhHV1podTNXUldVeEhBVSs1cmNsVDB5cXhFc1A2ekxVcjRZNWxEVEE2cDVJeQotLS0tLUVORCBQUklWQVRFIEtFWS0tLS0tCg==
+`)
 }

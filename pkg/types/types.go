@@ -134,6 +134,10 @@ func (ic *IPAMConfig) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (ic *IPAMConfig) GetPodRef() string {
+	return fmt.Sprintf("%s/%s", ic.PodNamespace, ic.PodName)
+}
+
 func backwardsCompatibleIPAddress(ip string) net.IP {
 	var ipAddr net.IP
 	if sanitizedIP, err := sanitizeIP(ip); err == nil {
