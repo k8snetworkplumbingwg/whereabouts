@@ -131,10 +131,11 @@ func (i *KubernetesIPAM) getPool(ctx context.Context, name string, iprange strin
 	pool, err := i.client.WhereaboutsV1alpha1().IPPools(i.namespace).Get(ctxWithTimeout, name, metav1.GetOptions{})
 	if err != nil && errors.IsNotFound(err) {
 		// pool does not exist, create it
-		pool.ObjectMeta.Name = name
-		pool.Spec.Range = iprange
-		pool.Spec.Allocations = make(map[string]whereaboutsv1alpha1.IPAllocation)
-		_, err = i.client.WhereaboutsV1alpha1().IPPools(i.namespace).Create(ctxWithTimeout, pool, metav1.CreateOptions{})
+		newPool := &whereaboutsv1alpha1.IPPool{}
+		newPool.ObjectMeta.Name = name
+		newPool.Spec.Range = iprange
+		newPool.Spec.Allocations = make(map[string]whereaboutsv1alpha1.IPAllocation)
+		_, err = i.client.WhereaboutsV1alpha1().IPPools(i.namespace).Create(ctxWithTimeout, newPool, metav1.CreateOptions{})
 		if err != nil && errors.IsAlreadyExists(err) {
 			// the pool was just created -- allow retry
 			return nil, &temporaryError{err}

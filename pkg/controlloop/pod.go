@@ -94,8 +94,8 @@ func newPodController(k8sCoreClient kubernetes.Interface, wbClient wbclientset.I
 		})
 
 	return &PodController{
-		k8sClient: k8sCoreClient,
-
+		k8sClient:               k8sCoreClient,
+		wbClient:                wbClient,
 		arePodsSynched:          podsInformer.HasSynced,
 		areIPPoolsSynched:       poolInformer.HasSynced,
 		areNetAttachDefsSynched: networksInformer.HasSynced,
