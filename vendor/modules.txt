@@ -32,9 +32,6 @@ github.com/go-co-op/gocron
 # github.com/go-logr/logr v1.2.3
 ## explicit; go 1.16
 github.com/go-logr/logr
-# github.com/go-logr/zapr v1.2.0
-## explicit; go 1.16
-github.com/go-logr/zapr
 # github.com/go-openapi/jsonpointer v0.19.5
 ## explicit; go 1.13
 github.com/go-openapi/jsonpointer
@@ -160,30 +157,12 @@ github.com/onsi/gomega/types
 # github.com/pkg/errors v0.9.1
 ## explicit
 github.com/pkg/errors
-# github.com/prometheus/client_golang v1.12.2
-## explicit; go 1.13
-# github.com/prometheus/common v0.34.0
-## explicit; go 1.15
 # github.com/robfig/cron/v3 v3.0.1
 ## explicit; go 1.12
 github.com/robfig/cron/v3
 # github.com/spf13/pflag v1.0.5
 ## explicit; go 1.12
 github.com/spf13/pflag
-# go.uber.org/atomic v1.7.0
-## explicit; go 1.13
-go.uber.org/atomic
-# go.uber.org/multierr v1.6.0
-## explicit; go 1.12
-go.uber.org/multierr
-# go.uber.org/zap v1.19.1
-## explicit; go 1.13
-go.uber.org/zap
-go.uber.org/zap/buffer
-go.uber.org/zap/internal/bufferpool
-go.uber.org/zap/internal/color
-go.uber.org/zap/internal/exit
-go.uber.org/zap/zapcore
 # golang.org/x/mod v0.6.0-dev.0.20220106191415-9b9b3d81d5e3
 ## explicit; go 1.17
 golang.org/x/mod/internal/lazyregexp
@@ -369,23 +348,12 @@ k8s.io/api/scheduling/v1beta1
 k8s.io/api/storage/v1
 k8s.io/api/storage/v1alpha1
 k8s.io/api/storage/v1beta1
-# k8s.io/apiextensions-apiserver v0.24.0
-## explicit; go 1.16
-k8s.io/apiextensions-apiserver/pkg/apis/apiextensions
-k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1
-k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1
-k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset
-k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/scheme
-k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1
-k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1beta1
 # k8s.io/apimachinery v0.24.0
 ## explicit; go 1.16
-k8s.io/apimachinery/pkg/api/equality
 k8s.io/apimachinery/pkg/api/errors
 k8s.io/apimachinery/pkg/api/meta
 k8s.io/apimachinery/pkg/api/resource
 k8s.io/apimachinery/pkg/apis/meta/internalversion
-k8s.io/apimachinery/pkg/apis/meta/internalversion/scheme
 k8s.io/apimachinery/pkg/apis/meta/v1
 k8s.io/apimachinery/pkg/apis/meta/v1/unstructured
 k8s.io/apimachinery/pkg/apis/meta/v1beta1
@@ -471,7 +439,6 @@ k8s.io/client-go/applyconfigurations/storage/v1alpha1
 k8s.io/client-go/applyconfigurations/storage/v1beta1
 k8s.io/client-go/discovery
 k8s.io/client-go/discovery/fake
-k8s.io/client-go/dynamic
 k8s.io/client-go/informers
 k8s.io/client-go/informers/admissionregistration
 k8s.io/client-go/informers/admissionregistration/v1
@@ -667,7 +634,6 @@ k8s.io/client-go/listers/scheduling/v1beta1
 k8s.io/client-go/listers/storage/v1
 k8s.io/client-go/listers/storage/v1alpha1
 k8s.io/client-go/listers/storage/v1beta1
-k8s.io/client-go/metadata
 k8s.io/client-go/openapi
 k8s.io/client-go/pkg/apis/clientauthentication
 k8s.io/client-go/pkg/apis/clientauthentication/install
@@ -678,7 +644,6 @@ k8s.io/client-go/plugin/pkg/client/auth/exec
 k8s.io/client-go/rest
 k8s.io/client-go/rest/fake
 k8s.io/client-go/rest/watch
-k8s.io/client-go/restmapper
 k8s.io/client-go/testing
 k8s.io/client-go/tools/auth
 k8s.io/client-go/tools/cache
@@ -699,7 +664,6 @@ k8s.io/client-go/util/connrotation
 k8s.io/client-go/util/flowcontrol
 k8s.io/client-go/util/homedir
 k8s.io/client-go/util/keyutil
-k8s.io/client-go/util/retry
 k8s.io/client-go/util/workqueue
 # k8s.io/code-generator v0.24.0
 ## explicit; go 1.16
@@ -780,26 +744,8 @@ k8s.io/utils/clock/testing
 k8s.io/utils/integer
 k8s.io/utils/internal/third_party/forked/golang/net
 k8s.io/utils/net
-k8s.io/utils/pointer
 k8s.io/utils/strings/slices
 k8s.io/utils/trace
-# sigs.k8s.io/controller-runtime v0.11.2
-## explicit; go 1.17
-sigs.k8s.io/controller-runtime/pkg/client
-sigs.k8s.io/controller-runtime/pkg/client/apiutil
-sigs.k8s.io/controller-runtime/pkg/client/config
-sigs.k8s.io/controller-runtime/pkg/conversion
-sigs.k8s.io/controller-runtime/pkg/envtest
-sigs.k8s.io/controller-runtime/pkg/internal/flock
-sigs.k8s.io/controller-runtime/pkg/internal/log
-sigs.k8s.io/controller-runtime/pkg/internal/objectutil
-sigs.k8s.io/controller-runtime/pkg/internal/testing/addr
-sigs.k8s.io/controller-runtime/pkg/internal/testing/certs
-sigs.k8s.io/controller-runtime/pkg/internal/testing/controlplane
-sigs.k8s.io/controller-runtime/pkg/internal/testing/process
-sigs.k8s.io/controller-runtime/pkg/log
-sigs.k8s.io/controller-runtime/pkg/log/zap
-sigs.k8s.io/controller-runtime/pkg/webhook/conversion
 # sigs.k8s.io/json v0.0.0-20211208200746-9f7c6b3444d2
 ## explicit; go 1.17
 sigs.k8s.io/json
