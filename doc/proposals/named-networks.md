@@ -15,6 +15,7 @@
 ## Introduction
 
 When whereabouts assigns an IP to a Pod this fact is recorded in a CR of kind `IPPool` that has its name derived from the CIDR range in question.
+This CR is stored in the namespace of whereabouts (`kube-system` by default).
 
 Should the user configure multiple overlapping ranges, it is possible to configure whereabouts to allow assigning duplicate IPs.
 
@@ -46,13 +47,16 @@ The network configuration already has a field `name`:
 }
 ```
 
-That is also parsed into the internal representation of the `IPAMConfig`.
+This is also parsed into the internal representation of the `IPAMConfig`.
 
 This proposal shows three schemes of implementing using that name to distinguish the assignment of IPs:
 
 1. Store the CR with the name of the network configuration instead of the canonicalized CIDR range
 2. Store the CR with the name of the network configuration prepended (or appended) to the canonicalized CIDR range
 3. Add a new field into the `IPAMConfig` to allow users to decide when whereabouts should use the name or the CIDR range for identifying the configuration
+
+Further, this proposal changes the namespace of the stored `IPPool` to be the same as the multus `NetworkAttachmentDefinition` if it exists, falling back to storing in the `kube-system` namespace.
+Cross-namespace access will be allowed in cases where multus allows cross-namespace access to the `NetworkAttachmentDefinition`
 
 ### Analysis of the proposed schemes
 
@@ -71,7 +75,6 @@ This proposal shows three schemes of implementing using that name to distinguish
 </td>
 <td>
 :red_circle: Not backwards compatible, existing installation would need to carefully migrate the existing `IPPool`s to not get duplicate IPs<br/>
-:red_circle: Unclear semantics when two ranges with the same name but different CIDR-ranges are created<br/>
 </td>
 </tr>
 </table>
@@ -114,45 +117,9 @@ This proposal shows three schemes of implementing using that name to distinguish
 
 ### Changes in Modules
 
-#### whereabouts/pkg/types/types.go
+#### Schemes 2 and 3
 
-```diff
-
- type IPAMConfig struct {
-      Name                string
-      Type                string               `json:"type"`
-      Routes              []*cnitypes.Route    `json:"routes"`
-      Datastore           string               `json:"datastore"`
-      Addresses           []Address            `json:"addresses,omitempty"`
-      OmitRanges          []string             `json:"exclude,omitempty"`
-      DNS                 cnitypes.DNS         `json:"dns"`
-      Range               string               `json:"range"`
-      RangeStart          net.IP               `json:"range_start,omitempty"`
-      RangeEnd            net.IP               `json:"range_end,omitempty"`
-      GatewayStr          string               `json:"gateway"`
-      EtcdHost            string               `json:"etcd_host,omitempty"`
-      EtcdUsername        string               `json:"etcd_username,omitempty"`
-      EtcdPassword        string               `json:"etcd_password,omitempty"`
-      EtcdKeyFile         string               `json:"etcd_key_file,omitempty"`
-      EtcdCertFile        string               `json:"etcd_cert_file,omitempty"`
-      EtcdCACertFile      string               `json:"etcd_ca_cert_file,omitempty"`
-      LeaderLeaseDuration int                  `json:"leader_lease_duration,omitempty"`
-      LeaderRenewDeadline int                  `json:"leader_renew_deadline,omitempty"`
-      LeaderRetryPeriod   int                  `json:"leader_retry_period,omitempty"`
-      LogFile             string               `json:"log_file"`
-      LogLevel            string               `json:"log_level"`
-      OverlappingRanges   bool                 `json:"enable_overlapping_ranges,omitempty"`
-      SleepForRace        int                  `json:"sleep_for_race,omitempty"`
-      Gateway             net.IP
-      Kubernetes          KubernetesConfig     `json:"kubernetes,omitempty"`
-      ConfigurationPath   string               `json:"configuration_path"`
-      PodName             string
-      PodNamespace        string
-      ThisIsANamedRange   bool               `json:"named_range,omitempty"`
- }
-```
-
-#### whereabouts/pkg/storage/kubernetes/ipam.go
+##### whereabouts/pkg/storage/kubernetes/ipam.go
 
 ```diff
 -func NormalizeRange(ipRange string) string {
@@ -172,7 +139,58 @@ This proposal shows three schemes of implementing using that name to distinguish
 ```
 
 This will ensure that every time whereabouts looks up the current assignments on a range, it queries not for `192.168.2.225-28` but for `whereaboutsexample-192.168.2.225-28`.
-Should the network name be left empty, the lookup is for the unchanged name `192.168.2.225-28`.
+Should the network be configured to use the "old" names (scheme 3), the lookup is for the unchanged name `192.168.2.225-28`.
+
+#### Scheme 1
+
+##### whereabouts/pkg/storage/kubernetes/ipam.go
+
+```diff
+-func (i *KubernetesIPAM) GetIPPool(ctx context.Context, ipRange string) (storage.IPPool, error) {
++func (i *KubernetesIPAM) GetIPPool(ctx context.Context, ipRange string, networkName string, namespace string) (storage.IPPool, error) {
+-    normalized := NormalizeRange(ipRange)
+-
+-    pool, err := i.getPool(ctx, normalized, ipRange)
++    // The ipRange is passed in so that the CR can be created if needed
++    pool, err := i.getPool(ctx, networkName, namespace, ipRange)
+     if err != nil {
+         return nil, err
+     }
+
+     firstIP, _, err := pool.ParseCIDR()
+     if err != nil {
+         return nil, err
+     }
+
+     return &KubernetesIPPool{i.client, i.containerID, firstIP, pool}, nil
+ }
+
+-func (i *KubernetesIPAM) getPool(ctx context.Context, name string, iprange string) (*whereaboutsv1alpha1.IPPool, error) {
++func (i *KubernetesIPAM) getPool(ctx context.Context, name string, namespace string, iprange string) (*whereaboutsv1alpha1.IPPool, error) {
+     pool := &whereaboutsv1alpha1.IPPool{
+         ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: i.namespace},
+     }
+-    if err := i.client.Get(ctx, types.NamespacedName{Name: name, Namespace: i.namespace}, pool); errors.IsNotFound(err) {
++    if err := i.client.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, pool); errors.IsNotFound(err) {
+         // pool does not exist, create it
+         pool.ObjectMeta.Name = name
+         pool.Spec.Range = iprange
+         pool.Spec.Allocations = make(map[string]whereaboutsv1alpha1.IPAllocation)
+         if err := i.client.Create(ctx, pool); errors.IsAlreadyExists(err) {
+             // the pool was just created -- allow retry
+             return nil, &temporaryError{err}
+         } else if err != nil {
+             return nil, fmt.Errorf("k8s create error: %s", err)
+         }
+         // if the pool was created for the first time, trigger another retry of the allocation loop
+         // so all of the metadata / resourceVersions are populated as necessary by the `client.Get` call
+         return nil, &temporaryError{fmt.Errorf("k8s pool initialized")}
+     } else if err != nil {
+         return nil, fmt.Errorf("k8s get error: %s", err)
+     }
+     return pool, nil
+ }
+```
 
 ### Summary
 
@@ -185,3 +203,16 @@ This proposal (and the prototypical implementation in https://github.com/k8snetw
 See
 - https://github.com/k8snetworkplumbingwg/whereabouts/pull/256
 - https://github.com/k8snetworkplumbingwg/whereabouts/issues/50#issuecomment-874040513
+
+#### Guide for decision
+
+It is the authors (@toelke) opinion that scheme 3 is the easiest to implement and deploy.
+It needs no re-configuration from current users of whereabouts.
+It is, however, a kludge designed to allow exactly this backwards compatibility.
+For that reason it will probably cause problems in the future.
+
+Implementing schemes 1 or 2 where either the name of the `NetworkAttachmentDefinition` or both the name and CIDR-Range are used for identifying `IPPool` is the greater development effort but gives a clearer desgned outcome.
+It could be possible to feature gate this for existing users of whereabouts.
+
+Pending the communities decision we would like to go forward with implementing scheme 2.
+We will need guidance on how to address the missing backwards compatibility: "Just" documentation or some feature gating.
