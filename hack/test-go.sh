@@ -8,9 +8,13 @@ GO=${GO:-go}
 echo "Running go vet ..."
 ${GO} vet --tags=test ./cmd/... ./pkg/...
 
+BASEDIR=$(pwd)
+
+echo "Installing golang staticcheck ..."
+GOBIN=${BASEDIR}/bin go install honnef.co/go/tools/cmd/staticcheck@latest
 
 echo "Running golang staticcheck ..."
-staticcheck --tags=test ./...
+${BASEDIR}/bin/staticcheck --tags=test ./...
 
 echo "Running go tests..."
 KUBEBUILDER_ASSETS="$(pwd)/bin" ${GO} test \
