@@ -114,6 +114,23 @@ var _ = Describe("Pod Wrapper operations", func() {
 			Expect(podSecondaryIPs).To(Equal(map[string]void{"192.168.14.14": {}, "10.10.10.10": {}}))
 		})
 
+		It("should filter out non-multus annotations", func() {
+			secondaryIfacesNetworkStatuses := generateMultusNetworkStatusList("192.168.14.14", "10.10.10.10")
+
+			networkStatus := append(
+				secondaryIfacesNetworkStatuses,
+				generateMultusNetworkStatus("eth0", "network33", "14.15.16.20"))
+			pod := v1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: generateMultusNetworkStatusAnnotationFromNetworkStatus(networkStatus...),
+				},
+			}
+
+			podSecondaryIPs := wrapPod(pod).ips
+			Expect(podSecondaryIPs).To(HaveLen(2))
+			Expect(podSecondaryIPs).To(Equal(map[string]void{"192.168.14.14": {}, "10.10.10.10": {}}))
+		})
+
 		It("return an empty list when the network annotations of a pod are invalid", func() {
 			pod := v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
