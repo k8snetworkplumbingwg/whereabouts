@@ -15,8 +15,8 @@ done
 
 HERE="$(dirname "$(readlink --canonicalize ${BASH_SOURCE[0]})")"
 ROOT="$(readlink --canonicalize "$HERE/..")"
-MULTUS_DAEMONSET_URL="https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/master/deployments/multus-daemonset.yml"
-CNIS_DAEMONSET_URL="https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/master/e2e/cni-install.yml"
+MULTUS_DAEMONSET_URL="https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/v3.9.1/deployments/multus-daemonset.yml"
+CNIS_DAEMONSET_URL="https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/v3.9.1/e2e/cni-install.yml"
 TIMEOUT_K8="5000s"
 RETRY_MAX=10
 INTERVAL=10
