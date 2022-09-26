@@ -1,6 +1,7 @@
 #!/bin/bash
 OCI_BIN=${OCI_BIN:-docker}
 
+VERSION=1.22.1
 BASEDIR=$(pwd)
 OSTYPE=$(uname -s | tr '[:upper:]' '[:lower:]')
 
@@ -9,7 +10,7 @@ GOBIN=${BASEDIR}/bin go install sigs.k8s.io/controller-tools/cmd/controller-gen@
 
 # install kubebuilder tools to bin/
 mkdir -p bin
-containerID=$("$OCI_BIN" create gcr.io/kubebuilder/thirdparty-${OSTYPE}:1.16.4)
+containerID=$("$OCI_BIN" create gcr.io/kubebuilder/thirdparty-${OSTYPE}-amd64:${VERSION})
 "$OCI_BIN" cp ${containerID}:/kubebuilder_${OSTYPE}_amd64.tar.gz ./kubebuilder_${OSTYPE}_amd64.tar.gz
 "$OCI_BIN" rm ${containerID}
 tar -xzvf kubebuilder_${OSTYPE}_amd64.tar.gz
