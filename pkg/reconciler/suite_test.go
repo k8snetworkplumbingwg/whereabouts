@@ -3,7 +3,6 @@ package reconciler
 import (
 	"fmt"
 	"io/fs"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -54,7 +53,7 @@ var _ = BeforeSuite(func(done Done) {
 	apiURL := testEnv.ControlPlane.APIServer.SecureServing.URL("https", "/").String()
 	Expect(apiURL).ToNot(BeNil())
 
-	tmpdir, err = ioutil.TempDir("/tmp", "whereabouts")
+	tmpdir, err = os.MkdirTemp("/tmp", "whereabouts")
 	Expect(err).ToNot(HaveOccurred())
 	kubeConfigPath = fmt.Sprintf("%s/whereabouts.kubeconfig", tmpdir)
 	Expect(copyEnvKubeconfigFile(testEnv.ControlPlane.APIServer.CertDir, kubeConfigPath)).To(Succeed())
@@ -81,11 +80,11 @@ var _ = AfterSuite(func() {
 })
 
 func copyEnvKubeconfigFile(envCertDir string, destFilePath string) error {
-	files, err := ioutil.ReadDir(envCertDir)
+	entries, err := os.ReadDir(envCertDir)
 	if err != nil {
 		return fmt.Errorf("failed to read the certificate dir: %w", err)
 	}
-
+	files := make([]fs.FileInfo, 0, len(entries))
 	for _, file := range files {
 		if isKubeconfigFile(file) {
 			return copyFile(path.Join(envCertDir, file.Name()), destFilePath, file.Mode())
@@ -100,12 +99,12 @@ func isKubeconfigFile(file fs.FileInfo) bool {
 }
 
 func copyFile(src string, dst string, mode fs.FileMode) error {
-	fileContents, err := ioutil.ReadFile(src)
+	fileContents, err := os.ReadFile(src)
 	if err != nil {
 		return fmt.Errorf("failed to read src file %s: %w", src, err)
 	}
 
-	if err := ioutil.WriteFile(dst, fileContents, mode); err != nil {
+	if err := os.WriteFile(dst, fileContents, mode); err != nil {
 		return fmt.Errorf("error writing dst file %s: %w", dst, err)
 	}
 	return nil

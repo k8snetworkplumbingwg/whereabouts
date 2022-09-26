@@ -2,8 +2,8 @@ package config
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net"
+	"os"
 	"testing"
 
 	. "github.com/onsi/ginkgo"
@@ -61,7 +61,7 @@ var _ = Describe("Allocation operations", func() {
       "gateway": "192.168.5.5"
     }`
 
-		err := ioutil.WriteFile("/tmp/whereabouts.conf", []byte(globalconf), 0755)
+		err := os.WriteFile("/tmp/whereabouts.conf", []byte(globalconf), 0755)
 		Expect(err).NotTo(HaveOccurred())
 
 		conf := `{
