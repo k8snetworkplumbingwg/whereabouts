@@ -282,4 +282,39 @@ var _ = Describe("Allocation operations", func() {
 		Expect(ipamConfig.RangeEnd).To(Equal(net.ParseIP("192.168.1.209")))
 		Expect(ipamConfig.ReconcilerCronExpression).To(Equal("30 4 * * *"))
 	})
+
+	It("errors when an invalid range specified", func() {
+		invalidConf := `{
+			"cniVersion": "0.3.1",
+            "name": "mynet",
+			"type": "ipvlan",
+			"master": "foo0",
+			"ipam": {
+				"type": "whereabouts",
+				"log_file" : "/tmp/whereabouts.log",
+				"log_level" : "debug",
+				"range": "192.168.1.5-192.168.2.25/28",
+				"gateway": "192.168.10.1"
+			}
+		}`
+		_, _, err := LoadIPAMConfig([]byte(invalidConf), "")
+		Expect(err).To(MatchError("invalid range start for CIDR 192.168.2.16/28: 192.168.1.5"))
+	})
+
+	It("errors when an invalid IPAM struct is specified", func() {
+		invalidConf := `{
+			"cniVersion": "0.3.1",
+            "name": "mynet",
+			"type": "ipvlan",
+			"master": "foo0",
+			"ipam": {
+				asdf
+			}
+		}`
+		_, _, err := LoadIPAMConfig([]byte(invalidConf), "")
+		Expect(err).To(
+			MatchError(
+				HavePrefix(
+					"LoadIPAMConfig - JSON Parsing Error: invalid character 'a' looking for beginning of object key string")))
+	})
 })
