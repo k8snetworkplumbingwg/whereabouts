@@ -6,14 +6,14 @@ import (
 	"net"
 	"time"
 
+	v1 "k8s.io/api/core/v1"
+
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/allocate"
 	whereaboutsv1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage/kubernetes"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
-
-	v1 "k8s.io/api/core/v1"
 )
 
 type ReconcileLooper struct {
@@ -35,7 +35,7 @@ func NewReconcileLooperWithKubeconfig(ctx context.Context, kubeconfigPath string
 	if err != nil {
 		return nil, logging.Errorf("failed to instantiate the Kubernetes client: %+v", err)
 	}
-	return newReconcileLooper(ctx, k8sClient, timeout)
+	return NewReconcileLooperWithClient(ctx, k8sClient, timeout)
 }
 
 func NewReconcileLooper(ctx context.Context, timeout int) (*ReconcileLooper, error) {
@@ -44,10 +44,10 @@ func NewReconcileLooper(ctx context.Context, timeout int) (*ReconcileLooper, err
 	if err != nil {
 		return nil, logging.Errorf("failed to instantiate the Kubernetes client: %+v", err)
 	}
-	return newReconcileLooper(ctx, k8sClient, timeout)
+	return NewReconcileLooperWithClient(ctx, k8sClient, timeout)
 }
 
-func newReconcileLooper(ctx context.Context, k8sClient *kubernetes.Client, timeout int) (*ReconcileLooper, error) {
+func NewReconcileLooperWithClient(ctx context.Context, k8sClient *kubernetes.Client, timeout int) (*ReconcileLooper, error) {
 	ipPools, err := k8sClient.ListIPPools(ctx)
 	if err != nil {
 		return nil, logging.Errorf("failed to retrieve all IP pools: %v", err)

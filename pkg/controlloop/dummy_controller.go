@@ -5,6 +5,7 @@ package controlloop
 
 import (
 	"context"
+	kubeClient "github.com/k8snetworkplumbingwg/whereabouts/pkg/storage/kubernetes"
 	"net"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -43,16 +44,18 @@ func newDummyPodController(
 	podInformerFactory := v1coreinformerfactory.NewSharedInformerFactory(k8sClient, noResyncPeriod)
 
 	podController := newPodController(
+		k8sClient,
+		wbClient,
 		podInformerFactory,
 		wbInformerFactory,
 		netAttachDefInformerFactory,
 		nil,
 		recorder,
-		func(_ context.Context, _ int, _ types.IPAMConfig, _ string, podRef string) (net.IPNet, error) {
+		func(_ context.Context, _ int, ipamConfig types.IPAMConfig, client *kubeClient.KubernetesIPAM) (net.IPNet, error) {
 			ipPools := castToIPPool(wbInformerFactory.Whereabouts().V1alpha1().IPPools().Informer().GetStore().List())
 			for _, pool := range ipPools {
 				for index, allocation := range pool.Spec.Allocations {
-					if allocation.PodRef == podRef {
+					if allocation.PodRef == ipamConfig.GetPodRef() {
 						delete(pool.Spec.Allocations, index)
 						_, err := wbClient.WhereaboutsV1alpha1().IPPools(ipPoolsNamespace()).Update(context.TODO(), &pool, metav1.UpdateOptions{})
 						if err != nil {
