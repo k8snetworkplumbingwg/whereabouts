@@ -28,6 +28,10 @@ import (
 	"gomodules.xyz/jsonpatch/v2"
 )
 
+const (
+	ErrKMsg8sPoolInit = "k8s pool initialized"
+)
+
 // NewKubernetesIPAM returns a new KubernetesIPAM Client configured to a kubernetes CRD backend
 func NewKubernetesIPAM(containerID string, ipamConf whereaboutstypes.IPAMConfig) (*KubernetesIPAM, error) {
 	var namespace string
@@ -144,7 +148,7 @@ func (i *KubernetesIPAM) getPool(ctx context.Context, name string, iprange strin
 		}
 		// if the pool was created for the first time, trigger another retry of the allocation loop
 		// so all of the metadata / resourceVersions are populated as necessary by the `client.Get` call
-		return nil, &temporaryError{fmt.Errorf("k8s pool initialized")}
+		return nil, &temporaryError{fmt.Errorf(ErrKMsg8sPoolInit)}
 	} else if err != nil {
 		return nil, fmt.Errorf("k8s get error: %s", err)
 	}

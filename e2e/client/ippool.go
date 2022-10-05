@@ -5,8 +5,6 @@ package client
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"time"
 
 	kubeClient "github.com/k8snetworkplumbingwg/whereabouts/pkg/storage/kubernetes"
@@ -16,8 +14,7 @@ import (
 func isIPPoolAllocationsEmpty(k8sIPAM *kubeClient.KubernetesIPAM, ipPoolName string) wait.ConditionFunc {
 	return func() (bool, error) {
 		ipPool, err := k8sIPAM.GetIPPool(context.Background(), ipPoolName)
-		noPoolError := fmt.Errorf("k8s pool initialized")
-		if errors.As(err, &noPoolError) {
+		if err.Error() == kubeClient.ErrKMsg8sPoolInit {
 			return true, nil
 		} else if err != nil {
 			return false, err
