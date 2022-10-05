@@ -14,7 +14,7 @@ import (
 func isIPPoolAllocationsEmpty(k8sIPAM *kubeClient.KubernetesIPAM, ipPoolName string) wait.ConditionFunc {
 	return func() (bool, error) {
 		ipPool, err := k8sIPAM.GetIPPool(context.Background(), ipPoolName)
-		if err.Error() == kubeClient.ErrKMsg8sPoolInit {
+		if err.Error() == kubeClient.ErrMsgK8sPoolInit {
 			return true, nil
 		} else if err != nil {
 			return false, err
