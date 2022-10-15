@@ -117,14 +117,10 @@ func LoadIPAMConfig(bytes []byte, envArgs string, extraConfigPaths ...string) (*
 		}
 	}
 
-	// Set the final value of old range paramaters too for consistency
-
-	if n.IPAM.Range != "" {
-		idx := len(n.IPAM.IPRanges) - 1
-		n.IPAM.Range = n.IPAM.IPRanges[idx].Range
-		n.IPAM.RangeStart = n.IPAM.IPRanges[idx].RangeStart
-		n.IPAM.RangeEnd = n.IPAM.IPRanges[idx].RangeEnd
-	}
+	n.IPAM.OmitRanges = nil
+	n.IPAM.Range = ""
+	n.IPAM.RangeStart = nil
+	n.IPAM.RangeEnd = nil
 
 	if n.IPAM.Kubernetes.KubeConfigPath == "" {
 		return nil, "", storageError()

@@ -47,7 +47,7 @@ const (
 	addressGarbageCollectionFailed = "IPAddressGarbageCollectionFailed"
 )
 
-type garbageCollector func(ctx context.Context, mode int, ipamConf types.IPAMConfig, client *wbclient.KubernetesIPAM) (net.IPNet, error)
+type garbageCollector func(ctx context.Context, mode int, ipamConf types.IPAMConfig, client *wbclient.KubernetesIPAM) ([]net.IPNet, error)
 
 type PodController struct {
 	k8sClient               kubernetes.Interface
@@ -181,31 +181,40 @@ func (pc *PodController) garbageCollectPodIPs(pod *v1.Pod) error {
 			return fmt.Errorf("failed to create an IPAM configuration for the pod %s iface %s: %+v", podID(podNamespace, podName), ifaceStatus.Name, err)
 		}
 
-		pool, err := pc.ipPool(ipamConfig.Range)
-		if err != nil {
-			return fmt.Errorf("failed to get the IPPool data: %+v", err)
+		var pools []*whereaboutsv1alpha1.IPPool
+		for _, rangeConfig := range ipamConfig.IPRanges {
+			pool, err := pc.ipPool(rangeConfig.Range)
+
+			if err != nil {
+				return fmt.Errorf("failed to get the IPPool data: %+v", err)
+			}
+
+			logging.Verbosef("pool range [%s]", pool.Spec.Range)
+
+			pools = append(pools, pool)
 		}
 
-		logging.Verbosef("pool range [%s]", pool.Spec.Range)
-		for allocationIndex, allocation := range pool.Spec.Allocations {
-			if allocation.PodRef == podID(podNamespace, podName) {
-				logging.Verbosef("stale allocation to cleanup: %+v", allocation)
+		for _, pool := range pools {
+			for allocationIndex, allocation := range pool.Spec.Allocations {
+				if allocation.PodRef == podID(podNamespace, podName) {
+					logging.Verbosef("stale allocation to cleanup: %+v", allocation)
 
-				client := *wbclient.NewKubernetesClient(nil, pc.k8sClient, 0)
-				wbClient := &wbclient.KubernetesIPAM{
-					Client: client,
-					Config: *ipamConfig,
-				}
+					client := *wbclient.NewKubernetesClient(nil, pc.k8sClient, 0)
+					wbClient := &wbclient.KubernetesIPAM{
+						Client: client,
+						Config: *ipamConfig,
+					}
 
-				if err != nil {
-					logging.Debugf("error while generating the IPAM client: %v", err)
-					continue
-				}
-				if _, err := pc.cleanupFunc(context.TODO(), types.Deallocate, *ipamConfig, wbClient); err != nil {
-					logging.Errorf("failed to cleanup allocation: %v", err)
-				}
-				if err := pc.addressGarbageCollected(pod, nad.GetName(), pool.Spec.Range, allocationIndex); err != nil {
-					logging.Errorf("failed to issue event for successful IP address cleanup: %v", err)
+					if err != nil {
+						logging.Debugf("error while generating the IPAM client: %v", err)
+						continue
+					}
+					if _, err := pc.cleanupFunc(context.TODO(), types.Deallocate, *ipamConfig, wbClient); err != nil {
+						logging.Errorf("failed to cleanup allocation: %v", err)
+					}
+					if err := pc.addressGarbageCollected(pod, nad.GetName(), pool.Spec.Range, allocationIndex); err != nil {
+						logging.Errorf("failed to issue event for successful IP address cleanup: %v", err)
+					}
 				}
 			}
 		}
