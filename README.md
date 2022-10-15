@@ -129,6 +129,71 @@ The same applies for the usage of IPv6:
 }
 ```
 
+### Example IPAM config for assigning multiple IP addresses
+
+`ipRanges` field can be used to provide a list of range configurations for assigning multiple IP addresses.
+
+```
+{
+      "cniVersion": "0.3.0",
+      "name": "whereaboutsexample",
+      "type": "macvlan",
+      "master": "eth0",
+      "mode": "bridge",
+      "ipam": {
+        "type": "whereabouts",
+        "ipRanges": [{
+            "range": "192.168.10.1/24"
+          }, {
+            "range": "176.168.10.1/16"
+        }]
+      }
+}
+```
+
+The above can also be used in combination with basic `range` field as below:
+
+```
+{
+      "cniVersion": "0.3.0",
+      "name": "whereaboutsexample",
+      "type": "macvlan",
+      "master": "eth0",
+      "mode": "bridge",
+      "ipam": {
+        "type": "whereabouts",
+        "ipRanges": [{
+            "range": "192.168.10.1/24"
+          }, {
+            "range": "176.168.10.1/16"
+        }],
+        "range": "abcd::1/64"
+      }
+}
+```
+
+### Example DualStack config
+
+Similar to above, `ipRanges` can be used for configuring DualStack
+
+```
+{
+      "cniVersion": "0.3.0",
+      "name": "whereaboutsexample",
+      "type": "macvlan",
+      "master": "eth0",
+      "mode": "bridge",
+      "ipam": {
+        "type": "whereabouts",
+        "ipRanges": [{
+            "range": "192.168.10.1/24"
+          }, {
+            "range": "abcd::1/64"
+        }]
+      }
+}
+```
+
 ## Core Parameters
 
 **Required**
