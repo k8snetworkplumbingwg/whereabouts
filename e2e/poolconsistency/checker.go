@@ -22,7 +22,8 @@ func NewPoolConsistencyCheck(ipPool storage.IPPool, podList []corev1.Pod) *Check
 func (pc *Checker) MissingIPs() []string {
 	var mismatchedIPs []string
 	for _, pod := range pc.podList {
-		podIP, err := retrievers.SecondaryIfaceIPValue(&pod)
+		podIPs, err := retrievers.SecondaryIfaceIPValue(&pod)
+		podIP := podIPs[len(podIPs)-1]
 		if err != nil {
 			return []string{}
 		}
@@ -50,7 +51,8 @@ func (pc *Checker) StaleIPs() []string {
 		reservedIP := allocation.IP.String()
 		found := false
 		for _, pod := range pc.podList {
-			podIP, err := retrievers.SecondaryIfaceIPValue(&pod)
+			podIPs, err := retrievers.SecondaryIfaceIPValue(&pod)
+			podIP := podIPs[len(podIPs)-1]
 			if err != nil {
 				continue
 			}

@@ -73,7 +73,7 @@ var _ = Describe("Whereabouts functionality", func() {
 			clientInfo, err = wbtestclient.NewClientInfo(config)
 			Expect(err).NotTo(HaveOccurred())
 
-			netAttachDef = macvlanNetworkWithWhereaboutsIPAMNetwork(testNetworkName, testNamespace, ipv4TestRange)
+			netAttachDef = macvlanNetworkWithWhereaboutsIPAMNetwork(testNetworkName, testNamespace, ipv4TestRange, []string{})
 
 			By("creating a NetworkAttachmentDefinition for whereabouts")
 			_, err = clientInfo.AddNetAttachDef(netAttachDef)
@@ -106,9 +106,108 @@ var _ = Describe("Whereabouts functionality", func() {
 
 			It("allocates a single pod within the correct IP range", func() {
 				By("checking pod IP is within whereabouts IPAM range")
-				secondaryIfaceIP, err := retrievers.SecondaryIfaceIPValue(pod)
+				secondaryIfaceIPs, err := retrievers.SecondaryIfaceIPValue(pod)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(inRange(ipv4TestRange, secondaryIfaceIP)).To(Succeed())
+				Expect(secondaryIfaceIPs).NotTo(BeEmpty())
+				Expect(inRange(ipv4TestRange, secondaryIfaceIPs[0])).To(Succeed())
+			})
+		})
+
+		Context("DualStack", func() {
+			const (
+				testDualStackNetworkName = "wa-dualstack-nad"
+				dualStackIPv4Range       = "11.11.0.0/16"
+				dualStackIPv6Range       = "abcd::0/64"
+			)
+
+			var (
+				netAttachDefDualStack *nettypes.NetworkAttachmentDefinition
+				testIPRangesDualStack = []string{dualStackIPv4Range, dualStackIPv6Range}
+			)
+
+			Context("IPRanges configuration only", func() {
+				BeforeEach(func() {
+					const dualstackPodName = "whereabouts-dualstack-test"
+					var err error
+
+					netAttachDefDualStack = macvlanNetworkWithWhereaboutsIPAMNetwork(
+						testDualStackNetworkName,
+						testNamespace,
+						"",
+						testIPRangesDualStack)
+
+					By("creating DualStack NetworkAttachmentDefinition for whereabouts")
+					_, err = clientInfo.AddNetAttachDef(netAttachDefDualStack)
+					Expect(err).NotTo(HaveOccurred())
+
+					By("creating a pod with whereabouts net-attach-def")
+					pod, err = clientInfo.ProvisionPod(
+						dualstackPodName,
+						testNamespace,
+						podTierLabel(dualstackPodName),
+						entities.PodNetworkSelectionElements(testDualStackNetworkName),
+					)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				AfterEach(func() {
+					By("deleting pod with whereabouts net-attach-def")
+					Expect(clientInfo.DeletePod(pod)).To(Succeed())
+					By("deleting DualStack NetworkAttachmentDefinition for whereabouts")
+					Expect(clientInfo.DelNetAttachDef(netAttachDefDualStack)).To(Succeed())
+				})
+
+				It("allocates a single pod within the correct IP ranges", func() {
+					By("checking pod IP is within whereabouts IPAM ranges")
+					secondaryIfaceIPs, err := retrievers.SecondaryIfaceIPValue(pod)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(secondaryIfaceIPs).To(HaveLen(2))
+					Expect(inRange(dualStackIPv4Range, secondaryIfaceIPs[0])).To(Succeed())
+					Expect(inRange(dualStackIPv6Range, secondaryIfaceIPs[1])).To(Succeed())
+				})
+			})
+
+			Context("IPRanges along with old range", func() {
+				BeforeEach(func() {
+					const dualstackPodName = "whereabouts-dualstack-test"
+					var err error
+
+					netAttachDefDualStack = macvlanNetworkWithWhereaboutsIPAMNetwork(
+						testDualStackNetworkName,
+						testNamespace,
+						ipv4TestRange,
+						testIPRangesDualStack)
+
+					By("creating DualStack NetworkAttachmentDefinition for whereabouts")
+					_, err = clientInfo.AddNetAttachDef(netAttachDefDualStack)
+					Expect(err).NotTo(HaveOccurred())
+
+					By("creating a pod with whereabouts net-attach-def")
+					pod, err = clientInfo.ProvisionPod(
+						dualstackPodName,
+						testNamespace,
+						podTierLabel(dualstackPodName),
+						entities.PodNetworkSelectionElements(testDualStackNetworkName),
+					)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				AfterEach(func() {
+					By("deleting pod with whereabouts net-attach-def")
+					Expect(clientInfo.DeletePod(pod)).To(Succeed())
+					By("deleting DualStack NetworkAttachmentDefinition for whereabouts")
+					Expect(clientInfo.DelNetAttachDef(netAttachDefDualStack)).To(Succeed())
+				})
+
+				It("allocates a single pod within the correct IP ranges", func() {
+					By("checking pod IP is within whereabouts IPAM ranges")
+					secondaryIfaceIPs, err := retrievers.SecondaryIfaceIPValue(pod)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(secondaryIfaceIPs).To(HaveLen(3))
+					Expect(inRange(ipv4TestRange, secondaryIfaceIPs[0])).To(Succeed())
+					Expect(inRange(dualStackIPv4Range, secondaryIfaceIPs[1])).To(Succeed())
+					Expect(inRange(dualStackIPv6Range, secondaryIfaceIPs[2])).To(Succeed())
+				})
 			})
 		})
 
@@ -297,7 +396,7 @@ var _ = Describe("Whereabouts functionality", func() {
 				BeforeEach(func() {
 					var err error
 					tinyNetwork, err = clientInfo.AddNetAttachDef(
-						macvlanNetworkWithWhereaboutsIPAMNetwork(networkName, namespace, rangeWithTwoIPs))
+						macvlanNetworkWithWhereaboutsIPAMNetwork(networkName, namespace, rangeWithTwoIPs, []string{}))
 					Expect(err).NotTo(HaveOccurred())
 
 					_, err = clientInfo.ProvisionStatefulSet(statefulSetName, namespace, serviceName, replicaNumber, networkName)
@@ -460,7 +559,7 @@ func generateNetAttachDefSpec(name, namespace, config string) *nettypes.NetworkA
 	}
 }
 
-func macvlanNetworkWithWhereaboutsIPAMNetwork(networkName string, namespaceName string, ipRange string) *nettypes.NetworkAttachmentDefinition {
+func macvlanNetworkWithWhereaboutsIPAMNetwork(networkName string, namespaceName string, ipRange string, ipRanges []string) *nettypes.NetworkAttachmentDefinition {
 	macvlanConfig := fmt.Sprintf(`{
         "cniVersion": "0.3.0",
         "disableCheck": true,
@@ -475,12 +574,13 @@ func macvlanNetworkWithWhereaboutsIPAMNetwork(networkName string, namespaceName 
                     "leader_renew_deadline": 1000,
                     "leader_retry_period": 500,
                     "range": "%s",
+                    "ipRanges": %s,
                     "log_level": "debug",
                     "log_file": "/tmp/wb"
                 }
             }
         ]
-    }`, ipRange)
+    }`, ipRange, createIPRanges(ipRanges))
 	return generateNetAttachDefSpec(networkName, namespaceName, macvlanConfig)
 }
 
@@ -495,4 +595,14 @@ func inRange(cidr string, ip string) error {
 	}
 
 	return fmt.Errorf("ip [%s] is NOT in range %s", ip, cidr)
+}
+
+func createIPRanges(ranges []string) string {
+	formattedRanges := []string{}
+	for _, ipRange := range ranges {
+		singleRange := fmt.Sprintf(`{"range": "%s"}`, ipRange)
+		formattedRanges = append(formattedRanges, singleRange)
+	}
+	ipRanges := "[" + strings.Join(formattedRanges[:], ",") + "]"
+	return ipRanges
 }
