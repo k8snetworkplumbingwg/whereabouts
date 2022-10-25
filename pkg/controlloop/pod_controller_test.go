@@ -3,7 +3,6 @@ package controlloop
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"testing"
@@ -45,10 +44,10 @@ var _ = Describe("IPControlLoop", func() {
 		const configFilePermissions = 0755
 
 		var err error
-		cniConfigDir, err = ioutil.TempDir("", "multus-config")
+		cniConfigDir, err = os.MkdirTemp("", "multus-config")
 		Expect(err).ToNot(HaveOccurred())
 		Expect(os.MkdirAll(path.Join(cniConfigDir, path.Dir(whereaboutsConfigPath)), configFilePermissions)).To(Succeed())
-		Expect(ioutil.WriteFile(
+		Expect(os.WriteFile(
 			path.Join(cniConfigDir, whereaboutsConfigPath),
 			[]byte(dummyWhereaboutsConfig()), configFilePermissions)).To(Succeed())
 	})

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"io/ioutil"
 	"net"
 	"os"
 	"strings"
@@ -135,7 +134,7 @@ var _ = Describe("Whereabouts operations", func() {
 
 	BeforeEach(func() {
 		var err error
-		tmpDir, err = ioutil.TempDir("/tmp", "whereabouts")
+		tmpDir, err = os.MkdirTemp("/tmp", "whereabouts")
 		Expect(err).ToNot(HaveOccurred())
 		kubeConfigPath = fmt.Sprintf("%s/%s", tmpDir, whereaboutsConfigFile)
 		Expect(os.WriteFile(kubeConfigPath, kubeconfig(), fs.ModePerm)).To(Succeed())
