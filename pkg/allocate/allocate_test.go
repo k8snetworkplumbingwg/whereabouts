@@ -330,6 +330,36 @@ var _ = Describe("Allocation operations", func() {
 		Expect(fmt.Sprint(newip)).To(Equal("100::2:1"))
 	})
 
+	It("can IterateForAssignment on an IPv4 address excluding a range", func() {
+
+		firstip, ipnet, err := net.ParseCIDR("192.168.0.0/29")
+		Expect(err).NotTo(HaveOccurred())
+
+		// figure out the range start.
+		calculatedrangestart := net.ParseIP(firstip.Mask(ipnet.Mask).String())
+
+		var ipres []types.IPReservation
+		exrange := []string{"192.168.0.0/30"}
+		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
+		Expect(fmt.Sprint(newip)).To(Equal("192.168.0.4"))
+
+	})
+
+	It("can IterateForAssignment on an IPv6 address excluding a range", func() {
+
+		firstip, ipnet, err := net.ParseCIDR("100::2:1/125")
+		Expect(err).NotTo(HaveOccurred())
+
+		// figure out the range start.
+		calculatedrangestart := net.ParseIP(firstip.Mask(ipnet.Mask).String())
+
+		var ipres []types.IPReservation
+		exrange := []string{"100::2:1/126"}
+		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
+		Expect(fmt.Sprint(newip)).To(Equal("100::2:4"))
+
+	})
+
 	It("creates an IPv6 range properly for 96 bits network address", func() {
 
 		_, ipnet, err := net.ParseCIDR("2001:db8:abcd:0012::0/96")
