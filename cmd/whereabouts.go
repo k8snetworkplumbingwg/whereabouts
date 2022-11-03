@@ -70,29 +70,31 @@ func cmdAdd(args *skel.CmdArgs, client *kubernetes.KubernetesIPAM, cniVersion st
 	result.Routes = client.Config.Routes
 
 	logging.Debugf("Beginning IPAM for ContainerID: %v", args.ContainerID)
-	var newip net.IPNet
+	var newips []net.IPNet
 
 	ctx, cancel := context.WithTimeout(context.Background(), types.AddTimeLimit)
 	defer cancel()
 
-	newip, err := kubernetes.IPManagement(ctx, types.Allocate, client.Config, client)
+	newips, err := kubernetes.IPManagement(ctx, types.Allocate, client.Config, client)
 	if err != nil {
 		logging.Errorf("Error at storage engine: %s", err)
 		return fmt.Errorf("error at storage engine: %w", err)
 	}
 
-	// Determine if v4 or v6.
 	var useVersion string
-	if allocate.IsIPv4(newip.IP) {
-		useVersion = "4"
-	} else {
-		useVersion = "6"
-	}
+	for _, newip := range newips {
+		// Determine if v4 or v6.
+		if allocate.IsIPv4(newip.IP) {
+			useVersion = "4"
+		} else {
+			useVersion = "6"
+		}
 
-	result.IPs = append(result.IPs, &current.IPConfig{
-		Version: useVersion,
-		Address: newip,
-		Gateway: client.Config.Gateway})
+		result.IPs = append(result.IPs, &current.IPConfig{
+			Version: useVersion,
+			Address: newip,
+			Gateway: client.Config.Gateway})
+	}
 
 	// Assign all the static IP elements.
 	for _, v := range client.Config.Addresses {

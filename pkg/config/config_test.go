@@ -39,9 +39,9 @@ var _ = Describe("Allocation operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ipamconfig.LogLevel).To(Equal("debug"))
 		Expect(ipamconfig.LogFile).To(Equal("/tmp/whereabouts.log"))
-		Expect(ipamconfig.Range).To(Equal("192.168.1.0/24"))
-		Expect(ipamconfig.RangeStart).To(Equal(net.ParseIP("192.168.1.5")))
-		Expect(ipamconfig.RangeEnd).To(Equal(net.ParseIP("192.168.1.25")))
+		Expect(ipamconfig.IPRanges[0].Range).To(Equal("192.168.1.0/24"))
+		Expect(ipamconfig.IPRanges[0].RangeStart).To(Equal(net.ParseIP("192.168.1.5")))
+		Expect(ipamconfig.IPRanges[0].RangeEnd).To(Equal(net.ParseIP("192.168.1.25")))
 		Expect(ipamconfig.Gateway).To(Equal(net.ParseIP("192.168.10.1")))
 		Expect(ipamconfig.LeaderLeaseDuration).To(Equal(1500))
 		Expect(ipamconfig.LeaderRenewDeadline).To(Equal(1000))
@@ -85,8 +85,8 @@ var _ = Describe("Allocation operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ipamconfig.LogLevel).To(Equal("debug"))
 		Expect(ipamconfig.LogFile).To(Equal("/tmp/whereabouts.log"))
-		Expect(ipamconfig.Range).To(Equal("192.168.2.0/24"))
-		Expect(ipamconfig.RangeStart.String()).To(Equal("192.168.2.223"))
+		Expect(ipamconfig.IPRanges[0].Range).To(Equal("192.168.2.0/24"))
+		Expect(ipamconfig.IPRanges[0].RangeStart.String()).To(Equal("192.168.2.223"))
 		// Gateway should remain unchanged from conf due to preference for primary config
 		Expect(ipamconfig.Gateway).To(Equal(net.ParseIP("192.168.10.1")))
 		Expect(ipamconfig.Kubernetes.KubeConfigPath).To(Equal("/etc/cni/net.d/whereabouts.d/whereabouts.kubeconfig"))
@@ -127,9 +127,9 @@ var _ = Describe("Allocation operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ipamconfig.LogLevel).To(Equal("debug"))
 		Expect(ipamconfig.LogFile).To(Equal("/tmp/whereabouts.log"))
-		Expect(ipamconfig.Range).To(Equal("192.168.1.0/24"))
-		Expect(ipamconfig.RangeStart).To(Equal(net.ParseIP("192.168.1.5")))
-		Expect(ipamconfig.RangeEnd).To(Equal(net.ParseIP("192.168.1.25")))
+		Expect(ipamconfig.IPRanges[0].Range).To(Equal("192.168.1.0/24"))
+		Expect(ipamconfig.IPRanges[0].RangeStart).To(Equal(net.ParseIP("192.168.1.5")))
+		Expect(ipamconfig.IPRanges[0].RangeEnd).To(Equal(net.ParseIP("192.168.1.25")))
 		Expect(ipamconfig.Gateway).To(Equal(net.ParseIP("192.168.10.1")))
 		Expect(ipamconfig.LeaderLeaseDuration).To(Equal(1500))
 		Expect(ipamconfig.LeaderRenewDeadline).To(Equal(1000))
@@ -172,9 +172,9 @@ var _ = Describe("Allocation operations", func() {
 
 		ipamConfig, _, err := LoadIPAMConfig([]byte(conf), "")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(ipamConfig.Range).To(Equal("192.168.1.0/24"))
-		Expect(ipamConfig.RangeStart).To(Equal(net.ParseIP("192.168.1.5")))
-		Expect(ipamConfig.RangeEnd).To(Equal(net.ParseIP("192.168.1.25")))
+		Expect(ipamConfig.IPRanges[0].Range).To(Equal("192.168.1.0/24"))
+		Expect(ipamConfig.IPRanges[0].RangeStart).To(Equal(net.ParseIP("192.168.1.5")))
+		Expect(ipamConfig.IPRanges[0].RangeEnd).To(Equal(net.ParseIP("192.168.1.25")))
 	})
 
 	It("allows for leading zeroes in the range", func() {
@@ -197,8 +197,8 @@ var _ = Describe("Allocation operations", func() {
 
 		ipamConfig, _, err := LoadIPAMConfig([]byte(conf), "")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(ipamConfig.Range).To(Equal("192.168.1.0/24"))
-		Expect(ipamConfig.RangeStart).To(Equal(net.ParseIP("192.168.1.0")))
+		Expect(ipamConfig.IPRanges[0].Range).To(Equal("192.168.1.0/24"))
+		Expect(ipamConfig.IPRanges[0].RangeStart).To(Equal(net.ParseIP("192.168.1.0")))
 	})
 
 	It("allows for leading zeroes in the range when the start range is provided", func() {
@@ -222,8 +222,8 @@ var _ = Describe("Allocation operations", func() {
 
 		ipamConfig, _, err := LoadIPAMConfig([]byte(conf), "")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(ipamConfig.Range).To(Equal("192.168.1.0/24"))
-		Expect(ipamConfig.RangeStart).To(Equal(net.ParseIP("192.168.1.44")))
+		Expect(ipamConfig.IPRanges[0].Range).To(Equal("192.168.1.0/24"))
+		Expect(ipamConfig.IPRanges[0].RangeStart).To(Equal(net.ParseIP("192.168.1.44")))
 	})
 
 	It("allows for leading zeroes in the range when the start and end ranges are provided", func() {
@@ -248,9 +248,9 @@ var _ = Describe("Allocation operations", func() {
 
 		ipamConfig, _, err := LoadIPAMConfig([]byte(conf), "")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(ipamConfig.Range).To(Equal("192.168.1.0/24"))
-		Expect(ipamConfig.RangeStart).To(Equal(net.ParseIP("192.168.1.44")))
-		Expect(ipamConfig.RangeEnd).To(Equal(net.ParseIP("192.168.1.209")))
+		Expect(ipamConfig.IPRanges[0].Range).To(Equal("192.168.1.0/24"))
+		Expect(ipamConfig.IPRanges[0].RangeStart).To(Equal(net.ParseIP("192.168.1.44")))
+		Expect(ipamConfig.IPRanges[0].RangeEnd).To(Equal(net.ParseIP("192.168.1.209")))
 	})
 
 	It("can unmarshall the cronjob expression", func() {
@@ -276,10 +276,9 @@ var _ = Describe("Allocation operations", func() {
 
 		ipamConfig, _, err := LoadIPAMConfig([]byte(conf), "")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(ipamConfig.Range).To(Equal("192.168.1.0/24"))
-		Expect(ipamConfig.RangeStart).To(Equal(net.ParseIP("192.168.1.44")))
-		Expect(ipamConfig.RangeEnd).To(Equal(net.ParseIP("192.168.1.209")))
-		Expect(ipamConfig.RangeEnd).To(Equal(net.ParseIP("192.168.1.209")))
+		Expect(ipamConfig.IPRanges[0].Range).To(Equal("192.168.1.0/24"))
+		Expect(ipamConfig.IPRanges[0].RangeStart).To(Equal(net.ParseIP("192.168.1.44")))
+		Expect(ipamConfig.IPRanges[0].RangeEnd).To(Equal(net.ParseIP("192.168.1.209")))
 		Expect(ipamConfig.ReconcilerCronExpression).To(Equal("30 4 * * *"))
 	})
 
