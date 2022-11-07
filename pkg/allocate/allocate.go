@@ -223,13 +223,15 @@ func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, r
 				isAddrExcluded = true
 				firstExcluded, _, _ := net.ParseCIDR(subnet.String())
 				_, lastExcluded, _ := GetIPRange(firstExcluded, *subnet)
-				if i.To4() != nil {
-					// exclude broadcast address
-					i = IPAddOffset(lastExcluded, uint64(1))
-				} else {
-					i = lastExcluded
+				if lastExcluded != nil {
+					if i.To4() != nil {
+						// exclude broadcast address
+						i = IPAddOffset(lastExcluded, uint64(1))
+					} else {
+						i = lastExcluded
+					}
+					logging.Debugf("excluding %v and moving to the next available ip: %v", subnet, i)
 				}
-				logging.Debugf("excluding %v and moving to the next available ip", subnet)
 			}
 		}
 		if isAddrExcluded {
