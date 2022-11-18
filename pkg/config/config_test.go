@@ -94,7 +94,44 @@ var _ = Describe("Allocation operations", func() {
 		Expect(ipamconfig.LeaderLeaseDuration).To(Equal(3000))
 		Expect(ipamconfig.LeaderRenewDeadline).To(Equal(2000))
 		Expect(ipamconfig.LeaderRetryPeriod).To(Equal(1000))
+	})
 
+	It("overlapping range can be set", func() {
+		var globalConf string = `{
+			"datastore": "kubernetes",
+			"kubernetes": {
+				"kubeconfig": "/etc/cni/net.d/whereabouts.d/whereabouts.kubeconfig"
+			},
+			"log_file": "/tmp/whereabouts.log",
+			"log_level": "debug",
+			"gateway": "192.168.5.5",
+			"enable_overlapping_ranges": false
+		}`
+		Expect(ioutil.WriteFile("/tmp/whereabouts.conf", []byte(globalConf), 0755)).To(Succeed())
+
+		ipamconfig, _, err := LoadIPAMConfig([]byte(generateIPAMConfWithOverlappingRanges()), "")
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(ipamconfig.OverlappingRanges).To(BeTrue())
+	})
+
+	It("overlapping range can be disabled", func() {
+		var globalConf string = `{
+			"datastore": "kubernetes",
+			"kubernetes": {
+				"kubeconfig": "/etc/cni/net.d/whereabouts.d/whereabouts.kubeconfig"
+			},
+			"log_file": "/tmp/whereabouts.log",
+			"log_level": "debug",
+			"gateway": "192.168.5.5",
+			"enable_overlapping_ranges": true
+		}`
+		Expect(ioutil.WriteFile("/tmp/whereabouts.conf", []byte(globalConf), 0755)).To(Succeed())
+
+		ipamconfig, _, err := LoadIPAMConfig([]byte(generateIPAMConfWithoutOverlappingRanges()), "")
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(ipamconfig.OverlappingRanges).To(BeFalse())
 	})
 
 	It("can load a config list", func() {
@@ -317,3 +354,33 @@ var _ = Describe("Allocation operations", func() {
 					"LoadIPAMConfig - JSON Parsing Error: invalid character 'a' looking for beginning of object key string")))
 	})
 })
+
+func generateIPAMConfWithOverlappingRanges() string {
+	return `{
+		"cniVersion": "0.3.1",
+		"name": "mynet",
+		"type": "ipvlan",
+		"master": "foo0",
+		"ipam": {
+			"range": "192.168.2.230/24",
+			"configuration_path": "/tmp/whereabouts.conf",
+			"type": "whereabouts",
+			"enable_overlapping_ranges": true
+		}
+	}`
+}
+
+func generateIPAMConfWithoutOverlappingRanges() string {
+	return `{
+		"cniVersion": "0.3.1",
+		"name": "mynet",
+		"type": "ipvlan",
+		"master": "foo0",
+		"ipam": {
+			"range": "192.168.2.230/24",
+			"configuration_path": "/tmp/whereabouts.conf",
+			"type": "whereabouts",
+			"enable_overlapping_ranges": false
+		}
+	}`
+}
