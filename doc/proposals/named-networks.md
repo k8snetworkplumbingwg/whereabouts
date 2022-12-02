@@ -25,7 +25,7 @@ This is, for example, useful in multi-tenant situations where more than one grou
 
 ### Goal of this Proposal
 
-- Allow configuring the same CIDR range multiple times (e.g. in separate multus-`NetworkAttachmentDefinitions`)
+- Allow configuring the same CIDR range multiple times (e.g. in separate multus-`NetworkAttachmentDefinition`s)
 
 <hr>
 
@@ -204,6 +204,20 @@ See
 - https://github.com/k8snetworkplumbingwg/whereabouts/pull/256
 - https://github.com/k8snetworkplumbingwg/whereabouts/issues/50#issuecomment-874040513
 
+#### Migration toolkit
+
+Should the decision be made that scheme 1 or scheme 2 are implemented, we are facing a backwards-compatibility issue: whereabouts would not find existing `IPPool`s as they are stored under the CIDR-derived name.
+We propose to supply a small program (ideally also as OCI image for use in kubernetes `Job`s) that migrates an existing cluster from "legacy whereabouts" to the new, named and namespaced scheme.
+
+This tool would do roughly the following:
+
+0. Caution the user that no new Pods with whereabouts CNI-config should be started for the duration of the run
+1. List all `IPPool`s in the `kube-system` namespace
+2. List all `NetworkAttachmentDefinition`s in all namespaces
+3. Match the `NetworkAttachmentDefinition`s to the `IPPool`s using the CIDR canonicalization rules
+4. Delete the `IPPool`s and re-create it under the namespace of the `NetworkAttachmentDefinition` with the name derived from the CNI config
+5. List any unmatched `IPPool`s and ask the user to rename/migrate them manually
+
 #### Guide for decision
 
 It is the authors (@toelke) opinion that scheme 3 is the easiest to implement and deploy.
@@ -214,5 +228,4 @@ For that reason it will probably cause problems in the future.
 Implementing schemes 1 or 2 where either the name of the `NetworkAttachmentDefinition` or both the name and CIDR-Range are used for identifying `IPPool` is the greater development effort but gives a clearer desgned outcome.
 It could be possible to feature gate this for existing users of whereabouts.
 
-Pending the communities decision we would like to go forward with implementing scheme 2.
-We will need guidance on how to address the missing backwards compatibility: "Just" documentation or some feature gating.
+Pending the communities decision we would like to go forward with implementing scheme 1.
