@@ -211,7 +211,7 @@ We propose to supply a small program (ideally also as OCI image for use in kuber
 
 This tool would do roughly the following:
 
-0. Caution the user that no new Pods with whereabouts CNI-config should be started for the duration of the run
+0. Grab the leader election lock to prevent any whereabouts to run during the operation
 1. List all `IPPool`s in the `kube-system` namespace
 2. List all `NetworkAttachmentDefinition`s in all namespaces
 3. Match the `NetworkAttachmentDefinition`s to the `IPPool`s using the CIDR canonicalization rules
