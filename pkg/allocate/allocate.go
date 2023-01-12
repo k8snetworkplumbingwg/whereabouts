@@ -194,9 +194,9 @@ func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, r
 	}
 	logging.Debugf("IterateForAssignment input >> ip: %v | ipnet: %v | first IP: %v | last IP: %v", rangeStart, ipnet, firstip, lastip)
 
-	reserved := make(map[string]bool)
+	reserved := make(map[string]string)
 	for _, r := range reservelist {
-		reserved[r.IP.String()] = true
+		reserved[r.IP.String()] = r.PodRef
 	}
 
 	// excluded,            "192.168.2.229/30", "192.168.1.229/30",
@@ -212,8 +212,11 @@ func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, r
 	endip := IPAddOffset(lastip, uint64(1))
 	for i := firstip; !i.Equal(endip); i = IPAddOffset(i, uint64(1)) {
 		// if already reserved, skip it
-		if reserved[i.String()] {
-			continue
+		if reserved[i.String()] != "" {
+			if reserved[i.String()] != podRef {
+				continue
+			}
+			logging.Debugf("Found existing reservation %v with matching podRef %s", i.String(), podRef)
 		}
 
 		// Lastly, we need to check if this IP is within the range of excluded subnets
