@@ -222,6 +222,17 @@ func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, r
 		for _, subnet := range excluded {
 			if subnet.Contains(i) {
 				isAddrExcluded = true
+				firstExcluded, _, _ := net.ParseCIDR(subnet.String())
+				_, lastExcluded, _ := GetIPRange(firstExcluded, *subnet)
+				if lastExcluded != nil {
+					if i.To4() != nil {
+						// exclude broadcast address
+						i = IPAddOffset(lastExcluded, uint64(1))
+					} else {
+						i = lastExcluded
+					}
+					logging.Debugf("excluding %v and moving to the next available ip: %v", subnet, i)
+				}
 			}
 		}
 		if isAddrExcluded {
