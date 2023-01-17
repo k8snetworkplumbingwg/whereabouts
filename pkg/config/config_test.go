@@ -2,8 +2,8 @@ package config
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net"
+	"os"
 	"testing"
 
 	. "github.com/onsi/ginkgo"
@@ -61,7 +61,7 @@ var _ = Describe("Allocation operations", func() {
       "gateway": "192.168.5.5"
     }`
 
-		err := ioutil.WriteFile("/tmp/whereabouts.conf", []byte(globalconf), 0755)
+		err := os.WriteFile("/tmp/whereabouts.conf", []byte(globalconf), 0755)
 		Expect(err).NotTo(HaveOccurred())
 
 		conf := `{
@@ -107,7 +107,7 @@ var _ = Describe("Allocation operations", func() {
 			"gateway": "192.168.5.5",
 			"enable_overlapping_ranges": false
 		}`
-		Expect(ioutil.WriteFile("/tmp/whereabouts.conf", []byte(globalConf), 0755)).To(Succeed())
+		Expect(os.WriteFile("/tmp/whereabouts.conf", []byte(globalConf), 0755)).To(Succeed())
 
 		ipamconfig, _, err := LoadIPAMConfig([]byte(generateIPAMConfWithOverlappingRanges()), "")
 		Expect(err).NotTo(HaveOccurred())
@@ -126,7 +126,7 @@ var _ = Describe("Allocation operations", func() {
 			"gateway": "192.168.5.5",
 			"enable_overlapping_ranges": true
 		}`
-		Expect(ioutil.WriteFile("/tmp/whereabouts.conf", []byte(globalConf), 0755)).To(Succeed())
+		Expect(os.WriteFile("/tmp/whereabouts.conf", []byte(globalConf), 0755)).To(Succeed())
 
 		ipamconfig, _, err := LoadIPAMConfig([]byte(generateIPAMConfWithoutOverlappingRanges()), "")
 		Expect(err).NotTo(HaveOccurred())
