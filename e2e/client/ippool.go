@@ -17,7 +17,7 @@ func isIPPoolAllocationsEmpty(k8sIPAM *kubeClient.KubernetesIPAM, ipPoolName str
 	return func() (bool, error) {
 		ipPool, err := k8sIPAM.GetIPPool(context.Background(), ipPoolName)
 		noPoolError := fmt.Errorf("k8s pool initialized")
-		if errors.As(err, &noPoolError) {
+		if errors.Is(err, noPoolError) {
 			return true, nil
 		} else if err != nil {
 			return false, err
