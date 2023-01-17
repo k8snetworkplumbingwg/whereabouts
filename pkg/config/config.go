@@ -3,7 +3,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"os"
 	"strings"
@@ -246,9 +246,9 @@ func GetFlatIPAM(isControlLoop bool, IPAM *types.IPAMConfig, extraConfigPaths ..
 
 			defer jsonFile.Close()
 
-			jsonBytes, err := ioutil.ReadAll(jsonFile)
+			jsonBytes, err := io.ReadAll(jsonFile)
 			if err != nil {
-				return flatipam, foundflatfile, fmt.Errorf("LoadIPAMConfig Flatfile (%s) - ioutil.ReadAll error: %s", confpath, err)
+				return flatipam, foundflatfile, fmt.Errorf("LoadIPAMConfig Flatfile (%s) - io.ReadAll error: %s", confpath, err)
 			}
 
 			if err := json.Unmarshal(jsonBytes, &flatipam.IPAM); err != nil {
