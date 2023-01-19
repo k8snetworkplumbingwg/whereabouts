@@ -259,7 +259,7 @@ var _ = Describe("Allocation operations", func() {
           "range_start": "00192.00168.1.44",
           "range_end": "00192.00168.01.209",
           "gateway": "192.168.10.1",
-          "reconciler_cron_expression": "30 4 * * *"
+          "reconciler_cron_expression": "* * * * *"
         }
       }`
 
@@ -269,6 +269,6 @@ var _ = Describe("Allocation operations", func() {
 		Expect(ipamConfig.RangeStart).To(Equal(net.ParseIP("192.168.1.44")))
 		Expect(ipamConfig.RangeEnd).To(Equal(net.ParseIP("192.168.1.209")))
 		Expect(ipamConfig.RangeEnd).To(Equal(net.ParseIP("192.168.1.209")))
-		Expect(ipamConfig.ReconcilerCronExpression).To(Equal("30 4 * * *"))
+		Expect(ipamConfig.ReconcilerCronExpression).To(Equal("* * * * *"))
 	})
 })
