@@ -72,16 +72,19 @@ func main() {
 	networkController.Start(stopChan)
 	defer networkController.Shutdown()
 
+	logging.Verbosef("test logging 1")
 	s := gocron.NewScheduler(time.UTC)
 	schedule := cronExpressionFromFlatFile()
 
-	_, err = s.Cron(schedule).Do(func() { // user configurable cron expression in install-cni.sh
+	logging.Verbosef("test logging 2, schedule is: %s", schedule)
+	_, err = s.Cron("* * * * *").Do(func() { // user configurable cron expression in install-cni.sh
 		reconciler.ReconcileIPs(errorChan)
 	})
 	if err != nil {
 		_ = logging.Errorf("error with cron expression schedule: %v", err)
 		os.Exit(cronExpressionError)
 	}
+	logging.Verbosef("test logging 3")
 
 	s.StartAsync()
 
@@ -99,9 +102,13 @@ func main() {
 
 	http.Handle("/metrics", promhttp.Handler())
 
+	logging.Verbosef("test logging 4")
+
 	go func() {
 		log.Fatal(http.ListenAndServe(":1984", nil))
 	}()
+
+	logging.Verbosef("test logging 5")
 
 	for {
 		select {
@@ -110,12 +117,13 @@ func main() {
 			s.Stop()
 			return
 		case err := <-errorChan:
-			reconcilerAttempted.Inc()
 			if err == nil {
 				logging.Verbosef("reconciler success")
 				reconcilerSuccessTotal.Inc()
+				reconcilerAttempted.Inc()
 			} else {
 				logging.Verbosef("reconciler failure: %s", err)
+				reconcilerAttempted.Inc()
 			}
 		}
 	}
