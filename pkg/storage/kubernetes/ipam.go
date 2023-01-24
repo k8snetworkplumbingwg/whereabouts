@@ -118,7 +118,11 @@ func (i *KubernetesIPAM) GetIPPool(ctx context.Context, ipRange string) (storage
 
 func NormalizeRange(ipRange string) string {
 	// v6 filter
+	if ipRange[len(ipRange)-1] == ':' {
+		ipRange = ipRange + "0"
+	}
 	normalized := strings.ReplaceAll(ipRange, ":", "-")
+
 	// replace subnet cidr slash
 	normalized = strings.ReplaceAll(normalized, "/", "-")
 	return normalized
@@ -178,7 +182,12 @@ func (i *KubernetesIPAM) GetOverlappingRangeStore() (storage.OverlappingRangeSto
 func (c *KubernetesOverlappingRangeStore) IsAllocatedInOverlappingRange(ctx context.Context, ip net.IP) (bool, error) {
 
 	// IPv6 doesn't make for valid CR names, so normalize it.
-	normalizedip := strings.ReplaceAll(fmt.Sprint(ip), ":", "-")
+	ipStr := fmt.Sprint(ip)
+	if ipStr[len(ipStr)-1] == ':' {
+		ipStr += "0"
+		logging.Debugf("modified: %s", ipStr)
+	}
+	normalizedip := strings.ReplaceAll(ipStr, ":", "-")
 
 	logging.Debugf("OverlappingRangewide allocation check for IP: %v", normalizedip)
 
@@ -199,7 +208,12 @@ func (c *KubernetesOverlappingRangeStore) IsAllocatedInOverlappingRange(ctx cont
 // UpdateOverlappingRangeAllocation updates clusterwide allocation for overlapping ranges.
 func (c *KubernetesOverlappingRangeStore) UpdateOverlappingRangeAllocation(ctx context.Context, mode int, ip net.IP, containerID string, podRef string) error {
 	// Normalize the IP
-	normalizedip := strings.ReplaceAll(fmt.Sprint(ip), ":", "-")
+	ipStr := fmt.Sprint(ip)
+	if ipStr[len(ipStr)-1] == ':' {
+		ipStr += "0"
+		logging.Debugf("modified: %s", ipStr)
+	}
+	normalizedip := strings.ReplaceAll(ipStr, ":", "-")
 
 	clusteripres := &whereaboutsv1alpha1.OverlappingRangeIPReservation{
 		ObjectMeta: metav1.ObjectMeta{Name: normalizedip, Namespace: c.namespace},
