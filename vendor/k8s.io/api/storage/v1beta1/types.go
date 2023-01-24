@@ -365,7 +365,6 @@ type CSIDriverSpec struct {
 	// This field was immutable in Kubernetes <= 1.22 and now is mutable.
 	//
 	// +optional
-	// +featureGate=CSIStorageCapacity
 	StorageCapacity *bool `json:"storageCapacity,omitempty" protobuf:"bytes,4,opt,name=storageCapacity"`
 
 	// Defines if the underlying volume supports changing ownership and

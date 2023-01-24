@@ -147,7 +147,6 @@ message CSIDriverSpec {
   // This field was immutable in Kubernetes <= 1.22 and now is mutable.
   //
   // +optional
-  // +featureGate=CSIStorageCapacity
   optional bool storageCapacity = 4;
 
   // Defines if the underlying volume supports changing ownership and

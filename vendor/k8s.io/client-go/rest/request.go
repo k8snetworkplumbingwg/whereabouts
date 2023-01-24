@@ -99,6 +99,7 @@ type Request struct {
 	rateLimiter flowcontrol.RateLimiter
 	backoff     BackoffManager
 	timeout     time.Duration
+	maxRetries  int
 
 	// generic components accessible via method setters
 	verb       string
@@ -416,7 +417,10 @@ func (r *Request) Timeout(d time.Duration) *Request {
 // function is specifically called with a different value.
 // A zero maxRetries prevent it from doing retires and return an error immediately.
 func (r *Request) MaxRetries(maxRetries int) *Request {
-	r.retry.SetMaxRetries(maxRetries)
+	if maxRetries < 0 {
+		maxRetries = 0
+	}
+	r.maxRetries = maxRetries
 	return r
 }
 

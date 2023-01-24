@@ -81,7 +81,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
@@ -1328,12 +1327,6 @@ func (v Verbose) InfoSDepth(depth int, msg string, keysAndValues ...interface{})
 	if v.enabled {
 		logging.infoS(v.logr, logging.filter, depth, msg, keysAndValues...)
 	}
-}
-
-// InfoSDepth acts as InfoS but uses depth to determine which call frame to log.
-// InfoSDepth(0, "msg") is the same as InfoS("msg").
-func InfoSDepth(depth int, msg string, keysAndValues ...interface{}) {
-	logging.infoS(logging.logr, logging.filter, depth, msg, keysAndValues...)
 }
 
 // Deprecated: Use ErrorS instead.

@@ -973,12 +973,6 @@ func (cc *ClientConn) isDoNotReuseAndIdle() bool {
 	return cc.doNotReuse && len(cc.streams) == 0
 }
 
-func (cc *ClientConn) isDoNotReuseAndIdle() bool {
-	cc.mu.Lock()
-	defer cc.mu.Unlock()
-	return cc.doNotReuse && len(cc.streams) == 0
-}
-
 var shutdownEnterWaitStateHook = func() {}
 
 // Shutdown gracefully closes the client connection, waiting for running streams to complete.
@@ -2947,11 +2941,6 @@ type noBodyReader struct{}
 
 func (noBodyReader) Close() error             { return nil }
 func (noBodyReader) Read([]byte) (int, error) { return 0, io.EOF }
-
-type missingBody struct{}
-
-func (missingBody) Close() error             { return nil }
-func (missingBody) Read([]byte) (int, error) { return 0, io.ErrUnexpectedEOF }
 
 type missingBody struct{}
 

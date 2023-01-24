@@ -22,25 +22,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/google/go-cmp/cmp"
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/klog/v2"
 	stringslices "k8s.io/utils/strings/slices"
-)
-
-var (
-	unaryOperators = []string{
-		string(selection.Exists), string(selection.DoesNotExist),
-	}
-	binaryOperators = []string{
-		string(selection.In), string(selection.NotIn),
-		string(selection.Equals), string(selection.DoubleEquals), string(selection.NotEquals),
-		string(selection.GreaterThan), string(selection.LessThan),
-	}
-	validRequirementOperators = append(binaryOperators, unaryOperators...)
 )
 
 var (
