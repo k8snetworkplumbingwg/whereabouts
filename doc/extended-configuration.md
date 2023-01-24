@@ -134,6 +134,12 @@ spec:
 
 You'll note that in the `ipam` section there's a lot less parameters than are used in the previous examples.
 
+### Reconciler Cron Expression Configuration (optional)
+
+You may want to provide a cron expression to configure how frequently the ip-reconciler runs. This is done via the flatfile.
+
+Look for the following parameter `"reconciler_cron_expression"` located in `script/install-cni.sh` and change to your desired schedule.
+
 ## Installing etcd. (optional)
 
 etcd installation is optional. By default, we recommend the custom resource backend (given in the first example configuration).

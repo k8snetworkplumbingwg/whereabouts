@@ -28,6 +28,19 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/klog/v2"
+	stringslices "k8s.io/utils/strings/slices"
+)
+
+var (
+	unaryOperators = []string{
+		string(selection.Exists), string(selection.DoesNotExist),
+	}
+	binaryOperators = []string{
+		string(selection.In), string(selection.NotIn),
+		string(selection.Equals), string(selection.DoubleEquals), string(selection.NotEquals),
+		string(selection.GreaterThan), string(selection.LessThan),
+	}
+	validRequirementOperators = append(binaryOperators, unaryOperators...)
 )
 
 var (
@@ -288,7 +301,7 @@ func (r Requirement) Equal(x Requirement) bool {
 	if r.operator != x.operator {
 		return false
 	}
-	return cmp.Equal(r.strValues, x.strValues)
+	return stringslices.Equal(r.strValues, x.strValues)
 }
 
 // Empty returns true if the internalSelector doesn't restrict selection space
