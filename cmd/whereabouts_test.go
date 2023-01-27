@@ -234,6 +234,30 @@ var _ = Describe("Whereabouts operations", func() {
 		)
 	})
 
+	It("allocates and releases an IPv6 range that ends with zeroes with a Kubernetes backend", func() {
+
+		ipVersion := "6"
+		ipRange := "2001:db8:480:603d:0304:0403:000:0000-2001:db8:480:603d:0304:0403:0000:0004/64"
+		ipGateway := "2001:db8:480:603d::1"
+		expectedAddress := "2001:db8:480:603d:0304:0403:000:0000/64"
+
+		AllocateAndReleaseAddressesTest(
+			ipVersion,
+			ipamConfig(podName, podNamespace, ipRange, ipGateway, kubeConfigPath),
+			[]string{expectedAddress},
+		)
+
+		ipRange = "2001:db8:5422:0005::-2001:db8:5422:0005:7fff:ffff:ffff:ffff/64"
+		ipGateway = "2001:db8:5422:0005::1"
+		expectedAddress = "2001:db8:5422:0005::/64"
+
+		AllocateAndReleaseAddressesTest(
+			ipVersion,
+			ipamConfig(podName, podNamespace, ipRange, ipGateway, kubeConfigPath),
+			[]string{expectedAddress},
+		)
+	})
+
 	It("allocates IPv6 addresses with DNS-1123 conformant naming with a Kubernetes backend", func() {
 
 		ipVersion := "6"
