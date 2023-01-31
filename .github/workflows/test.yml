@@ -17,7 +17,7 @@ jobs:
       uses: actions/checkout@v2
 
     - name: Run Revive Action by building from repository
-      uses: morphy2k/revive-action@v1.4.1
+      uses: morphy2k/revive-action@v2.4.1
       with:
         exclude: "./vendor/..."
         name: "Revive"
