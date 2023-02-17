@@ -1,0 +1,7 @@
+# https://help.github.com/en/articles/about-code-owners
+* @dougbtv
+cmd/controlloop @maiqueb
+doc/ @dougbtv @maiqueb
+e2e/ @maiqueb
+pkg/reconciler/ @maiqueb
+pkg/controlloop @maiqueb

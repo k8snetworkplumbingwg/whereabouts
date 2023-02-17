@@ -11,6 +11,9 @@ import (
 	cnitypes "github.com/containernetworking/cni/pkg/types"
 	types020 "github.com/containernetworking/cni/pkg/types/020"
 	"github.com/imdario/mergo"
+
+	netutils "k8s.io/utils/net"
+
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 )
@@ -30,21 +33,17 @@ func canonicalizeIP(ip *net.IP) error {
 // LoadIPAMConfig creates IPAMConfig using json encoded configuration provided
 // as `bytes`. At the moment values provided in envArgs are ignored so there
 // is no possibility to overload the json configuration using envArgs
-func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, error) {
+func LoadIPAMConfig(bytes []byte, envArgs string, extraConfigPaths ...string) (*types.IPAMConfig, string, error) {
 
-	// We first load up what we already have, before we start reading a file...
-	n := types.Net{
-		IPAM: &types.IPAMConfig{
-			OverlappingRanges: true,
-			SleepForRace:      0,
-		},
-	}
+	var n types.Net
 	if err := json.Unmarshal(bytes, &n); err != nil {
 		return nil, "", fmt.Errorf("LoadIPAMConfig - JSON Parsing Error: %s / bytes: %s", err, bytes)
 	}
 
 	if n.IPAM == nil {
 		return nil, "", fmt.Errorf("IPAM config missing 'ipam' key")
+	} else if !isNetworkRelevant(n.IPAM) {
+		return nil, "", NewInvalidPluginError(n.IPAM.Type)
 	}
 
 	args := types.IPAMEnvArgs{}
@@ -54,47 +53,18 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 	n.IPAM.PodName = string(args.K8S_POD_NAME)
 	n.IPAM.PodNamespace = string(args.K8S_POD_NAMESPACE)
 
-	// Once we have our basics, let's look for our (optional) configuration file
-	confdirs := []string{"/etc/kubernetes/cni/net.d/whereabouts.d/whereabouts.conf", "/etc/cni/net.d/whereabouts.d/whereabouts.conf"}
-	// We prefix the optional configuration path (so we look there first)
-	if n.IPAM.ConfigurationPath != "" {
-		confdirs = append([]string{n.IPAM.ConfigurationPath}, confdirs...)
-	}
-
-	// Cycle through the path and parse the JSON config
-	flatipam := types.Net{}
-	foundflatfile := ""
-	for _, confpath := range confdirs {
-		if pathExists(confpath) {
-
-			jsonFile, err := os.Open(confpath)
-
-			if err != nil {
-				return nil, "", fmt.Errorf("Error opening flat configuration file @ %s with: %s", confpath, err)
-			}
-
-			defer jsonFile.Close()
-
-			jsonBytes, err := ioutil.ReadAll(jsonFile)
-			if err != nil {
-				return nil, "", fmt.Errorf("LoadIPAMConfig Flatfile (%s) - ioutil.ReadAll error: %s", confpath, err)
-			}
-
-			if err := json.Unmarshal(jsonBytes, &flatipam.IPAM); err != nil {
-				return nil, "", fmt.Errorf("LoadIPAMConfig Flatfile (%s) - JSON Parsing Error: %s / bytes: %s", confpath, err, jsonBytes)
-			}
-
-			foundflatfile = confpath
-
-			break
-		}
+	flatipam, foundflatfile, err := GetFlatIPAM(false, n.IPAM, extraConfigPaths...)
+	if err != nil {
+		return nil, "", err
 	}
 
 	// Now let's try to merge the configurations...
 	// NB: Don't try to do any initialization before this point or it won't account for merged flat file.
+	var OverlappingRanges bool = n.IPAM.OverlappingRanges
 	if err := mergo.Merge(&n, flatipam); err != nil {
 		logging.Errorf("Merge error with flat file: %s", err)
 	}
+	n.IPAM.OverlappingRanges = OverlappingRanges
 
 	// Logging
 	if n.IPAM.LogFile != "" {
@@ -108,65 +78,65 @@ func LoadIPAMConfig(bytes []byte, envArgs string) (*types.IPAMConfig, string, er
 		logging.Debugf("Used defaults from parsed flat file config @ %s", foundflatfile)
 	}
 
-	if r := strings.SplitN(n.IPAM.Range, "-", 2); len(r) == 2 {
-		firstip := net.ParseIP(r[0])
-		if firstip == nil {
-			return nil, "", fmt.Errorf("invalid range start IP: %s", r[0])
+	if n.IPAM.Range != "" {
+
+		oldRange := types.RangeConfiguration{
+			OmitRanges: n.IPAM.OmitRanges,
+			Range:      n.IPAM.Range,
+			RangeStart: n.IPAM.RangeStart,
+			RangeEnd:   n.IPAM.RangeEnd,
 		}
-		lastip, ipNet, err := net.ParseCIDR(r[1])
-		if err != nil {
-			return nil, "", fmt.Errorf("invalid CIDR (do you have the 'range' parameter set for Whereabouts?) '%s': %s", r[1], err)
-		}
-		if !ipNet.Contains(firstip) {
-			return nil, "", fmt.Errorf("invalid range start for CIDR %s: %s", ipNet.String(), firstip)
-		}
-		n.IPAM.Range = ipNet.String()
-		n.IPAM.RangeStart = firstip
-		n.IPAM.RangeEnd = lastip
-	} else {
-		firstip, ipNet, err := net.ParseCIDR(n.IPAM.Range)
-		if err != nil {
-			return nil, "", fmt.Errorf("invalid CIDR %s: %s", n.IPAM.Range, err)
-		}
-		n.IPAM.Range = ipNet.String()
-		if n.IPAM.RangeStart == nil {
-			firstip = net.ParseIP(firstip.Mask(ipNet.Mask).String()) // if range_start is not net then pick the first network address
-			n.IPAM.RangeStart = firstip
+
+		n.IPAM.IPRanges = append([]types.RangeConfiguration{oldRange}, n.IPAM.IPRanges...)
+	}
+
+	for idx := range n.IPAM.IPRanges {
+		if r := strings.SplitN(n.IPAM.IPRanges[idx].Range, "-", 2); len(r) == 2 {
+			firstip := netutils.ParseIPSloppy(r[0])
+			if firstip == nil {
+				return nil, "", fmt.Errorf("invalid range start IP: %s", r[0])
+			}
+			lastip, ipNet, err := netutils.ParseCIDRSloppy(r[1])
+			if err != nil {
+				return nil, "", fmt.Errorf("invalid CIDR (do you have the 'range' parameter set for Whereabouts?) '%s': %s", r[1], err)
+			}
+			if !ipNet.Contains(firstip) {
+				return nil, "", fmt.Errorf("invalid range start for CIDR %s: %s", ipNet.String(), firstip)
+			}
+			n.IPAM.IPRanges[idx].Range = ipNet.String()
+			n.IPAM.IPRanges[idx].RangeStart = firstip
+			n.IPAM.IPRanges[idx].RangeEnd = lastip
+		} else {
+			firstip, ipNet, err := netutils.ParseCIDRSloppy(n.IPAM.IPRanges[idx].Range)
+			if err != nil {
+				return nil, "", fmt.Errorf("invalid CIDR %s: %s", n.IPAM.IPRanges[idx].Range, err)
+			}
+			n.IPAM.IPRanges[idx].Range = ipNet.String()
+			if n.IPAM.IPRanges[idx].RangeStart == nil {
+				firstip = netutils.ParseIPSloppy(firstip.Mask(ipNet.Mask).String()) // if range_start is not net then pick the first network address
+				n.IPAM.IPRanges[idx].RangeStart = firstip
+			}
 		}
 	}
 
-	if n.IPAM.Datastore == "" {
-		n.IPAM.Datastore = types.DatastoreETCD
-	}
+	n.IPAM.OmitRanges = nil
+	n.IPAM.Range = ""
+	n.IPAM.RangeStart = nil
+	n.IPAM.RangeEnd = nil
 
-	var err error
-	storageError := "You have not configured the storage engine (looks like you're using an invalid `%s` parameter in your config)"
-	switch n.IPAM.Datastore {
-	case types.DatastoreKubernetes:
-		if n.IPAM.Kubernetes.KubeConfigPath == "" {
-			err = fmt.Errorf(storageError, "kubernetes.kubeconfig")
-		}
-	case types.DatastoreETCD:
-		if n.IPAM.EtcdHost == "" {
-			err = fmt.Errorf(storageError, "etcd_host")
-		}
-	default:
-		err = fmt.Errorf(storageError, "datastore")
-	}
-	if err != nil {
-		return nil, "", err
+	if n.IPAM.Kubernetes.KubeConfigPath == "" {
+		return nil, "", storageError()
 	}
 
 	if n.IPAM.GatewayStr != "" {
-		gwip := net.ParseIP(n.IPAM.GatewayStr)
+		gwip := netutils.ParseIPSloppy(n.IPAM.GatewayStr)
 		if gwip == nil {
-			return nil, "", fmt.Errorf("Couldn't parse gateway IP: %s", n.IPAM.GatewayStr)
+			return nil, "", fmt.Errorf("couldn't parse gateway IP: %s", n.IPAM.GatewayStr)
 		}
 		n.IPAM.Gateway = gwip
 	}
-
 	for i := range n.IPAM.OmitRanges {
-		_, _, err := net.ParseCIDR(n.IPAM.OmitRanges[i])
+		_, _, err := netutils.ParseCIDRSloppy(n.IPAM.OmitRanges[i])
 		if err != nil {
 			return nil, "", fmt.Errorf("invalid CIDR in exclude list %s: %s", n.IPAM.OmitRanges[i], err)
 		}
@@ -212,7 +182,7 @@ func configureStatic(n *types.Net, args types.IPAMEnvArgs) error {
 	numV6 := 0
 
 	for i := range n.IPAM.Addresses {
-		ip, addr, err := net.ParseCIDR(n.IPAM.Addresses[i].AddressStr)
+		ip, addr, err := netutils.ParseCIDRSloppy(n.IPAM.Addresses[i].AddressStr)
 		if err != nil {
 			return fmt.Errorf("invalid CIDR in addresses %s: %s", n.IPAM.Addresses[i].AddressStr, err)
 		}
@@ -252,13 +222,54 @@ func configureStatic(n *types.Net, args types.IPAMEnvArgs) error {
 
 }
 
+func GetFlatIPAM(isControlLoop bool, IPAM *types.IPAMConfig, extraConfigPaths ...string) (types.Net, string, error) {
+	// Once we have our basics, let's look for our (optional) configuration file
+	confdirs := []string{"/etc/kubernetes/cni/net.d/whereabouts.d/whereabouts.conf", "/etc/cni/net.d/whereabouts.d/whereabouts.conf", "/host/etc/cni/net.d/whereabouts.d/whereabouts.conf"}
+	confdirs = append(confdirs, extraConfigPaths...)
+	// We prefix the optional configuration path (so we look there first)
+
+	if !isControlLoop && IPAM != nil {
+		if IPAM.ConfigurationPath != "" {
+			confdirs = append([]string{IPAM.ConfigurationPath}, confdirs...)
+		}
+	}
+
+	// Cycle through the path and parse the JSON config
+	flatipam := types.Net{}
+	foundflatfile := ""
+	for _, confpath := range confdirs {
+		if pathExists(confpath) {
+			jsonFile, err := os.Open(confpath)
+			if err != nil {
+				return flatipam, foundflatfile, fmt.Errorf("error opening flat configuration file @ %s with: %s", confpath, err)
+			}
+
+			defer jsonFile.Close()
+
+			jsonBytes, err := ioutil.ReadAll(jsonFile)
+			if err != nil {
+				return flatipam, foundflatfile, fmt.Errorf("LoadIPAMConfig Flatfile (%s) - ioutil.ReadAll error: %s", confpath, err)
+			}
+
+			if err := json.Unmarshal(jsonBytes, &flatipam.IPAM); err != nil {
+				return flatipam, foundflatfile, fmt.Errorf("LoadIPAMConfig Flatfile (%s) - JSON Parsing Error: %s / bytes: %s", confpath, err, jsonBytes)
+			}
+
+			foundflatfile = confpath
+			return flatipam, foundflatfile, err
+		}
+	}
+	var err error
+	return flatipam, foundflatfile, err
+}
+
 func handleEnvArgs(n *types.Net, numV6 int, numV4 int, args types.IPAMEnvArgs) (int, int, error) {
 
 	if args.IP != "" {
 		for _, item := range strings.Split(string(args.IP), ",") {
 			ipstr := strings.TrimSpace(item)
 
-			ip, subnet, err := net.ParseCIDR(ipstr)
+			ip, subnet, err := netutils.ParseCIDRSloppy(ipstr)
 			if err != nil {
 				return numV6, numV4, fmt.Errorf("invalid CIDR %s: %s", ipstr, err)
 			}
@@ -277,7 +288,7 @@ func handleEnvArgs(n *types.Net, numV6 int, numV4 int, args types.IPAMEnvArgs) (
 
 	if args.GATEWAY != "" {
 		for _, item := range strings.Split(string(args.GATEWAY), ",") {
-			gwip := net.ParseIP(strings.TrimSpace(item))
+			gwip := netutils.ParseIPSloppy(strings.TrimSpace(item))
 			if gwip == nil {
 				return numV6, numV4, fmt.Errorf("invalid gateway address: %s", item)
 			}
@@ -292,4 +303,73 @@ func handleEnvArgs(n *types.Net, numV6 int, numV4 int, args types.IPAMEnvArgs) (
 
 	return numV6, numV4, nil
 
+}
+
+func LoadIPAMConfiguration(bytes []byte, envArgs string, extraConfigPaths ...string) (*types.IPAMConfig, error) {
+	pluginConfig, err := loadPluginConfig(bytes)
+	if err != nil {
+		return nil, err
+	}
+
+	if pluginConfig.Type == "" {
+		pluginConfigList, err := loadPluginConfigList(bytes)
+		if err != nil {
+			return nil, err
+		}
+
+		pluginConfigList.Plugins[0].CNIVersion = pluginConfig.CNIVersion
+		firstPluginBytes, err := json.Marshal(pluginConfigList.Plugins[0])
+		if err != nil {
+			return nil, err
+		}
+		ipamConfig, _, err := LoadIPAMConfig(firstPluginBytes, envArgs, extraConfigPaths...)
+		if err != nil {
+			return nil, err
+		}
+		return ipamConfig, nil
+	}
+
+	ipamConfig, _, err := LoadIPAMConfig(bytes, envArgs, extraConfigPaths...)
+	if err != nil {
+		return nil, err
+	}
+	return ipamConfig, nil
+}
+
+func loadPluginConfigList(bytes []byte) (*types.NetConfList, error) {
+	var netConfList types.NetConfList
+	if err := json.Unmarshal(bytes, &netConfList); err != nil {
+		return nil, err
+	}
+
+	return &netConfList, nil
+}
+
+func loadPluginConfig(bytes []byte) (*cnitypes.NetConf, error) {
+	var pluginConfig cnitypes.NetConf
+	if err := json.Unmarshal(bytes, &pluginConfig); err != nil {
+		return nil, err
+	}
+	return &pluginConfig, nil
+}
+
+func isNetworkRelevant(ipamConfig *types.IPAMConfig) bool {
+	const relevantIPAMType = "whereabouts"
+	return ipamConfig.Type == relevantIPAMType
+}
+
+type InvalidPluginError struct {
+	ipamType string
+}
+
+func NewInvalidPluginError(ipamType string) *InvalidPluginError {
+	return &InvalidPluginError{ipamType: ipamType}
+}
+
+func (e *InvalidPluginError) Error() string {
+	return fmt.Sprintf("only interested in networks whose IPAM type is 'whereabouts'. This one was: %s", e.ipamType)
+}
+
+func storageError() error {
+	return fmt.Errorf("you have not configured the storage engine (looks like you're using an invalid `kubernetes.kubeconfig` parameter in your config)")
 }
