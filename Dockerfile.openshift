@@ -5,7 +5,7 @@
 # than this Dockerfile. ART will be unable to build your component or
 # reconcile this Dockerfile until that disparity is addressed.
 # This dockerfile is used for building for OpenShift
-FROM registry.ci.openshift.org/openshift/release:golang-1.17 as builder
+FROM registry.ci.openshift.org/ocp/builder:rhel-8-golang-1.19-openshift-4.13 AS builder
 ADD . /go/src/github.com/k8snetworkplumbingwg/whereabouts
 WORKDIR /go/src/github.com/k8snetworkplumbingwg/whereabouts
 ENV CGO_ENABLED=1
@@ -14,7 +14,7 @@ RUN go build -mod vendor -o bin/whereabouts     cmd/whereabouts.go
 RUN go build -mod vendor -o bin/ip-control-loop cmd/controlloop/controlloop.go
 WORKDIR /
 
-FROM openshift/origin-base
+FROM registry.ci.openshift.org/ocp/builder:rhel-8-base-openshift-4.13
 RUN mkdir -p /usr/src/whereabouts/images && \
        mkdir -p /usr/src/whereabouts/bin
 COPY --from=builder /go/src/github.com/k8snetworkplumbingwg/whereabouts/bin/whereabouts     /usr/src/whereabouts/bin
