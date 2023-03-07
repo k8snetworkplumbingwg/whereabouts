@@ -16,48 +16,62 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v2
 
+    - name: Get all changed files excluding docs and README
+      id: changed-files
+      uses: tj-actions/changed-files@v35
+      with:
+        files: |
+          .github
+          cmd
+          pkg
+          Dockerfile*
+          e2e
+          go.mod
+          go.sum
+          hack
+          script
+          doc/crds
+
     - name: Run Revive Action by building from repository
       uses: morphy2k/revive-action@v2.4.1
+      if: steps.changed-files.outputs.any_changed == 'true'
       with:
         exclude: "./vendor/..."
         name: "Revive"
 
     - name: Install kubebuilder tools
+      if: steps.changed-files.outputs.any_changed == 'true'
       run: ./hack/install-kubebuilder-tools.sh
 
     - name: Generate code
+      if: steps.changed-files.outputs.any_changed == 'true'
       run: ./hack/generate-code.sh && hack/verify-codegen.sh
 
     - name: Run go fmt
+      if: steps.changed-files.outputs.any_changed == 'true'
       run: go fmt ./...
       #run: diff -u <(echo -n) <(gofmt -d -s .)
 
     - name: Run go vet
+      if: steps.changed-files.outputs.any_changed == 'true'
       run: go vet --tags=test ./...
 
     - name: Install static check
+      if: steps.changed-files.outputs.any_changed == 'true'
       run: go install honnef.co/go/tools/cmd/staticcheck@latest
 
     - name: Test
+      if: steps.changed-files.outputs.any_changed == 'true'
       run: sudo PATH=${PATH}:./bin ./hack/test-go.sh
 
     - name: Send coverage
+      if: steps.changed-files.outputs.any_changed == 'true'
       uses: shogo82148/actions-goveralls@v1
       with:
         path-to-profile: coverage.out
         flag-name: Go-${{ matrix.go }}
-        parallel: true
       env:
         KUBEBUILDER_ASSETS: "$(pwd)/bin"
-
-  # notifies that all test jobs are finished.
-  finish:
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: shogo82148/actions-goveralls@v1
-        with:
-          parallel-finished: true
 
   e2e-test:
     name: e2e test
@@ -73,16 +87,36 @@ jobs:
       - name: Checkout code into the Go module directory
         uses: actions/checkout@v2
 
+      - name: Get all changed files excluding docs and README
+        id: changed-files
+        uses: tj-actions/changed-files@v35
+        with:
+          files: |
+            .github
+            cmd
+            pkg
+            Dockerfile*
+            e2e
+            go.mod
+            go.sum
+            hack
+            script
+            doc/crds
+
       - name: Install requirements
+        if: steps.changed-files.outputs.any_changed == 'true'
         run: sudo apt-get install nmap jq && ./hack/build-go.sh
 
       - name: Get tools, setup KinD cluster test environment
+        if: steps.changed-files.outputs.any_changed == 'true'
         run: source hack/e2e-get-test-tools.sh && ./hack/e2e-setup-kind-cluster.sh --number-of-compute $NUMBER_OF_COMPUTE_NODES
 
       - name: Clear test-cache
+        if: steps.changed-files.outputs.any_changed == 'true'
         run: go clean -testcache
 
       - name: Execute golang based E2E tests
+        if: steps.changed-files.outputs.any_changed == 'true'
         env:
           KUBECONFIG: /home/runner/.kube/config
           NUMBER_OF_THRASH_ITER: 20
