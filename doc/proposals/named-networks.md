@@ -5,7 +5,7 @@
 - [Introduction](#introduction)
   - [Goal](#goal-of-this-proposal)
 - [Design](#design)
-  - [Changes in IPAM Config](#changes-in-ipam-config)
+  - [Analysis of the proposed schemes](#analysis-of-the-proposed-schemes)
   - [Changes in Modules](#changes-in-modules)
 - [Summary](#summary)
 - [Discussions and Decisions](#discussions-and-decisions)
