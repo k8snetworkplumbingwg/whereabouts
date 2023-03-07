@@ -20,17 +20,9 @@ jobs:
       id: changed-files
       uses: tj-actions/changed-files@v35
       with:
-        files: |
-          .github
-          cmd
-          pkg
-          Dockerfile*
-          e2e
-          go.mod
-          go.sum
-          hack
-          script
-          doc/crds
+        files_ignore: |
+          **/*.md
+          doc/*.{json,png,svg}
 
     - name: Run Revive Action by building from repository
       uses: morphy2k/revive-action@v2.4.1
@@ -91,17 +83,9 @@ jobs:
         id: changed-files
         uses: tj-actions/changed-files@v35
         with:
-          files: |
-            .github
-            cmd
-            pkg
-            Dockerfile*
-            e2e
-            go.mod
-            go.sum
-            hack
-            script
-            doc/crds
+          files_ignore: |
+            **/*.md
+            doc/*.{json,png,svg}
 
       - name: Install requirements
         if: steps.changed-files.outputs.any_changed == 'true'
