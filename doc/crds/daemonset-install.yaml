@@ -48,6 +48,11 @@ rules:
   verbs:
   - list
   - watch
+- apiGroups: [""]
+  resources:
+  - nodes
+  verbs:
+  - get
 - apiGroups: ["k8s.cni.cncf.io"]
   resources:
     - network-attachment-definitions
@@ -103,6 +108,11 @@ spec:
             /ip-control-loop -log-level debug
         image: ghcr.io/k8snetworkplumbingwg/whereabouts:latest-amd64
         env:
+        - name: NODENAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
         - name: WHEREABOUTS_NAMESPACE
           valueFrom:
             fieldRef:

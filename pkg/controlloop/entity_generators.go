@@ -50,12 +50,23 @@ func dummyNonWhereaboutsIPAMNetSpec(networkName string) string {
     }`, networkName)
 }
 
-func podSpec(name string, namespace string, networks ...string) *v1.Pod {
+func nodeSpec(name string) *v1.Node {
+	return &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+	}
+}
+
+func podSpec(name string, namespace string, nodeName string, networks ...string) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        name,
 			Namespace:   namespace,
 			Annotations: podNetworkSelectionElements(networks...),
+		},
+		Spec: v1.PodSpec{
+			NodeName: nodeName,
 		},
 	}
 }

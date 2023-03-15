@@ -4,14 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"k8s.io/client-go/kubernetes"
 	"net"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	"k8s.io/client-go/kubernetes"
+
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/util/wait"
 	v1coreinformerfactory "k8s.io/client-go/informers"
 	v1corelisters "k8s.io/client-go/listers/core/v1"
@@ -22,6 +25,7 @@ import (
 	nadv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 	nadinformers "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/client/informers/externalversions"
 	nadlister "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/client/listers/k8s.cni.cncf.io/v1"
+	"github.com/pkg/errors"
 
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/allocate"
 	whereaboutsv1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
@@ -45,6 +49,12 @@ const (
 const (
 	addressGarbageCollected        = "IPAddressGarbageCollected"
 	addressGarbageCollectionFailed = "IPAddressGarbageCollectionFailed"
+)
+
+const (
+	podControllerFilterKey           = "spec.nodeName"
+	podControllerNodeNameEnvVariable = "NODENAME"
+	noResyncPeriod                   = 0
 )
 
 type garbageCollector func(ctx context.Context, mode int, ipamConf types.IPAMConfig, client *wbclient.KubernetesIPAM) ([]net.IPNet, error)
@@ -71,6 +81,22 @@ type PodController struct {
 // NewPodController ...
 func NewPodController(k8sCoreClient kubernetes.Interface, wbClient wbclientset.Interface, k8sCoreInformerFactory v1coreinformerfactory.SharedInformerFactory, wbSharedInformerFactory wbinformers.SharedInformerFactory, netAttachDefInformerFactory nadinformers.SharedInformerFactory, broadcaster record.EventBroadcaster, recorder record.EventRecorder) *PodController {
 	return newPodController(k8sCoreClient, wbClient, k8sCoreInformerFactory, wbSharedInformerFactory, netAttachDefInformerFactory, broadcaster, recorder, wbclient.IPManagement)
+}
+
+// PodInformerFactory is a wrapper around NewSharedInformerFactoryWithOptions. Before returning the informer, it will
+// extract the node name from environment variable "NODENAME". It will then try to look up the node with the given name.
+// On success, it will create an informer that filters all pods with spec.nodeName == <value of env NODENAME>.
+func PodInformerFactory(k8sClientSet kubernetes.Interface) (v1coreinformerfactory.SharedInformerFactory, error) {
+	nodeName := os.Getenv(podControllerNodeNameEnvVariable)
+	logging.Debugf("Filtering pods with filter key '%s' and filter value '%s'", podControllerFilterKey, nodeName)
+	if _, err := k8sClientSet.CoreV1().Nodes().Get(context.TODO(), nodeName, metav1.GetOptions{}); err != nil {
+		return nil, errors.Wrap(err, fmt.Sprintf("Could not find node with node name '%s'.", nodeName))
+	}
+	return v1coreinformerfactory.NewSharedInformerFactoryWithOptions(
+		k8sClientSet, noResyncPeriod, v1coreinformerfactory.WithTweakListOptions(
+			func(options *metav1.ListOptions) {
+				options.FieldSelector = fields.OneTermEqualSelector(podControllerFilterKey, nodeName).String()
+			})), nil
 }
 
 func newPodController(k8sCoreClient kubernetes.Interface, wbClient wbclientset.Interface, k8sCoreInformerFactory v1coreinformerfactory.SharedInformerFactory, wbSharedInformerFactory wbinformers.SharedInformerFactory, netAttachDefInformerFactory nadinformers.SharedInformerFactory, broadcaster record.EventBroadcaster, recorder record.EventRecorder, cleanupFunc garbageCollector) *PodController {
