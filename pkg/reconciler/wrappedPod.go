@@ -11,10 +11,8 @@ import (
 )
 
 const (
-	multusInterfaceNamePrefix     = "net"
-	multusPrefixSize              = len(multusInterfaceNamePrefix)
-	MultusNetworkAnnotation       = "k8s.v1.cni.cncf.io/networks"
-	MultusNetworkStatusAnnotation = "k8s.v1.cni.cncf.io/networks-status"
+	multusInterfaceNamePrefix = "net"
+	multusPrefixSize          = len(multusInterfaceNamePrefix)
 )
 
 type podWrapper struct {
@@ -90,7 +88,7 @@ func getFlatIPSet(pod v1.Pod) (map[string]void, error) {
 }
 
 func networkStatusFromPod(pod v1.Pod) string {
-	networkStatusAnnotationValue, isStatusAnnotationPresent := pod.Annotations[MultusNetworkStatusAnnotation]
+	networkStatusAnnotationValue, isStatusAnnotationPresent := pod.Annotations[k8snetworkplumbingwgv1.NetworkStatusAnnot]
 	if !isStatusAnnotationPresent || len(networkStatusAnnotationValue) == 0 {
 		return "[]"
 	}

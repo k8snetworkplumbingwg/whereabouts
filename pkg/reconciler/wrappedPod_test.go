@@ -50,7 +50,7 @@ var _ = Describe("Pod Wrapper operations", func() {
 			annotationString = []byte("")
 		}
 		return map[string]string{
-			MultusNetworkStatusAnnotation: string(annotationString),
+			k8snetworkplumbingwgv1.NetworkStatusAnnot: string(annotationString),
 		}
 	}
 
@@ -60,7 +60,7 @@ var _ = Describe("Pod Wrapper operations", func() {
 			annotationString = []byte("")
 		}
 		return map[string]string{
-			MultusNetworkStatusAnnotation: string(annotationString),
+			k8snetworkplumbingwgv1.NetworkStatusAnnot: string(annotationString),
 		}
 	}
 
@@ -117,7 +117,7 @@ var _ = Describe("Pod Wrapper operations", func() {
 		It("return an empty list when the network annotations of a pod are invalid", func() {
 			pod := v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					Annotations: map[string]string{MultusNetworkStatusAnnotation: "this-wont-fly"},
+					Annotations: map[string]string{k8snetworkplumbingwgv1.NetworkStatusAnnot: "this-wont-fly"},
 				},
 			}
 			Expect(wrapPod(pod).ips).To(BeEmpty())
