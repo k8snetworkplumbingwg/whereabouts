@@ -242,6 +242,67 @@ Run the build command from the `./hack` directory:
 ./hack/build-go.sh
 ```
 
+## Running whereabouts CNI in a local kind cluster
+
+You can start a kind cluster to run local changes with:
+```
+make kind
+# or make kind COMPUTE_NODES=<desired number of worker nodes>
+```
+
+You can then create a NetworkAttachmentDefinition with:
+```
+cat <<'EOF' | kubectl apply -f -
+apiVersion: "k8s.cni.cncf.io/v1"
+kind: NetworkAttachmentDefinition
+metadata:
+  name: whereabouts-conf
+spec:
+  config: '{
+      "cniVersion": "0.3.0",
+      "name": "whereaboutsexample",
+      "type": "macvlan",
+      "master": "eth0",
+      "mode": "bridge",
+      "ipam": {
+        "type": "whereabouts",
+        "range": "192.168.2.225/28"
+      }
+    }'
+EOF
+```
+
+Create a deployment that uses the NetworkAttachmentDefinition, for example:
+```
+cat <<'EOF' | kubectl apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: netshoot-deployment
+  labels:
+    app: netshoot-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: netshoot-pod
+  template:
+    metadata:
+      annotations:
+        k8s.v1.cni.cncf.io/networks: whereabouts-conf
+      labels:
+        app: netshoot-pod
+    spec:
+      containers:
+      - name: netshoot
+        image: nicolaka/netshoot
+        command:
+          - sleep
+          - "3600"
+        imagePullPolicy: IfNotPresent
+EOF
+```
+
 ## Acknowledgements
 
 Thanks big time to [Tomofumi Hayashi](https://github.com/s1061123), I utilized his [static CNI IPAM plugin](https://github.com/containernetworking/plugins/tree/master/plugins/ipam/static) as a basis for this project to give me a head start!
