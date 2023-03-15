@@ -54,3 +54,4 @@ jobs:
           push: false
           tags: ghcr.io/${{ github.repository }}:latest-arm64
           file: Dockerfile.arm64
+          platforms: linux/arm64
