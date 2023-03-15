@@ -10,11 +10,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
-const (
-	multusInterfaceNamePrefix = "net"
-	multusPrefixSize          = len(multusInterfaceNamePrefix)
-)
-
 type podWrapper struct {
 	ips   map[string]void
 	phase v1.PodPhase
