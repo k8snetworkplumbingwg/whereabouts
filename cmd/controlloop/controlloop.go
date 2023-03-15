@@ -9,9 +9,6 @@ import (
 
 	gocron "github.com/go-co-op/gocron"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
-	v1coreinformerfactory "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -132,15 +129,10 @@ func newPodController(stopChannel chan struct{}) (*controlloop.PodController, er
 	const noResyncPeriod = 0
 	ipPoolInformerFactory := wbinformers.NewSharedInformerFactory(wbClientSet, noResyncPeriod)
 	netAttachDefInformerFactory := nadinformers.NewSharedInformerFactory(nadK8sClientSet, noResyncPeriod)
-	podInformerFactory := v1coreinformerfactory.NewSharedInformerFactoryWithOptions(
-		k8sClientSet, noResyncPeriod, v1coreinformerfactory.WithTweakListOptions(
-			func(options *v1.ListOptions) {
-				const (
-					filterKey           = "spec.nodeName"
-					hostnameEnvVariable = "HOSTNAME"
-				)
-				options.FieldSelector = fields.OneTermEqualSelector(filterKey, os.Getenv(hostnameEnvVariable)).String()
-			}))
+	podInformerFactory, err := controlloop.PodInformerFactory(k8sClientSet)
+	if err != nil {
+		return nil, err
+	}
 
 	controller := controlloop.NewPodController(
 		k8sClientSet,
