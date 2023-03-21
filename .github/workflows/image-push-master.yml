@@ -1,5 +1,5 @@
 name: Image push for master
-on: 
+on:
   push:
     branches:
       - master
@@ -59,3 +59,4 @@ jobs:
           push: true
           tags: ghcr.io/${{ github.repository }}:latest-ocp
           file: Dockerfile.openshift
+          platforms: linux/arm64

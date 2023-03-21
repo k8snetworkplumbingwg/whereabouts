@@ -1,5 +1,5 @@
 name: Image push release
-on: 
+on:
   push:
     tags:
       - v*
@@ -75,3 +75,4 @@ jobs:
           tags: |
             ${{ steps.docker_meta.outputs.tags }}-arm64
           file: Dockerfile
+          platforms: linux/arm64
