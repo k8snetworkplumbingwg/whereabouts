@@ -5,11 +5,11 @@ package controlloop
 
 import (
 	"context"
-	kubeClient "github.com/k8snetworkplumbingwg/whereabouts/pkg/storage/kubernetes"
 	"net"
 
+	kubeClient "github.com/k8snetworkplumbingwg/whereabouts/pkg/storage/kubernetes"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	v1coreinformerfactory "k8s.io/client-go/informers"
 	k8sclient "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
@@ -41,7 +41,10 @@ func newDummyPodController(
 	const noResyncPeriod = 0
 	netAttachDefInformerFactory := nadinformers.NewSharedInformerFactory(nadClient, noResyncPeriod)
 	wbInformerFactory := wbinformers.NewSharedInformerFactory(wbClient, noResyncPeriod)
-	podInformerFactory := v1coreinformerfactory.NewSharedInformerFactory(k8sClient, noResyncPeriod)
+	podInformerFactory, err := PodInformerFactory(k8sClient)
+	if err != nil {
+		return nil, err
+	}
 
 	podController := newPodController(
 		k8sClient,

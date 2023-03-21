@@ -12,6 +12,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8sclient "k8s.io/client-go/kubernetes"
@@ -56,20 +57,59 @@ var _ = Describe("IPControlLoop", func() {
 		Expect(os.RemoveAll(cniConfigDir)).To(Succeed())
 	})
 
-	Context("a running pod", func() {
+	Context("a running pod on a node", func() {
 		const (
 			networkName = "meganet"
 			podName     = "tiny-winy-pod"
+			nodeName    = "hypernode"
 		)
 
 		var (
-			k8sClient k8sclient.Interface
-			pod       *v1.Pod
+			k8sClient          k8sclient.Interface
+			pod                *v1.Pod
+			node               *v1.Node
+			dummyPodController *dummyPodController
+			podControllerError error
 		)
 
 		BeforeEach(func() {
-			pod = podSpec(podName, namespace, networkName)
-			k8sClient = fakek8sclient.NewSimpleClientset(pod)
+			pod = podSpec(podName, namespace, nodeName, networkName)
+			node = nodeSpec(nodeName)
+			k8sClient = fakek8sclient.NewSimpleClientset(pod, node)
+			os.Setenv("NODENAME", nodeName)
+		})
+
+		When("NODENAME is set to an invalid value", func() {
+			var (
+				wbClient           wbclient.Interface
+				eventRecorder      *record.FakeRecorder
+				netAttachDefClient nadclient.Interface
+				stopChannel        chan struct{}
+			)
+
+			BeforeEach(func() {
+				os.Setenv("NODENAME", "invalid-node-name")
+
+				stopChannel = make(chan struct{})
+				wbClient = fakewbclient.NewSimpleClientset()
+				netAttachDefClient, podControllerError = newFakeNetAttachDefClient(namespace, netAttachDef(networkName, namespace, dummyNonWhereaboutsIPAMNetSpec(networkName)))
+				Expect(podControllerError).NotTo(HaveOccurred())
+
+				const maxEvents = 1
+				eventRecorder = record.NewFakeRecorder(maxEvents)
+			})
+
+			It("should fail", func() {
+				_, podControllerError = newDummyPodController(k8sClient, wbClient, netAttachDefClient, stopChannel, cniConfigDir, eventRecorder)
+				Expect(errors.IsNotFound(podControllerError)).Should(BeTrue())
+			})
+
+			AfterEach(func() {
+				if podControllerError != nil {
+					return
+				}
+				stopChannel <- struct{}{}
+			})
 		})
 
 		Context("IPPool featuring an allocation for the pod", func() {
@@ -98,7 +138,10 @@ var _ = Describe("IPControlLoop", func() {
 					const maxEvents = 10
 					stopChannel = make(chan struct{})
 					eventRecorder = record.NewFakeRecorder(maxEvents)
-					Expect(newDummyPodController(k8sClient, wbClient, netAttachDefClient, stopChannel, cniConfigDir, eventRecorder)).NotTo(BeNil())
+
+					dummyPodController, podControllerError = newDummyPodController(k8sClient, wbClient, netAttachDefClient, stopChannel, cniConfigDir, eventRecorder)
+					Expect(podControllerError).NotTo(HaveOccurred())
+					Expect(dummyPodController).NotTo(BeNil())
 
 					// assure the pool features an allocated address
 					ipPool, err := wbClient.WhereaboutsV1alpha1().IPPools(dummyNetworkPool.GetNamespace()).Get(context.TODO(), dummyNetworkPool.GetName(), metav1.GetOptions{})
@@ -107,6 +150,9 @@ var _ = Describe("IPControlLoop", func() {
 				})
 
 				AfterEach(func() {
+					if podControllerError != nil {
+						return
+					}
 					stopChannel <- struct{}{}
 				})
 
@@ -145,7 +191,9 @@ var _ = Describe("IPControlLoop", func() {
 
 					const maxEvents = 10
 					eventRecorder = record.NewFakeRecorder(maxEvents)
-					Expect(newDummyPodController(k8sClient, wbClient, netAttachDefClient, stopChannel, cniConfigDir, eventRecorder)).NotTo(BeNil())
+					dummyPodController, podControllerError = newDummyPodController(k8sClient, wbClient, netAttachDefClient, stopChannel, cniConfigDir, eventRecorder)
+					Expect(podControllerError).NotTo(HaveOccurred())
+					Expect(dummyPodController).NotTo(BeNil())
 
 					// assure the pool features an allocated address
 					ipPool, err := wbClient.WhereaboutsV1alpha1().IPPools(dummyNetworkPool.GetNamespace()).Get(context.TODO(), dummyNetworkPool.GetName(), metav1.GetOptions{})
@@ -196,10 +244,16 @@ var _ = Describe("IPControlLoop", func() {
 
 				const maxEvents = 1
 				eventRecorder = record.NewFakeRecorder(maxEvents)
-				Expect(newDummyPodController(k8sClient, wbClient, netAttachDefClient, stopChannel, cniConfigDir, eventRecorder)).NotTo(BeNil())
+
+				dummyPodController, podControllerError = newDummyPodController(k8sClient, wbClient, netAttachDefClient, stopChannel, cniConfigDir, eventRecorder)
+				Expect(podControllerError).NotTo(HaveOccurred())
+				Expect(dummyPodController).NotTo(BeNil())
 			})
 
 			AfterEach(func() {
+				if podControllerError != nil {
+					return
+				}
 				stopChannel <- struct{}{}
 			})
 
