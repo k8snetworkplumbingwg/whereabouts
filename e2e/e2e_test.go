@@ -47,7 +47,7 @@ var _ = Describe("Whereabouts functionality", func() {
 			ipv4TestRange   = "10.10.0.0/16"
 			testNetworkName = "wa-nad"
 			rsName          = "whereabouts-scale-test"
-			ipPoolName      = "10.10.0.0/16"
+			ipPoolCIDR      = "10.10.0.0/16"
 		)
 
 		var (
@@ -73,7 +73,7 @@ var _ = Describe("Whereabouts functionality", func() {
 			clientInfo, err = wbtestclient.NewClientInfo(config)
 			Expect(err).NotTo(HaveOccurred())
 
-			netAttachDef = macvlanNetworkWithWhereaboutsIPAMNetwork(testNetworkName, testNamespace, ipv4TestRange, []string{})
+			netAttachDef = macvlanNetworkWithWhereaboutsIPAMNetwork(testNetworkName, testNamespace, ipv4TestRange, []string{}, wbstorage.UnnamedNetwork, true)
 
 			By("creating a NetworkAttachmentDefinition for whereabouts")
 			_, err = clientInfo.AddNetAttachDef(netAttachDef)
@@ -134,7 +134,7 @@ var _ = Describe("Whereabouts functionality", func() {
 						testDualStackNetworkName,
 						testNamespace,
 						"",
-						testIPRangesDualStack)
+						testIPRangesDualStack, wbstorage.UnnamedNetwork, true)
 
 					By("creating DualStack NetworkAttachmentDefinition for whereabouts")
 					_, err = clientInfo.AddNetAttachDef(netAttachDefDualStack)
@@ -176,7 +176,7 @@ var _ = Describe("Whereabouts functionality", func() {
 						testDualStackNetworkName,
 						testNamespace,
 						ipv4TestRange,
-						testIPRangesDualStack)
+						testIPRangesDualStack, wbstorage.UnnamedNetwork, true)
 
 					By("creating DualStack NetworkAttachmentDefinition for whereabouts")
 					_, err = clientInfo.AddNetAttachDef(netAttachDefDualStack)
@@ -245,7 +245,7 @@ var _ = Describe("Whereabouts functionality", func() {
 				By("removing replicas and expecting 0 IP pool allocations")
 				Expect(
 					checkZeroIPPoolAllocationsAndReplicas(
-						clientInfo, k8sIPAM, rsName, testNamespace, ipPoolName, testNetworkName)).To(Succeed())
+						clientInfo, k8sIPAM, rsName, testNamespace, ipPoolCIDR, testNetworkName)).To(Succeed())
 
 				By("deleting replicaset with whereabouts net-attach-def")
 				Expect(clientInfo.DeleteReplicaSet(replicaSet)).To(Succeed())
@@ -256,7 +256,7 @@ var _ = Describe("Whereabouts functionality", func() {
 				for i := 0; i < testConfig.NumberOfIterations; i++ {
 					Expect(
 						checkZeroIPPoolAllocationsAndReplicas(
-							clientInfo, k8sIPAM, rsName, testNamespace, ipPoolName, testNetworkName)).To(Succeed())
+							clientInfo, k8sIPAM, rsName, testNamespace, ipPoolCIDR, testNetworkName)).To(Succeed())
 
 					allPods, err := clientInfo.Client.CoreV1().Pods(core.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
 					Expect(err).NotTo(HaveOccurred())
@@ -282,7 +282,7 @@ var _ = Describe("Whereabouts functionality", func() {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(podList.Items).NotTo(BeEmpty())
 
-					ipPool, err := k8sIPAM.GetIPPool(context.Background(), ipPoolName)
+					ipPool, err := k8sIPAM.GetIPPool(context.Background(), wbstorage.PoolIdentifier{IpRange: ipPoolCIDR, NetworkName: wbstorage.UnnamedNetwork})
 					Expect(err).NotTo(HaveOccurred())
 					Expect(poolconsistency.NewPoolConsistencyCheck(ipPool, podList.Items).MissingIPs()).To(BeEmpty())
 					Expect(poolconsistency.NewPoolConsistencyCheck(ipPool, podList.Items).StaleIPs()).To(BeEmpty())
@@ -327,14 +327,16 @@ var _ = Describe("Whereabouts functionality", func() {
 					Expect(
 						clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(
 							context.TODO(),
-							wbstorage.NormalizeRange(ipv4TestRange),
+							wbstorage.IPPoolName(wbstorage.PoolIdentifier{IpRange: ipv4TestRange, NetworkName: wbstorage.UnnamedNetwork}),
 							metav1.GetOptions{})).To(
 						WithTransform(poolAllocations, BeEmpty()),
 						"cannot have leaked IPAllocations in the system")
 				})
 
 				It("IPPools feature allocations", func() {
-					ipPool, err := clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(context.TODO(), wbstorage.NormalizeRange(ipv4TestRange), metav1.GetOptions{})
+					ipPool, err := clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(context.TODO(),
+						wbstorage.IPPoolName(wbstorage.PoolIdentifier{IpRange: ipv4TestRange, NetworkName: wbstorage.UnnamedNetwork}),
+						metav1.GetOptions{})
 					Expect(err).NotTo(HaveOccurred())
 					Expect(ipPool.Spec.Allocations).To(HaveLen(initialReplicaNumber))
 				})
@@ -346,7 +348,9 @@ var _ = Describe("Whereabouts functionality", func() {
 
 					Eventually(func() (map[string]v1alpha1.IPAllocation, error) {
 						ipPool, err := clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(
-							context.TODO(), wbstorage.NormalizeRange(ipv4TestRange), metav1.GetOptions{})
+							context.TODO(),
+							wbstorage.IPPoolName(wbstorage.PoolIdentifier{IpRange: ipv4TestRange, NetworkName: wbstorage.UnnamedNetwork}),
+							metav1.GetOptions{})
 						if err != nil {
 							return map[string]v1alpha1.IPAllocation{}, err
 						}
@@ -396,7 +400,7 @@ var _ = Describe("Whereabouts functionality", func() {
 				BeforeEach(func() {
 					var err error
 					tinyNetwork, err = clientInfo.AddNetAttachDef(
-						macvlanNetworkWithWhereaboutsIPAMNetwork(networkName, namespace, rangeWithTwoIPs, []string{}))
+						macvlanNetworkWithWhereaboutsIPAMNetwork(networkName, namespace, rangeWithTwoIPs, []string{}, wbstorage.UnnamedNetwork, true))
 					Expect(err).NotTo(HaveOccurred())
 
 					_, err = clientInfo.ProvisionStatefulSet(statefulSetName, namespace, serviceName, replicaNumber, networkName)
@@ -430,7 +434,7 @@ var _ = Describe("Whereabouts functionality", func() {
 					BeforeEach(func() {
 						ipPool, err := clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(
 							context.TODO(),
-							wbstorage.NormalizeRange(rangeWithTwoIPs),
+							wbstorage.IPPoolName(wbstorage.PoolIdentifier{IpRange: rangeWithTwoIPs, NetworkName: wbstorage.UnnamedNetwork}),
 							metav1.GetOptions{})
 						Expect(err).NotTo(HaveOccurred())
 						Expect(ipPool.Spec.Allocations).NotTo(BeEmpty())
@@ -467,7 +471,7 @@ var _ = Describe("Whereabouts functionality", func() {
 					It("can recover from an exhausted IP pool", func() {
 						ipPool, err := clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(
 							context.TODO(),
-							wbstorage.NormalizeRange(rangeWithTwoIPs),
+							wbstorage.IPPoolName(wbstorage.PoolIdentifier{IpRange: rangeWithTwoIPs, NetworkName: wbstorage.UnnamedNetwork}),
 							metav1.GetOptions{})
 						Expect(err).NotTo(HaveOccurred())
 						Expect(ipPool.Spec.Allocations).NotTo(BeEmpty())
@@ -475,6 +479,79 @@ var _ = Describe("Whereabouts functionality", func() {
 						Expect(allocationForPodRef(podRef, *ipPool).ContainerID).NotTo(Equal(containerID))
 					})
 				})
+			})
+		})
+
+		Context("Named ranges test", func() {
+			const (
+				testNetwork2Name = "wa-nad-2"
+			)
+			var (
+				netAttachDef2 *nettypes.NetworkAttachmentDefinition
+				pod2          *core.Pod
+			)
+
+			BeforeEach(func() {
+				var (
+					err error
+				)
+
+				netAttachDef2 = macvlanNetworkWithWhereaboutsIPAMNetwork(testNetwork2Name, testNamespace, ipv4TestRange, []string{}, testNetwork2Name, false)
+
+				By("creating a second NetworkAttachmentDefinition for whereabouts")
+				_, err = clientInfo.AddNetAttachDef(netAttachDef2)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			AfterEach(func() {
+				Expect(clientInfo.DelNetAttachDef(netAttachDef2)).To(Succeed())
+			})
+
+			BeforeEach(func() {
+				const (
+					singlePodName  = "whereabouts-basic-test"
+					singlePod2Name = "whereabouts-basic-test-2"
+				)
+				var err error
+
+				By("creating a pod with whereabouts net-attach-def")
+				pod, err = clientInfo.ProvisionPod(
+					singlePodName,
+					testNamespace,
+					podTierLabel(singlePodName),
+					entities.PodNetworkSelectionElements(testNetworkName),
+				)
+				Expect(err).NotTo(HaveOccurred())
+
+				By("creating a second pod with the second whereabouts net-attach-def")
+				pod2, err = clientInfo.ProvisionPod(
+					singlePod2Name,
+					testNamespace,
+					podTierLabel(singlePodName),
+					entities.PodNetworkSelectionElements(testNetwork2Name),
+				)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			AfterEach(func() {
+				By("deleting pod with whereabouts net-attach-def")
+				Expect(clientInfo.DeletePod(pod)).To(Succeed())
+				By("deleting the second pod with whereabouts net-attach-def")
+				Expect(clientInfo.DeletePod(pod2)).To(Succeed())
+			})
+
+			It("allocates the same IP to the Pods as they are in differenct address collision domains", func() {
+				By("checking pod IP is within whereabouts IPAM range")
+				secondaryIfaceIPs, err := retrievers.SecondaryIfaceIPValue(pod)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(secondaryIfaceIPs).NotTo(BeEmpty())
+
+				By("checking pod 2 IP is within whereabouts IPAM range")
+				secondaryIfaceIPs2, err := retrievers.SecondaryIfaceIPValue(pod2)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(secondaryIfaceIPs2).NotTo(BeEmpty())
+
+				Expect(secondaryIfaceIPs[0]).To(Equal(secondaryIfaceIPs2[0]))
 			})
 		})
 	})
@@ -510,7 +587,7 @@ func podTierLabel(podTier string) map[string]string {
 }
 
 // Waits for all replicas to be fully removed from replicaset, and checks that there are 0 ip pool allocations
-func checkZeroIPPoolAllocationsAndReplicas(clientInfo *wbtestclient.ClientInfo, k8sIPAM *wbstorage.KubernetesIPAM, rsName, namespace string, ipPoolName string, networkNames ...string) error {
+func checkZeroIPPoolAllocationsAndReplicas(clientInfo *wbtestclient.ClientInfo, k8sIPAM *wbstorage.KubernetesIPAM, rsName, namespace string, ipPoolCIDR string, networkNames ...string) error {
 	const (
 		emptyReplicaSet   = 0
 		rsSteadyTimeout   = 1200 * time.Second
@@ -535,7 +612,7 @@ func checkZeroIPPoolAllocationsAndReplicas(clientInfo *wbtestclient.ClientInfo, 
 		return err
 	}
 
-	if err = wbtestclient.WaitForZeroIPPoolAllocations(k8sIPAM, ipPoolName, zeroIPPoolTimeout); err != nil {
+	if err = wbtestclient.WaitForZeroIPPoolAllocations(k8sIPAM, ipPoolCIDR, zeroIPPoolTimeout); err != nil {
 		return err
 	}
 
@@ -559,7 +636,7 @@ func generateNetAttachDefSpec(name, namespace, config string) *nettypes.NetworkA
 	}
 }
 
-func macvlanNetworkWithWhereaboutsIPAMNetwork(networkName string, namespaceName string, ipRange string, ipRanges []string) *nettypes.NetworkAttachmentDefinition {
+func macvlanNetworkWithWhereaboutsIPAMNetwork(networkName string, namespaceName string, ipRange string, ipRanges []string, poolName string, enableOverlappingRanges bool) *nettypes.NetworkAttachmentDefinition {
 	macvlanConfig := fmt.Sprintf(`{
         "cniVersion": "0.3.0",
         "disableCheck": true,
@@ -576,11 +653,13 @@ func macvlanNetworkWithWhereaboutsIPAMNetwork(networkName string, namespaceName 
                     "range": "%s",
                     "ipRanges": %s,
                     "log_level": "debug",
-                    "log_file": "/tmp/wb"
+                    "log_file": "/tmp/wb",
+                    "network_name": "%s",
+                    "enable_overlapping_ranges": %v
                 }
             }
         ]
-    }`, ipRange, createIPRanges(ipRanges))
+    }`, ipRange, createIPRanges(ipRanges), poolName, enableOverlappingRanges)
 	return generateNetAttachDefSpec(networkName, namespaceName, macvlanConfig)
 }
 

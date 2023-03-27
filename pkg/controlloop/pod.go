@@ -209,7 +209,7 @@ func (pc *PodController) garbageCollectPodIPs(pod *v1.Pod) error {
 
 		var pools []*whereaboutsv1alpha1.IPPool
 		for _, rangeConfig := range ipamConfig.IPRanges {
-			pool, err := pc.ipPool(rangeConfig.Range)
+			pool, err := pc.ipPool(wbclient.PoolIdentifier{IpRange: rangeConfig.Range, NetworkName: ipamConfig.NetworkName})
 
 			if err != nil {
 				return fmt.Errorf("failed to get the IPPool data: %+v", err)
@@ -297,8 +297,8 @@ func (pc *PodController) ifaceNetAttachDef(ifaceStatus nadv1.NetworkStatus) (*na
 	return nad, nil
 }
 
-func (pc *PodController) ipPool(cidr string) (*whereaboutsv1alpha1.IPPool, error) {
-	pool, err := pc.ipPoolLister.IPPools(ipPoolsNamespace()).Get(wbclient.NormalizeRange(cidr))
+func (pc *PodController) ipPool(poolIdentifier wbclient.PoolIdentifier) (*whereaboutsv1alpha1.IPPool, error) {
+	pool, err := pc.ipPoolLister.IPPools(ipPoolsNamespace()).Get(wbclient.IPPoolName(poolIdentifier))
 	if err != nil {
 		return nil, err
 	}

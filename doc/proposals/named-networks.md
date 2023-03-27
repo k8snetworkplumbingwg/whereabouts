@@ -1,5 +1,7 @@
 # Support for named networks
 
+It was decided in March 2023 to implement scheme 3. This means that we added a new field to the `IPAMConfig` called `network_name` that is included in the `IPPool` name to distinguish it from other pools with the same CIDR.
+
 # Table of contents
 
 - [Introduction](#introduction)

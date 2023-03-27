@@ -26,6 +26,7 @@ import (
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
 	wbclient "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/clientset/versioned"
 	fakewbclient "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/clientset/versioned/fake"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage/kubernetes"
 )
 
 func TestIPControlLoop(t *testing.T) {
@@ -119,7 +120,7 @@ var _ = Describe("IPControlLoop", func() {
 			)
 
 			BeforeEach(func() {
-				dummyNetworkPool = ipPool(dummyNetIPRange, ipPoolsNamespace(), podReference(pod))
+				dummyNetworkPool = ipPool(kubernetes.PoolIdentifier{IpRange: dummyNetIPRange, NetworkName: kubernetes.UnnamedNetwork}, ipPoolsNamespace(), podReference(pod))
 				wbClient = fakewbclient.NewSimpleClientset(dummyNetworkPool)
 			})
 

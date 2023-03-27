@@ -107,14 +107,14 @@ func podNetworkStatusAnnotations(namespace string, networkNames ...string) strin
 	return string(serelizedNetStatus)
 }
 
-func ipPool(ipRange string, namespace string, podReferences ...string) *v1alpha1.IPPool {
+func ipPool(poolIdentifier kubernetes.PoolIdentifier, namespace string, podReferences ...string) *v1alpha1.IPPool {
 	return &v1alpha1.IPPool{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      kubernetes.NormalizeRange(ipRange),
+			Name:      kubernetes.IPPoolName(poolIdentifier),
 			Namespace: namespace,
 		},
 		Spec: v1alpha1.IPPoolSpec{
-			Range:       ipRange,
+			Range:       poolIdentifier.IpRange,
 			Allocations: allocations(podReferences...),
 		},
 	}

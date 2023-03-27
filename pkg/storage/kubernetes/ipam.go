@@ -74,6 +74,13 @@ type KubernetesIPAM struct {
 	namespace   string
 }
 
+const UnnamedNetwork string = ""
+
+type PoolIdentifier struct {
+	IpRange     string
+	NetworkName string
+}
+
 func toIPReservationList(allocations map[string]whereaboutsv1alpha1.IPAllocation, firstip net.IP) []whereaboutstypes.IPReservation {
 	reservelist := []whereaboutstypes.IPReservation{}
 	for offset, a := range allocations {
@@ -100,10 +107,10 @@ func toAllocationMap(reservelist []whereaboutstypes.IPReservation, firstip net.I
 }
 
 // GetIPPool returns a storage.IPPool for the given range
-func (i *KubernetesIPAM) GetIPPool(ctx context.Context, ipRange string) (storage.IPPool, error) {
-	normalized := NormalizeRange(ipRange)
+func (i *KubernetesIPAM) GetIPPool(ctx context.Context, poolIdentifier PoolIdentifier) (storage.IPPool, error) {
+	name := IPPoolName(poolIdentifier)
 
-	pool, err := i.getPool(ctx, normalized, ipRange)
+	pool, err := i.getPool(ctx, name, poolIdentifier.IpRange)
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +123,15 @@ func (i *KubernetesIPAM) GetIPPool(ctx context.Context, ipRange string) (storage
 	return &KubernetesIPPool{i.client, i.containerID, firstIP, pool}, nil
 }
 
-func NormalizeRange(ipRange string) string {
+func IPPoolName(poolIdentifier PoolIdentifier) string {
+	if poolIdentifier.NetworkName == UnnamedNetwork {
+		return normalizeRange(poolIdentifier.IpRange)
+	} else {
+		return fmt.Sprintf("%s-%s", poolIdentifier.NetworkName, normalizeRange(poolIdentifier.IpRange))
+	}
+}
+
+func normalizeRange(ipRange string) string {
 	// v6 filter
 	if ipRange[len(ipRange)-1] == ':' {
 		ipRange = ipRange + "0"
@@ -471,7 +486,7 @@ func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *Kubernete
 				return newips, err
 			}
 
-			pool, err = ipam.GetIPPool(requestCtx, ipRange.Range)
+			pool, err = ipam.GetIPPool(requestCtx, PoolIdentifier{IpRange: ipRange.Range, NetworkName: ipamConf.NetworkName})
 			if err != nil {
 				logging.Errorf("IPAM error reading pool allocations (attempt: %d): %v", j, err)
 				if e, ok := err.(storage.Temporary); ok && e.Temporary() {

@@ -13,9 +13,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
-func isIPPoolAllocationsEmpty(k8sIPAM *kubeClient.KubernetesIPAM, ipPoolName string) wait.ConditionFunc {
+func isIPPoolAllocationsEmpty(k8sIPAM *kubeClient.KubernetesIPAM, ipPoolCIDR string) wait.ConditionFunc {
 	return func() (bool, error) {
-		ipPool, err := k8sIPAM.GetIPPool(context.Background(), ipPoolName)
+		ipPool, err := k8sIPAM.GetIPPool(context.Background(), kubeClient.PoolIdentifier{IpRange: ipPoolCIDR, NetworkName: kubeClient.UnnamedNetwork})
 		noPoolError := fmt.Errorf("k8s pool initialized")
 		if errors.Is(err, noPoolError) {
 			return true, nil
@@ -33,6 +33,6 @@ func isIPPoolAllocationsEmpty(k8sIPAM *kubeClient.KubernetesIPAM, ipPoolName str
 
 // WaitForZeroIPPoolAllocations polls up to timeout seconds for IP pool allocations to be gone from the Kubernetes cluster.
 // Returns an error if any IP pool allocations remain after time limit, or if GETing IP pools causes an error.
-func WaitForZeroIPPoolAllocations(k8sIPAM *kubeClient.KubernetesIPAM, ipPoolName string, timeout time.Duration) error {
-	return wait.PollImmediate(time.Second, timeout, isIPPoolAllocationsEmpty(k8sIPAM, ipPoolName))
+func WaitForZeroIPPoolAllocations(k8sIPAM *kubeClient.KubernetesIPAM, ipPoolCIDR string, timeout time.Duration) error {
+	return wait.PollImmediate(time.Second, timeout, isIPPoolAllocationsEmpty(k8sIPAM, ipPoolCIDR))
 }
