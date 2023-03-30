@@ -210,7 +210,7 @@ func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, r
 	var assignedip net.IP
 	performedassignment := false
 	endip := IPAddOffset(lastip, uint64(1))
-	for i := firstip; !i.Equal(endip); i = IPAddOffset(i, uint64(1)) {
+	for i := firstip; ipnet.Contains(i) && !i.Equal(endip); i = IPAddOffset(i, uint64(1)) {
 		// if already reserved, skip it
 		if reserved[i.String()] {
 			continue
