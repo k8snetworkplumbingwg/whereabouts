@@ -140,6 +140,14 @@ You may want to provide a cron expression to configure how frequently the ip-rec
 
 Look for the following parameter `"reconciler_cron_expression"` located in `script/install-cni.sh` and change to your desired schedule.
 
+alternatively you can speficy the `WHEREABOUTS_RECONCILER_CRON` environment variable in your daemonset definition file to provide the cron expresion.
+
+```
+       env:
+        - name: WHEREABOUTS_RECONCILER_CRON
+          value: 30 * * * *
+```
+
 ## Installing etcd. (optional)
 
 etcd installation is optional. By default, we recommend the custom resource backend (given in the first example configuration).
