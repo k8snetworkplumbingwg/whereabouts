@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"net/netip"
 
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
@@ -16,8 +17,11 @@ type AssignmentError struct {
 	ipnet   net.IPNet
 }
 
+// Error returns the string representation of Assignment Error.
 func (a AssignmentError) Error() string {
-	return fmt.Sprintf("Could not allocate IP in range: ip: %v / - %v / range: %#v", a.firstIP, a.lastIP, a.ipnet)
+	addr, _ := netip.AddrFromSlice(a.ipnet.IP)
+	cidr, _ := a.ipnet.Mask.Size()
+	return fmt.Sprintf("Could not allocate IP in range: network: %s, start: %v, end: %v", netip.PrefixFrom(addr, cidr), a.firstIP, a.lastIP)
 }
 
 // AssignIP assigns an IP using a range and a reserve list.
