@@ -138,15 +138,11 @@ You'll note that in the `ipam` section there's a lot less parameters than are us
 
 You may want to provide a cron expression to configure how frequently the ip-reconciler runs. This is done via the flatfile.
 
-Look for the following parameter `"reconciler_cron_expression"` located in `script/install-cni.sh` and change to your desired schedule.
-
-alternatively you can speficy the `WHEREABOUTS_RECONCILER_CRON` environment variable in your daemonset definition file to provide the cron expresion.
-
-```
+You can speficy the `WHEREABOUTS_RECONCILER_CRON` environment variable in your daemonset definition file to override the default cron expression:
+```yaml
        env:
         - name: WHEREABOUTS_RECONCILER_CRON
           value: 30 * * * *
-```
 
 ## Installing etcd. (optional)
 
