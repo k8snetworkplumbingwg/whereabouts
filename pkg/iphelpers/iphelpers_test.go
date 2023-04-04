@@ -1,6 +1,7 @@
 package iphelpers
 
 import (
+	"fmt"
 	"net"
 	"testing"
 
@@ -205,5 +206,19 @@ var _ = Describe("IP helper utility functions", func() {
 		ip := net.IP([]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 255, 255})
 		bNum := ipAddrFromUint64(uintNum)
 		Expect(bNum).To(Equal(ip))
+	})
+})
+
+var _ = Describe("IPAddOffset operations", func() {
+	It("correctly calculates the offset between two IPv4 IPs", func() {
+		ip := net.ParseIP("192.168.1.1")
+		newIP := IPAddOffset(ip, 256)
+		Expect(fmt.Sprint(newIP)).To(Equal("192.168.2.1"))
+	})
+
+	It("correctly calculates the offset between two IPv6 IPs", func() {
+		ip := net.ParseIP("2000::1")
+		newIP := IPAddOffset(ip, 65535)
+		Expect(fmt.Sprint(newIP)).To(Equal("2000::1:0"))
 	})
 })
