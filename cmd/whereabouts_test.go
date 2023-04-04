@@ -185,7 +185,6 @@ var _ = Describe("Whereabouts operations", func() {
 		ipVersion := "4"
 		ipRange := "192.168.1.11-192.168.1.23/24"
 		ipGateway := "192.168.10.1"
-		expectedAddress := "192.168.1.1/24"
 
 		expectedAddresses := []string{
 			"192.168.1.11/24",
@@ -211,7 +210,7 @@ var _ = Describe("Whereabouts operations", func() {
 		ipVersion = "6"
 		ipRange = "2001::1/116"
 		ipGateway = "2001::f:1"
-		expectedAddress = "2001::1/116"
+		expectedAddress := "2001::1/116"
 		AllocateAndReleaseAddressesTest(
 			ipVersion,
 			ipamConfig(podName, podNamespace, ipRange, ipGateway, kubeConfigPath),
@@ -248,7 +247,7 @@ var _ = Describe("Whereabouts operations", func() {
 
 		ipRange = "2001:db8:5422:0005::-2001:db8:5422:0005:7fff:ffff:ffff:ffff/64"
 		ipGateway = "2001:db8:5422:0005::1"
-		expectedAddress = "2001:db8:5422:0005::/64"
+		expectedAddress = "2001:db8:5422:0005::1/64"
 
 		AllocateAndReleaseAddressesTest(
 			ipVersion,

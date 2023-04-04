@@ -81,78 +81,66 @@ func removeIdxFromSlice(s []types.IPReservation, i int) []types.IPReservation {
 	return s[:len(s)-1]
 }
 
-// IterateForAssignment iterates given an IP/IPNet and a list of reserved IPs
-func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, reservelist []types.IPReservation, excludeRanges []string, containerID string, podRef string) (net.IP, []types.IPReservation, error) {
-	firstip := rangeStart.To16()
-	var lastip net.IP
-	if rangeEnd != nil {
-		lastip = rangeEnd.To16()
-	} else {
-		var err error
-		firstip, lastip, err = iphelpers.GetIPRange(rangeStart, ipnet)
-		if err != nil {
-			logging.Errorf("GetIPRange request failed with: %v", err)
-			return net.IP{}, reservelist, err
-		}
+// IterateForAssignment iterates given an IP/IPNet and a list of reserved IPs and exluded subnets.
+// Valid IPs are contained within the ipnet, excluding the network and broadcast address.
+// If rangeStart is specified, it is respected if it lies within the ipnet.
+// If rangeEnd is specified, it is respected if it lies within the ipnet and if it is >= rangeStart.
+// reserveList holds a list of reserved IPs.
+// excludeRanges holds a list of subnets to be excluded (meaning the full subnet, including the network and broadcast IP).
+func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, reserveList []types.IPReservation, excludeRanges []string, containerID string, podRef string) (net.IP, []types.IPReservation, error) {
+	// Get the valid range, delimited by the ipnet's first and last usable IP as well as the rangeStart and rangeEnd.
+	firstIP, lastIP, err := iphelpers.GetIPRange(ipnet, rangeStart, rangeEnd)
+	if err != nil {
+		logging.Errorf("GetIPRange request failed with: %v", err)
+		return net.IP{}, reserveList, err
 	}
-	logging.Debugf("IterateForAssignment input >> ip: %v | ipnet: %v | first IP: %v | last IP: %v", rangeStart, ipnet, firstip, lastip)
+	logging.Debugf("IterateForAssignment input >> range_start: %v | range_end: %v | ipnet: %v | first IP: %v | last IP: %v",
+		rangeStart, rangeEnd, ipnet, firstIP, lastIP)
 
+	// Build reserved map.
 	reserved := make(map[string]bool)
-	for _, r := range reservelist {
+	for _, r := range reserveList {
 		reserved[r.IP.String()] = true
 	}
-
-	// excluded,            "192.168.2.229/30", "192.168.1.229/30",
+	// Build excluded list, "192.168.2.229/30", "192.168.1.229/30".
 	excluded := []*net.IPNet{}
 	for _, v := range excludeRanges {
 		_, subnet, _ := net.ParseCIDR(v)
 		excluded = append(excluded, subnet)
 	}
 
-	// Iterate every IP address in the range
-	var assignedip net.IP
-	performedassignment := false
-	endip := iphelpers.IPAddOffset(lastip, uint64(1))
-	for i := firstip; ipnet.Contains(i) && iphelpers.CompareIPs(i, endip) < 0; i = iphelpers.IPAddOffset(i, uint64(1)) {
-		// if already reserved, skip it
-		if reserved[i.String()] {
+	// Iterate over every IP address in the range, accounting for reserved IPs and exclude ranges. Make sure that ip is
+	// within ipnet, and make sure that ip is smaller than lastIP.
+	for ip := firstIP; ipnet.Contains(ip) && iphelpers.CompareIPs(ip, lastIP) <= 0; ip = iphelpers.IncIP(ip) {
+		// If already reserved, skip it.
+		if reserved[ip.String()] {
 			continue
 		}
-
-		// Lastly, we need to check if this IP is within the range of excluded subnets
-		isAddrExcluded := false
-		for _, subnet := range excluded {
-			if subnet.Contains(i) {
-				isAddrExcluded = true
-				firstExcluded, _, _ := net.ParseCIDR(subnet.String())
-				_, lastExcluded, _ := iphelpers.GetIPRange(firstExcluded, *subnet)
-				if lastExcluded != nil {
-					if i.To4() != nil {
-						// exclude broadcast address
-						i = iphelpers.IPAddOffset(lastExcluded, uint64(1))
-					} else {
-						i = lastExcluded
-					}
-					logging.Debugf("excluding %v and moving to the next available ip: %v", subnet, i)
-				}
-			}
-		}
-		if isAddrExcluded {
+		// If this IP is within the range of one of the excluded subnets, jump to the exluded subnet's broadcast address
+		// and skip.
+		if skipTo := skipExcludedSubnets(ip, excluded); skipTo != nil {
+			ip = skipTo
 			continue
 		}
-
-		// Ok, this one looks like we can assign it!
-		performedassignment = true
-
-		assignedip = i
-		logging.Debugf("Reserving IP: |%v|", assignedip.String()+" "+containerID)
-		reservelist = append(reservelist, types.IPReservation{IP: assignedip, ContainerID: containerID, PodRef: podRef})
-		break
+		// Assign and reserve the IP and return.
+		logging.Debugf("Reserving IP: |%v|", ip.String()+" "+containerID)
+		reserveList = append(reserveList, types.IPReservation{IP: ip, ContainerID: containerID, PodRef: podRef})
+		return ip, reserveList, nil
 	}
 
-	if !performedassignment {
-		return net.IP{}, reservelist, AssignmentError{firstip, lastip, ipnet}
-	}
+	// No IP address for assignment found, return an error.
+	return net.IP{}, reserveList, AssignmentError{firstIP, lastIP, ipnet}
+}
 
-	return assignedip, reservelist, nil
+// skipExcludedSubnets iterates through all subnets and checks if ip is part of them. If i is part of one of the subnets,
+// return the subnet's broadcast address.
+func skipExcludedSubnets(ip net.IP, excluded []*net.IPNet) net.IP {
+	for _, subnet := range excluded {
+		if subnet.Contains(ip) {
+			broadcastIP := iphelpers.SubnetBroadcastIP(*subnet)
+			logging.Debugf("excluding %v and moving to the end of the excluded range: %v", subnet, broadcastIP)
+			return broadcastIP
+		}
+	}
+	return nil
 }

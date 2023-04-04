@@ -236,4 +236,130 @@ var _ = Describe("Allocation operations", func() {
 
 	})
 
+	// Make sure that the network IP and the broadcast IP are excluded from the range.
+	// According to https://github.com/k8snetworkplumbingwg/whereabouts, we look at a range "... excluding the first
+	// network address and the last broadcast address".
+	When("no range_end is specified", func() {
+		It("the range start and end must be ignored if they are not within the bounds of the range for IPv4", func() {
+			_, ipnet, err := net.ParseCIDR("192.168.0.0/29")
+			Expect(err).NotTo(HaveOccurred())
+			rangeStart := net.ParseIP("192.168.0.0") // Network address, out of bounds.
+			newip, _, err := IterateForAssignment(*ipnet, rangeStart, nil, nil, nil, "0xdeadbeef", "")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(fmt.Sprint(newip)).To(Equal("192.168.0.1"))
+		})
+	})
+
+	When("a range_end is specified", func() {
+		It("the range start and end must be ignored if they are not within the bounds of the range for IPv4", func() {
+			_, ipnet, err := net.ParseCIDR("192.168.0.0/29")
+			Expect(err).NotTo(HaveOccurred())
+			rangeStart := net.ParseIP("192.168.0.0") // Network address, out of bounds.
+			rangeEnd := net.ParseIP("192.168.0.8")   // Broadcast address, out of bounds.
+			newip, _, err := IterateForAssignment(*ipnet, rangeStart, rangeEnd, nil, nil, "0xdeadbeef", "")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(fmt.Sprint(newip)).To(Equal("192.168.0.1"))
+		})
+	})
+
+	// Make sure that the end_range parameter is respected even when it is part of the exclude range.
+	It("can IterateForAssignment on an IPv4 address excluding a range and respect endrange value", func() {
+		_, ipnet, err := net.ParseCIDR("192.168.0.0/28")
+		Expect(err).NotTo(HaveOccurred())
+		startip := net.ParseIP("192.168.0.1")
+		lastip := net.ParseIP("192.168.0.6")
+
+		ipres := []types.IPReservation{
+			{
+				IP:     net.ParseIP("192.168.0.1"),
+				PodRef: "default/pod1",
+			},
+			{
+				IP:     net.ParseIP("192.168.0.2"),
+				PodRef: "default/pod1",
+			},
+			{
+				IP:     net.ParseIP("192.168.0.3"),
+				PodRef: "default/pod1",
+			},
+		}
+		exrange := []string{"192.168.0.4/30"}
+		_, _, err = IterateForAssignment(*ipnet, startip, lastip, ipres, exrange, "0xdeadbeef", "")
+		Expect(err).To(MatchError(HavePrefix("Could not allocate IP in range")))
+	})
+
+	Context("test reserve lists", func() {
+		When("an empty reserve list is provided", func() {
+			It("is properly updated", func() {
+				_, ipnet, err := net.ParseCIDR("192.168.0.0/28")
+				Expect(err).NotTo(HaveOccurred())
+				startip := net.ParseIP("192.168.0.1")
+				lastip := net.ParseIP("192.168.0.6")
+
+				ipres := []types.IPReservation{}
+				_, ipres, err = IterateForAssignment(*ipnet, startip, lastip, ipres, nil, "0xdeadbeef", "dummy-0")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(len(ipres)).To(Equal(1))
+				Expect(fmt.Sprint(ipres[0].IP)).To(Equal("192.168.0.1"))
+			})
+		})
+
+		When("a reserve list is provided", func() {
+			It("is properly updated", func() {
+				_, ipnet, err := net.ParseCIDR("192.168.0.0/28")
+				Expect(err).NotTo(HaveOccurred())
+				startip := net.ParseIP("192.168.0.1")
+				lastip := net.ParseIP("192.168.0.6")
+
+				ipres := []types.IPReservation{
+					{
+						IP:     net.ParseIP("192.168.0.1"),
+						PodRef: "default/pod1",
+					},
+					{
+						IP:     net.ParseIP("192.168.0.2"),
+						PodRef: "default/pod1",
+					},
+					{
+						IP:     net.ParseIP("192.168.0.3"),
+						PodRef: "default/pod1",
+					},
+				}
+
+				_, ipres, err = IterateForAssignment(*ipnet, startip, lastip, ipres, nil, "0xdeadbeef", "dummy-0")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(len(ipres)).To(Equal(4))
+				Expect(fmt.Sprint(ipres[3].IP)).To(Equal("192.168.0.4"))
+			})
+		})
+
+		When("a reserve list with a hole is provided", func() {
+			It("is properly updated", func() {
+				_, ipnet, err := net.ParseCIDR("192.168.0.0/28")
+				Expect(err).NotTo(HaveOccurred())
+				startip := net.ParseIP("192.168.0.1")
+				lastip := net.ParseIP("192.168.0.6")
+
+				ipres := []types.IPReservation{
+					{
+						IP:     net.ParseIP("192.168.0.1"),
+						PodRef: "default/pod1",
+					},
+					{
+						IP:     net.ParseIP("192.168.0.2"),
+						PodRef: "default/pod1",
+					},
+					{
+						IP:     net.ParseIP("192.168.0.5"),
+						PodRef: "default/pod1",
+					},
+				}
+
+				_, ipres, err = IterateForAssignment(*ipnet, startip, lastip, ipres, nil, "0xdeadbeef", "dummy-0")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(len(ipres)).To(Equal(4))
+				Expect(fmt.Sprint(ipres[3].IP)).To(Equal("192.168.0.3"))
+			})
+		})
+	})
 })

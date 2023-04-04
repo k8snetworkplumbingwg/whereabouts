@@ -175,55 +175,39 @@ func IsIPv4(checkip net.IP) bool {
 	return checkip.To4() != nil
 }
 
-// GetIPRange returns the first and last IP in a range
-func GetIPRange(ip net.IP, ipnet net.IPNet) (net.IP, net.IP, error) {
-	mask := ipnet.Mask
-	ones, bits := mask.Size()
-	masklen := bits - ones
-
-	// Error when the mask isn't large enough.
-	if masklen < 2 {
-		return nil, nil, fmt.Errorf("net mask is too short, must be 2 or more: %v", masklen)
+// GetIPRange returns the first and last IP in a range.
+// If either rangeStart or rangeEnd are inside the range of first usable IP to last usable IP, then use them. Otherwise,
+// they will be silently ignored and the first usable IP and/or last usable IP will be used. A valid rangeEnd cannot
+// be smaller than a valid rangeStart, otherwise it will be silently ignored.
+// We do this also for backwards compatibility to avoid throwing unexpected errors in existing environments.
+func GetIPRange(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP) (net.IP, net.IP, error) {
+	firstUsableIP, err := FirstUsableIP(ipnet)
+	if err != nil {
+		return nil, nil, err
 	}
-
-	// get network part
-	network := ip.Mask(ipnet.Mask)
-	// get bitmask for host
-	hostMask := net.IPMask(append([]byte{}, ipnet.Mask...))
-	for i, n := range hostMask {
-		hostMask[i] = ^n
+	lastUsableIP, err := LastUsableIP(ipnet)
+	if err != nil {
+		return nil, nil, err
 	}
-	// get host part of ip
-	first := ip.Mask(net.IPMask(hostMask))
-	// if ip is just same as ipnet.IP, i.e. just network address,
-	// increment it for start ip
-	if ip.Equal(ipnet.IP) {
-		first[len(first)-1] = 0x1
+	if rangeStart != nil {
+		rangeStartInRange, err := IsIPInRange(rangeStart, firstUsableIP, lastUsableIP)
+		if err != nil {
+			return nil, nil, err
+		}
+		if rangeStartInRange {
+			firstUsableIP = rangeStart
+		}
 	}
-	// calculate last byte
-	last := hostMask
-	// if IPv4 case, decrement 1 for broadcasting address
-	if ip.To4() != nil {
-		last[len(last)-1]--
+	if rangeEnd != nil {
+		rangeEndInRange, err := IsIPInRange(rangeEnd, firstUsableIP, lastUsableIP)
+		if err != nil {
+			return nil, nil, err
+		}
+		if rangeEndInRange {
+			lastUsableIP = rangeEnd
+		}
 	}
-	// get first ip and last ip based on network part + host part
-	firstIPbyte, _ := mergeIPAddress([]byte(network), first)
-	lastIPbyte, _ := mergeIPAddress([]byte(network), last)
-	firstIP := net.IP(firstIPbyte).To16()
-	lastIP := net.IP(lastIPbyte).To16()
-
-	return firstIP, lastIP, nil
-}
-
-func mergeIPAddress(net, host []byte) ([]byte, error) {
-	if len(net) != len(host) {
-		return nil, fmt.Errorf("not matched")
-	}
-	addr := append([]byte{}, net...)
-	for i := range net {
-		addr[i] = net[i] | host[i]
-	}
-	return addr, nil
+	return firstUsableIP, lastUsableIP, nil
 }
 
 // byteSliceAdd adds ar1 to ar2
