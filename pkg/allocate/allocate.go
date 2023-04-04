@@ -2,7 +2,6 @@ package allocate
 
 import (
 	"fmt"
-	"math"
 	"net"
 
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/iphelpers"
@@ -82,103 +81,6 @@ func removeIdxFromSlice(s []types.IPReservation, i int) []types.IPReservation {
 	return s[:len(s)-1]
 }
 
-// byteSliceAdd adds ar1 to ar2
-// note: ar1/ar2 should be 16-length array
-func byteSliceAdd(ar1, ar2 []byte) ([]byte, error) {
-	if len(ar1) != len(ar2) {
-		return nil, fmt.Errorf("byteSliceAdd: bytes array mismatch: %v != %v", len(ar1), len(ar2))
-	}
-	carry := uint(0)
-
-	sumByte := make([]byte, 16)
-	for n := range ar1 {
-		sum := uint(ar1[15-n]) + uint(ar2[15-n]) + carry
-		carry = 0
-		if sum > 255 {
-			carry = 1
-		}
-		sumByte[15-n] = uint8(sum)
-	}
-
-	return sumByte, nil
-}
-
-// byteSliceSub subtracts ar2 from ar1. This function assumes that ar1 > ar2
-// note: ar1/ar2 should be 16-length array
-func byteSliceSub(ar1, ar2 []byte) ([]byte, error) {
-	if len(ar1) != len(ar2) {
-		return nil, fmt.Errorf("byteSliceSub: bytes array mismatch")
-	}
-	carry := int(0)
-
-	sumByte := make([]byte, 16)
-	for n := range ar1 {
-		var sum int
-		sum = int(ar1[15-n]) - int(ar2[15-n]) - carry
-		if sum < 0 {
-			sum = 0x100 - int(ar1[15-n]) - int(ar2[15-n]) - carry
-			carry = 1
-		} else {
-			carry = 0
-		}
-		sumByte[15-n] = uint8(sum)
-	}
-
-	return sumByte, nil
-}
-
-func ipAddrToUint64(ip net.IP) uint64 {
-	num := uint64(0)
-	ipArray := []byte(ip)
-	for n := range ipArray {
-		num = num << 8
-		num = uint64(ipArray[n]) + num
-	}
-	return num
-}
-
-func ipAddrFromUint64(num uint64) net.IP {
-	idxByte := make([]byte, 16)
-	i := num
-	for n := range idxByte {
-		idxByte[15-n] = byte(0xff & i)
-		i = i >> 8
-	}
-	return net.IP(idxByte)
-}
-
-// IPGetOffset gets offset between ip1 and ip2. This assumes ip1 > ip2 (from IP representation point of view)
-func IPGetOffset(ip1, ip2 net.IP) uint64 {
-	if ip1.To4() == nil && ip2.To4() != nil {
-		return 0
-	}
-
-	if ip1.To4() != nil && ip2.To4() == nil {
-		return 0
-	}
-
-	if len([]byte(ip1)) != len([]byte(ip2)) {
-		return 0
-	}
-
-	ipOffset, _ := byteSliceSub([]byte(ip1.To16()), []byte(ip2.To16()))
-	return ipAddrToUint64(ipOffset)
-}
-
-// IPAddOffset show IP address plus given offset
-func IPAddOffset(ip net.IP, offset uint64) net.IP {
-	// Check IPv4 and its offset range
-	if ip.To4() != nil && offset >= math.MaxUint32 {
-		return nil
-	}
-
-	// make pseudo IP variable for offset
-	idxIP := ipAddrFromUint64(offset)
-
-	b, _ := byteSliceAdd([]byte(ip.To16()), []byte(idxIP))
-	return net.IP(b)
-}
-
 // IterateForAssignment iterates given an IP/IPNet and a list of reserved IPs
 func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, reservelist []types.IPReservation, excludeRanges []string, containerID string, podRef string) (net.IP, []types.IPReservation, error) {
 	firstip := rangeStart.To16()
@@ -210,8 +112,8 @@ func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, r
 	// Iterate every IP address in the range
 	var assignedip net.IP
 	performedassignment := false
-	endip := IPAddOffset(lastip, uint64(1))
-	for i := firstip; ipnet.Contains(i) && iphelpers.CompareIPs(i, endip) < 0; i = IPAddOffset(i, uint64(1)) {
+	endip := iphelpers.IPAddOffset(lastip, uint64(1))
+	for i := firstip; ipnet.Contains(i) && iphelpers.CompareIPs(i, endip) < 0; i = iphelpers.IPAddOffset(i, uint64(1)) {
 		// if already reserved, skip it
 		if reserved[i.String()] {
 			continue
@@ -227,7 +129,7 @@ func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, r
 				if lastExcluded != nil {
 					if i.To4() != nil {
 						// exclude broadcast address
-						i = IPAddOffset(lastExcluded, uint64(1))
+						i = iphelpers.IPAddOffset(lastExcluded, uint64(1))
 					} else {
 						i = lastExcluded
 					}

@@ -22,6 +22,7 @@ import (
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/allocate"
 	whereaboutsv1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
 	wbclient "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/clientset/versioned"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/iphelpers"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage"
 	whereaboutstypes "github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
@@ -91,7 +92,7 @@ func toIPReservationList(allocations map[string]whereaboutsv1alpha1.IPAllocation
 			logging.Errorf("Error decoding ip offset (backend: kubernetes): %v", err)
 			continue
 		}
-		ip := allocate.IPAddOffset(firstip, uint64(numOffset))
+		ip := iphelpers.IPAddOffset(firstip, uint64(numOffset))
 		reservelist = append(reservelist, whereaboutstypes.IPReservation{IP: ip, ContainerID: a.ContainerID, PodRef: a.PodRef})
 	}
 	return reservelist
@@ -100,7 +101,7 @@ func toIPReservationList(allocations map[string]whereaboutsv1alpha1.IPAllocation
 func toAllocationMap(reservelist []whereaboutstypes.IPReservation, firstip net.IP) map[string]whereaboutsv1alpha1.IPAllocation {
 	allocations := make(map[string]whereaboutsv1alpha1.IPAllocation)
 	for _, r := range reservelist {
-		index := allocate.IPGetOffset(r.IP, firstip)
+		index := iphelpers.IPGetOffset(r.IP, firstip)
 		allocations[fmt.Sprintf("%d", index)] = whereaboutsv1alpha1.IPAllocation{ContainerID: r.ContainerID, PodRef: r.PodRef}
 	}
 	return allocations
