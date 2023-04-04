@@ -143,7 +143,7 @@ You can speficy the `WHEREABOUTS_RECONCILER_CRON` environment variable in your d
        env:
         - name: WHEREABOUTS_RECONCILER_CRON
           value: 30 * * * *
-
+```
 ## Installing etcd. (optional)
 
 etcd installation is optional. By default, we recommend the custom resource backend (given in the first example configuration).
