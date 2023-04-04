@@ -25,22 +25,26 @@ func CompareIPs(ipX net.IP, ipY net.IP) int {
 	return 0
 }
 
-// IPGetOffset gets offset between ip1 and ip2. This assumes ip1 > ip2 (from IP representation point of view)
-func IPGetOffset(ip1, ip2 net.IP) uint64 {
-	if ip1.To4() == nil && ip2.To4() != nil {
-		return 0
-	}
-
+// IPGetOffset gets the absolute offset between ip1 and ip2, meaning that this offset will always be a positive number.
+func IPGetOffset(ip1, ip2 net.IP) (uint64, error) {
 	if ip1.To4() != nil && ip2.To4() == nil {
-		return 0
+		return 0, fmt.Errorf("cannot calculate offset between IPv4 (%s) and IPv6 address (%s)", ip1, ip2)
+	}
+	if ip1.To4() == nil && ip2.To4() != nil {
+		return 0, fmt.Errorf("cannot calculate offset between IPv6 (%s) and IPv4 address (%s)", ip1, ip2)
 	}
 
-	if len([]byte(ip1)) != len([]byte(ip2)) {
-		return 0
+	var ipOffset []byte
+	var err error
+	if CompareIPs(ip1, ip2) < 0 {
+		ipOffset, err = byteSliceSub([]byte(ip2.To16()), []byte(ip1.To16()))
+	} else {
+		ipOffset, err = byteSliceSub([]byte(ip1.To16()), []byte(ip2.To16()))
 	}
-
-	ipOffset, _ := byteSliceSub([]byte(ip1.To16()), []byte(ip2.To16()))
-	return ipAddrToUint64(ipOffset)
+	if err != nil {
+		return 0, err
+	}
+	return ipAddrToUint64(ipOffset), nil
 }
 
 // IPAddOffset show IP address plus given offset

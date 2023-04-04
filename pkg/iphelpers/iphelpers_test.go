@@ -61,51 +61,95 @@ var _ = Describe("IPGetOffset operations", func() {
 	It("correctly calculates the offset between two IPv4 IPs", func() {
 		ip1 := net.ParseIP("192.168.1.1")
 		ip2 := net.ParseIP("192.168.1.0")
-		offset := IPGetOffset(ip1, ip2)
+		offset, err := IPGetOffset(ip1, ip2)
+		Expect(err).NotTo(HaveOccurred())
 		Expect(offset).To(Equal(uint64(1)))
+	})
+
+	It("correctly calculates the offset between two IPv4 IPs in different notations when the first value is in To4", func() {
+		ip1 := net.ParseIP("192.168.1.1").To4()
+		ip2 := net.ParseIP("192.168.1.0").To16()
+		offset, err := IPGetOffset(ip1, ip2)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(offset).To(Equal(uint64(1)))
+
+		ip1 = net.ParseIP("192.168.4.0").To4()
+		ip2 = net.ParseIP("192.168.3.0").To16()
+		offset, err = IPGetOffset(ip1, ip2)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(offset).To(Equal(uint64(256)))
+	})
+
+	It("correctly calculates the offset between two IPv4 IPs in different notations when the second value in in To4", func() {
+		ip1 := net.ParseIP("192.168.1.1").To16()
+		ip2 := net.ParseIP("192.168.1.0").To4()
+		offset, err := IPGetOffset(ip1, ip2)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(offset).To(Equal(uint64(1)))
+	})
+
+	It("correctly calculates the offset between two IPv4 IPs inverted", func() {
+		ip1 := net.ParseIP("192.168.1.0").To16()
+		ip2 := net.ParseIP("192.168.1.1").To4()
+		offset, err := IPGetOffset(ip1, ip2)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(offset).To(Equal(uint64(1)))
+
+		ip1 = net.ParseIP("192.168.1.0").To16()
+		ip2 = net.ParseIP("192.168.2.255").To4()
+		offset, err = IPGetOffset(ip1, ip2)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(offset).To(Equal(uint64(511)))
 	})
 
 	It("confirms the IPGetOffset normal case", func() {
 		ip1 := net.ParseIP("192.168.2.255")
 		ip2 := net.ParseIP("192.168.2.1")
-		offset1 := IPGetOffset(ip1, ip2)
-		Expect(offset1).To(Equal(uint64(254)))
+		offset, err := IPGetOffset(ip1, ip2)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(offset).To(Equal(uint64(254)))
 
-		ip3 := net.ParseIP("ff02::ff")
-		ip4 := net.ParseIP("ff02::1")
-		offset2 := IPGetOffset(ip3, ip4)
-		Expect(offset2).To(Equal(uint64(254)))
+		ip1 = net.ParseIP("ff02::ff")
+		ip2 = net.ParseIP("ff02::1")
+		offset, err = IPGetOffset(ip1, ip2)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(offset).To(Equal(uint64(254)))
 	})
 
 	It("confirms the IPGetOffset carry case", func() {
 		ip1 := net.ParseIP("192.168.3.0")
 		ip2 := net.ParseIP("192.168.2.1")
-		offset1 := IPGetOffset(ip1, ip2)
-		Expect(offset1).To(Equal(uint64(255)))
+		offset, err := IPGetOffset(ip1, ip2)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(offset).To(Equal(uint64(255)))
 
-		ip3 := net.ParseIP("ff02::100")
-		ip4 := net.ParseIP("ff02::1")
-		offset2 := IPGetOffset(ip3, ip4)
-		Expect(offset2).To(Equal(uint64(255)))
+		ip1 = net.ParseIP("ff02::100")
+		ip2 = net.ParseIP("ff02::1")
+		offset, err = IPGetOffset(ip1, ip2)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(offset).To(Equal(uint64(255)))
 
-		ip5 := net.ParseIP("ff02::1:0")
-		ip6 := net.ParseIP("ff02::1")
-		offset3 := IPGetOffset(ip5, ip6)
-		Expect(offset3).To(Equal(uint64(0xffff)))
+		ip1 = net.ParseIP("ff02::1:0")
+		ip2 = net.ParseIP("ff02::1")
+		offset, err = IPGetOffset(ip1, ip2)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(offset).To(Equal(uint64(0xffff)))
 	})
 
 	It("confirms the IPGetOffset error case", func() {
 		// cannot get offset from v4/v6
 		ip1 := net.ParseIP("192.168.3.0")
 		ip2 := net.ParseIP("ff02::1")
-		offset1 := IPGetOffset(ip1, ip2)
-		Expect(offset1).To(Equal(uint64(0)))
+		offset, err := IPGetOffset(ip1, ip2)
+		Expect(err).To(MatchError("cannot calculate offset between IPv4 (192.168.3.0) and IPv6 address (ff02::1)"))
+		Expect(offset).To(Equal(uint64(0)))
 
 		// cannot get offset from v6/v4
-		ip3 := net.ParseIP("ff02::1")
-		ip4 := net.ParseIP("192.168.3.0")
-		offset2 := IPGetOffset(ip3, ip4)
-		Expect(offset2).To(Equal(uint64(0)))
+		ip1 = net.ParseIP("ff02::1")
+		ip2 = net.ParseIP("192.168.3.0")
+		offset, err = IPGetOffset(ip1, ip2)
+		Expect(err).To(MatchError("cannot calculate offset between IPv6 (ff02::1) and IPv4 address (192.168.3.0)"))
+		Expect(offset).To(Equal(uint64(0)))
 	})
 })
 

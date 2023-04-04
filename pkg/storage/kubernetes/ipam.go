@@ -98,13 +98,16 @@ func toIPReservationList(allocations map[string]whereaboutsv1alpha1.IPAllocation
 	return reservelist
 }
 
-func toAllocationMap(reservelist []whereaboutstypes.IPReservation, firstip net.IP) map[string]whereaboutsv1alpha1.IPAllocation {
+func toAllocationMap(reservelist []whereaboutstypes.IPReservation, firstip net.IP) (map[string]whereaboutsv1alpha1.IPAllocation, error) {
 	allocations := make(map[string]whereaboutsv1alpha1.IPAllocation)
 	for _, r := range reservelist {
-		index := iphelpers.IPGetOffset(r.IP, firstip)
+		index, err := iphelpers.IPGetOffset(r.IP, firstip)
+		if err != nil {
+			return nil, err
+		}
 		allocations[fmt.Sprintf("%d", index)] = whereaboutsv1alpha1.IPAllocation{ContainerID: r.ContainerID, PodRef: r.PodRef}
 	}
-	return allocations
+	return allocations, nil
 }
 
 // GetIPPool returns a storage.IPPool for the given range
@@ -286,7 +289,11 @@ func (p *KubernetesIPPool) Update(ctx context.Context, reservations []whereabout
 	}
 
 	// update the pool before marshalling once again
-	p.pool.Spec.Allocations = toAllocationMap(reservations, p.firstIP)
+	allocations, err := toAllocationMap(reservations, p.firstIP)
+	if err != nil {
+		return err
+	}
+	p.pool.Spec.Allocations = allocations
 	modBytes, err := json.Marshal(p.pool)
 	if err != nil {
 		return err
