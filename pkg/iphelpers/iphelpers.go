@@ -61,6 +61,11 @@ func IPAddOffset(ip net.IP, offset uint64) net.IP {
 	return net.IP(b)
 }
 
+// IsIPv4 checks if an IP is v4.
+func IsIPv4(checkip net.IP) bool {
+	return checkip.To4() != nil
+}
+
 // byteSliceAdd adds ar1 to ar2
 // note: ar1/ar2 should be 16-length array
 func byteSliceAdd(ar1, ar2 []byte) ([]byte, error) {

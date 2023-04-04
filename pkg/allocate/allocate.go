@@ -207,8 +207,3 @@ func GetIPRange(ip net.IP, ipnet net.IPNet) (net.IP, net.IP, error) {
 
 	return firstIP, lastIP, nil
 }
-
-// IsIPv4 checks if an IP is v4.
-func IsIPv4(checkip net.IP) bool {
-	return checkip.To4() != nil
-}
