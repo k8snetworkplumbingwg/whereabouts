@@ -175,6 +175,57 @@ func IsIPv4(checkip net.IP) bool {
 	return checkip.To4() != nil
 }
 
+// GetIPRange returns the first and last IP in a range
+func GetIPRange(ip net.IP, ipnet net.IPNet) (net.IP, net.IP, error) {
+	mask := ipnet.Mask
+	ones, bits := mask.Size()
+	masklen := bits - ones
+
+	// Error when the mask isn't large enough.
+	if masklen < 2 {
+		return nil, nil, fmt.Errorf("net mask is too short, must be 2 or more: %v", masklen)
+	}
+
+	// get network part
+	network := ip.Mask(ipnet.Mask)
+	// get bitmask for host
+	hostMask := net.IPMask(append([]byte{}, ipnet.Mask...))
+	for i, n := range hostMask {
+		hostMask[i] = ^n
+	}
+	// get host part of ip
+	first := ip.Mask(net.IPMask(hostMask))
+	// if ip is just same as ipnet.IP, i.e. just network address,
+	// increment it for start ip
+	if ip.Equal(ipnet.IP) {
+		first[len(first)-1] = 0x1
+	}
+	// calculate last byte
+	last := hostMask
+	// if IPv4 case, decrement 1 for broadcasting address
+	if ip.To4() != nil {
+		last[len(last)-1]--
+	}
+	// get first ip and last ip based on network part + host part
+	firstIPbyte, _ := mergeIPAddress([]byte(network), first)
+	lastIPbyte, _ := mergeIPAddress([]byte(network), last)
+	firstIP := net.IP(firstIPbyte).To16()
+	lastIP := net.IP(lastIPbyte).To16()
+
+	return firstIP, lastIP, nil
+}
+
+func mergeIPAddress(net, host []byte) ([]byte, error) {
+	if len(net) != len(host) {
+		return nil, fmt.Errorf("not matched")
+	}
+	addr := append([]byte{}, net...)
+	for i := range net {
+		addr[i] = net[i] | host[i]
+	}
+	return addr, nil
+}
+
 // byteSliceAdd adds ar1 to ar2
 // note: ar1/ar2 should be 16-length array
 func byteSliceAdd(ar1, ar2 []byte) ([]byte, error) {

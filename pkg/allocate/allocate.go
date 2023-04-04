@@ -89,7 +89,7 @@ func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, r
 		lastip = rangeEnd.To16()
 	} else {
 		var err error
-		firstip, lastip, err = GetIPRange(rangeStart, ipnet)
+		firstip, lastip, err = iphelpers.GetIPRange(rangeStart, ipnet)
 		if err != nil {
 			logging.Errorf("GetIPRange request failed with: %v", err)
 			return net.IP{}, reservelist, err
@@ -125,7 +125,7 @@ func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, r
 			if subnet.Contains(i) {
 				isAddrExcluded = true
 				firstExcluded, _, _ := net.ParseCIDR(subnet.String())
-				_, lastExcluded, _ := GetIPRange(firstExcluded, *subnet)
+				_, lastExcluded, _ := iphelpers.GetIPRange(firstExcluded, *subnet)
 				if lastExcluded != nil {
 					if i.To4() != nil {
 						// exclude broadcast address
@@ -155,55 +155,4 @@ func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, r
 	}
 
 	return assignedip, reservelist, nil
-}
-
-func mergeIPAddress(net, host []byte) ([]byte, error) {
-	if len(net) != len(host) {
-		return nil, fmt.Errorf("not matched")
-	}
-	addr := append([]byte{}, net...)
-	for i := range net {
-		addr[i] = net[i] | host[i]
-	}
-	return addr, nil
-}
-
-// GetIPRange returns the first and last IP in a range
-func GetIPRange(ip net.IP, ipnet net.IPNet) (net.IP, net.IP, error) {
-	mask := ipnet.Mask
-	ones, bits := mask.Size()
-	masklen := bits - ones
-
-	// Error when the mask isn't large enough.
-	if masklen < 2 {
-		return nil, nil, fmt.Errorf("net mask is too short, must be 2 or more: %v", masklen)
-	}
-
-	// get network part
-	network := ip.Mask(ipnet.Mask)
-	// get bitmask for host
-	hostMask := net.IPMask(append([]byte{}, ipnet.Mask...))
-	for i, n := range hostMask {
-		hostMask[i] = ^n
-	}
-	// get host part of ip
-	first := ip.Mask(net.IPMask(hostMask))
-	// if ip is just same as ipnet.IP, i.e. just network address,
-	// increment it for start ip
-	if ip.Equal(ipnet.IP) {
-		first[len(first)-1] = 0x1
-	}
-	// calculate last byte
-	last := hostMask
-	// if IPv4 case, decrement 1 for broadcasting address
-	if ip.To4() != nil {
-		last[len(last)-1]--
-	}
-	// get first ip and last ip based on network part + host part
-	firstIPbyte, _ := mergeIPAddress([]byte(network), first)
-	lastIPbyte, _ := mergeIPAddress([]byte(network), last)
-	firstIP := net.IP(firstIPbyte).To16()
-	lastIP := net.IP(lastIPbyte).To16()
-
-	return firstIP, lastIP, nil
 }
