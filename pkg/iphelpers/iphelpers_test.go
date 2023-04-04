@@ -58,6 +58,499 @@ var _ = Describe("CompareIPs operations", func() {
 	})
 })
 
+var _ = Describe("IsIPInRange operations", func() {
+	When("one of the IPs is nil", func() {
+		It("returns an error for IPv4", func() {
+			in := net.ParseIP("INVALID")
+			start := net.ParseIP("192.168.0.0")
+			end := net.ParseIP("192.169.0.0")
+			_, err := IsIPInRange(in, start, end)
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("returns an error for IPv6", func() {
+			in := net.ParseIP("INVALID")
+			start := net.ParseIP("2000::")
+			end := net.ParseIP("2000:1::")
+			_, err := IsIPInRange(in, start, end)
+			Expect(err).To(HaveOccurred())
+		})
+	})
+
+	When("the IP is within the range", func() {
+		It("returns true for IPv4", func() {
+			in := net.ParseIP("192.168.255.100")
+			start := net.ParseIP("192.168.0.0")
+			end := net.ParseIP("192.169.0.0")
+			Expect(IsIPInRange(in, start, end)).To(BeTrue())
+		})
+
+		It("returns true for end of range for IPv4", func() {
+			in := net.ParseIP("192.169.0.0")
+			start := net.ParseIP("192.168.0.0")
+			end := net.ParseIP("192.169.0.0")
+			Expect(IsIPInRange(in, start, end)).To(BeTrue())
+		})
+
+		It("returns true for start of range for IPv4", func() {
+			in := net.ParseIP("192.168.0.0")
+			start := net.ParseIP("192.168.0.0")
+			end := net.ParseIP("192.169.0.0")
+			Expect(IsIPInRange(in, start, end)).To(BeTrue())
+		})
+
+		It("returns true for IPv6", func() {
+			in := net.ParseIP("2000::ffff:ffcc")
+			start := net.ParseIP("2000::")
+			end := net.ParseIP("2000:1::")
+			Expect(IsIPInRange(in, start, end)).To(BeTrue())
+
+			in = net.ParseIP("2001:db8:480:603d:304:403::")
+			start = net.ParseIP("2001:db8:480:603d::1")
+			end = net.ParseIP("2001:db8:480:603e::4")
+			Expect(IsIPInRange(in, start, end)).To(BeTrue())
+		})
+
+		It("returns true for end of range for IPv6", func() {
+			in := net.ParseIP("2000:1::")
+			start := net.ParseIP("2000::")
+			end := net.ParseIP("2000:1::")
+			Expect(IsIPInRange(in, start, end)).To(BeTrue())
+		})
+
+		It("returns true for start of range for IPv6", func() {
+			in := net.ParseIP("2000::")
+			start := net.ParseIP("2000::")
+			end := net.ParseIP("2000:1::")
+			Expect(IsIPInRange(in, start, end)).To(BeTrue())
+		})
+	})
+
+	When("the IP is not within the range", func() {
+		It("returns false for IPv4", func() {
+			in := net.ParseIP("192.169.255.100")
+			start := net.ParseIP("192.168.0.0")
+			end := net.ParseIP("192.169.0.0")
+			Expect(IsIPInRange(in, start, end)).To(BeFalse())
+		})
+
+		It("returns false for one beyond end of range for IPv4", func() {
+			in := net.ParseIP("192.169.0.1")
+			start := net.ParseIP("192.168.0.0")
+			end := net.ParseIP("192.169.0.0")
+			Expect(IsIPInRange(in, start, end)).To(BeFalse())
+		})
+
+		It("returns false for one beyond start of range for IPv4", func() {
+			in := net.ParseIP("192.167.255.255")
+			start := net.ParseIP("192.168.0.0")
+			end := net.ParseIP("192.169.0.0")
+			Expect(IsIPInRange(in, start, end)).To(BeFalse())
+		})
+
+		It("returns false for IPv6", func() {
+			in := net.ParseIP("2000:1::ffff:ffcc")
+			start := net.ParseIP("2000::")
+			end := net.ParseIP("2000:1::")
+			Expect(IsIPInRange(in, start, end)).To(BeFalse())
+		})
+
+		It("returns false for one beyond end of range for IPv6", func() {
+			in := net.ParseIP("2000:1::1")
+			start := net.ParseIP("2000::")
+			end := net.ParseIP("2000:1::")
+			Expect(IsIPInRange(in, start, end)).To(BeFalse())
+		})
+
+		It("returns false for one beyond start of range for IPv6", func() {
+			in := net.ParseIP("2000::")
+			start := net.ParseIP("2000::1")
+			end := net.ParseIP("2000:1::")
+			Expect(IsIPInRange(in, start, end)).To(BeFalse())
+		})
+	})
+})
+
+var _ = Describe("NetworkIP operations", func() {
+	Context("IPv4", func() {
+		It("correctly gets the NetworkIP for a /32", func() {
+			_, ipnet, _ := net.ParseCIDR("192.168.0.0/32")
+			ip := NetworkIP(*ipnet)
+			Expect(ip.To16()).To(Equal(net.ParseIP("192.168.0.0").To16()))
+		})
+
+		It("correctly gets the NetworkIP for a /31", func() {
+			_, ipnet, _ := net.ParseCIDR("192.168.0.0/31")
+			ip := NetworkIP(*ipnet)
+			Expect(ip.To16()).To(Equal(net.ParseIP("192.168.0.0").To16()))
+		})
+
+		It("correctly gets the NetworkIP for a /30", func() {
+			_, ipnet, _ := net.ParseCIDR("192.168.0.0/30")
+			ip := NetworkIP(*ipnet)
+			Expect(ip.To16()).To(Equal(net.ParseIP("192.168.0.0").To16()))
+		})
+
+		It("correctly gets the NetworkIP for a /23", func() {
+			_, ipnet, _ := net.ParseCIDR("192.168.0.0/23")
+			ip := NetworkIP(*ipnet)
+			Expect(ip.To16()).To(Equal(net.ParseIP("192.168.0.0").To16()))
+		})
+	})
+
+	Context("IPv6", func() {
+		It("correctly gets the NetworkIP for a /128", func() {
+			_, ipnet, _ := net.ParseCIDR("2000::/128")
+			ip := NetworkIP(*ipnet)
+			Expect(ip.To16()).To(Equal(net.ParseIP("2000::").To16()))
+		})
+
+		It("correctly gets the NetworkIP for a /127", func() {
+			_, ipnet, _ := net.ParseCIDR("2000::/127")
+			ip := NetworkIP(*ipnet)
+			Expect(ip.To16()).To(Equal(net.ParseIP("2000::").To16()))
+		})
+
+		It("correctly gets the NetworkIP for a /126", func() {
+			_, ipnet, _ := net.ParseCIDR("2000::/126")
+			ip := NetworkIP(*ipnet)
+			Expect(ip.To16()).To(Equal(net.ParseIP("2000::").To16()))
+		})
+
+		It("correctly gets the NetworkIP for a /64", func() {
+			_, ipnet, _ := net.ParseCIDR("2000::/64")
+			ip := NetworkIP(*ipnet)
+			Expect(ip.To16()).To(Equal(net.ParseIP("2000::").To16()))
+		})
+	})
+})
+
+var _ = Describe("SubnetBroadcastIP operations", func() {
+	Context("IPv4", func() {
+		It("correctly gets the SubnetBroadcastIP for a /32", func() {
+			_, ipnet, _ := net.ParseCIDR("192.168.0.0/32")
+			ip := SubnetBroadcastIP(*ipnet)
+			Expect(ip.To16()).To(Equal(net.ParseIP("192.168.0.0").To16()))
+		})
+
+		It("correctly gets the SubnetBroadcastIP for a /31", func() {
+			_, ipnet, _ := net.ParseCIDR("192.168.0.0/31")
+			ip := SubnetBroadcastIP(*ipnet)
+			Expect(ip.To16()).To(Equal(net.ParseIP("192.168.0.1").To16()))
+		})
+
+		It("correctly gets the SubnetBroadcastIP for a /30", func() {
+			_, ipnet, _ := net.ParseCIDR("192.168.0.0/30")
+			ip := SubnetBroadcastIP(*ipnet)
+			Expect(ip.To16()).To(Equal(net.ParseIP("192.168.0.3").To16()))
+		})
+
+		It("correctly gets the SubnetBroadcastIP for a /23", func() {
+			_, ipnet, _ := net.ParseCIDR("192.168.0.0/23")
+			ip := SubnetBroadcastIP(*ipnet)
+			Expect(ip.To16()).To(Equal(net.ParseIP("192.168.1.255").To16()))
+		})
+	})
+
+	Context("IPv6", func() {
+		It("correctly gets the SubnetBroadcastIP for a /128", func() {
+			_, ipnet, _ := net.ParseCIDR("2000::/128")
+			ip := SubnetBroadcastIP(*ipnet)
+			Expect(ip.To16()).To(Equal(net.ParseIP("2000::0").To16()))
+		})
+
+		It("correctly gets the SubnetBroadcastIP for a /127", func() {
+			_, ipnet, _ := net.ParseCIDR("2000::/127")
+			ip := SubnetBroadcastIP(*ipnet)
+			Expect(ip.To16()).To(Equal(net.ParseIP("2000::1").To16()))
+		})
+
+		It("correctly gets the SubnetBroadcastIP for a /126", func() {
+			_, ipnet, _ := net.ParseCIDR("2000::/126")
+			ip := SubnetBroadcastIP(*ipnet)
+			Expect(ip.To16()).To(Equal(net.ParseIP("2000::3").To16()))
+		})
+
+		It("correctly gets the SubnetBroadcastIP for a /64", func() {
+			_, ipnet, _ := net.ParseCIDR("2000::/64")
+			ip := SubnetBroadcastIP(*ipnet)
+			Expect(ip.To16()).To(Equal(net.ParseIP("2000::ffff:ffff:ffff:ffff").To16()))
+		})
+	})
+})
+
+var _ = Describe("FirstUsableIP operations", func() {
+	Context("IPv4", func() {
+		It("throws an error when running FirstUsableIP for a /32", func() {
+			_, ipnet, _ := net.ParseCIDR("192.168.0.0/32")
+			_, err := FirstUsableIP(*ipnet)
+			Expect(err).To(MatchError(HavePrefix("net mask is too short")))
+		})
+
+		It("throws an error when running FirstUsableIP for a /31", func() {
+			_, ipnet, _ := net.ParseCIDR("192.168.0.0/31")
+			_, err := FirstUsableIP(*ipnet)
+			Expect(err).To(MatchError(HavePrefix("net mask is too short")))
+		})
+
+		It("correctly gets the FirstUsableIP for a /30", func() {
+			_, ipnet, _ := net.ParseCIDR("192.168.0.0/30")
+			ip, err := FirstUsableIP(*ipnet)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ip.To16()).To(Equal(net.ParseIP("192.168.0.1").To16()))
+		})
+
+		It("correctly gets the FirstUsableIP for a /23", func() {
+			_, ipnet, _ := net.ParseCIDR("192.168.0.0/23")
+			ip, err := FirstUsableIP(*ipnet)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ip.To16()).To(Equal(net.ParseIP("192.168.0.1").To16()))
+		})
+	})
+
+	Context("IPv6", func() {
+		It("throws an error when running FirstUsableIP for a /128", func() {
+			_, ipnet, _ := net.ParseCIDR("2000::/128")
+			_, err := FirstUsableIP(*ipnet)
+			Expect(err).To(MatchError(HavePrefix("net mask is too short")))
+		})
+
+		It("throws an error when running FirstUsableIP for a /127", func() {
+			_, ipnet, _ := net.ParseCIDR("2000::/127")
+			_, err := FirstUsableIP(*ipnet)
+			Expect(err).To(MatchError(HavePrefix("net mask is too short")))
+		})
+
+		It("correctly gets the FirstUsableIP for a /126", func() {
+			_, ipnet, _ := net.ParseCIDR("2000::/126")
+			ip, err := FirstUsableIP(*ipnet)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ip.To16()).To(Equal(net.ParseIP("2000::1").To16()))
+		})
+
+		It("correctly gets the FirstUsableIP for a /64", func() {
+			_, ipnet, _ := net.ParseCIDR("2000::/64")
+			ip, err := FirstUsableIP(*ipnet)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ip.To16()).To(Equal(net.ParseIP("2000::1").To16()))
+		})
+	})
+})
+
+var _ = Describe("LastUsableIP operations", func() {
+	Context("IPv4", func() {
+		It("throws an error when running LastUsableIP for a /32", func() {
+			_, ipnet, _ := net.ParseCIDR("192.168.0.0/32")
+			_, err := LastUsableIP(*ipnet)
+			Expect(err).To(MatchError(HavePrefix("net mask is too short")))
+		})
+
+		It("throws an error when running LastUsableIP for a /31", func() {
+			_, ipnet, _ := net.ParseCIDR("192.168.0.0/31")
+			_, err := LastUsableIP(*ipnet)
+			Expect(err).To(MatchError(HavePrefix("net mask is too short")))
+		})
+
+		It("correctly gets the LastUsableIP for a /30", func() {
+			_, ipnet, _ := net.ParseCIDR("192.168.0.0/30")
+			ip, err := LastUsableIP(*ipnet)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ip.To16()).To(Equal(net.ParseIP("192.168.0.2").To16()))
+		})
+
+		It("correctly gets the LastUsableIP for a /23", func() {
+			_, ipnet, _ := net.ParseCIDR("192.168.0.0/23")
+			ip, err := LastUsableIP(*ipnet)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ip.To16()).To(Equal(net.ParseIP("192.168.1.254").To16()))
+		})
+	})
+
+	Context("IPv6", func() {
+		It("throws an error when running LastUsableIP for a /128", func() {
+			_, ipnet, _ := net.ParseCIDR("2000::/128")
+			_, err := LastUsableIP(*ipnet)
+			Expect(err).To(MatchError(HavePrefix("net mask is too short")))
+		})
+
+		It("throws an error when running LastUsableIP for a /127", func() {
+			_, ipnet, _ := net.ParseCIDR("2000::/127")
+			_, err := LastUsableIP(*ipnet)
+			Expect(err).To(MatchError(HavePrefix("net mask is too short")))
+		})
+
+		It("correctly gets the LastUsableIP for a /126", func() {
+			_, ipnet, _ := net.ParseCIDR("2000::/126")
+			ip, err := LastUsableIP(*ipnet)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ip.To16()).To(Equal(net.ParseIP("2000::2").To16()))
+		})
+
+		It("correctly gets the LastUsableIP for a /64", func() {
+			_, ipnet, _ := net.ParseCIDR("2000::/64")
+			ip, err := LastUsableIP(*ipnet)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ip.To16()).To(Equal(net.ParseIP("2000::ffff:ffff:ffff:fffe").To16()))
+		})
+	})
+})
+
+var _ = Describe("HasUsableIPs operations", func() {
+	Context("small subnets", func() {
+		It("IPv4 /32 has no usable IPs", func() {
+			_, ipnet, _ := net.ParseCIDR("192.168.0.0/32")
+			Expect(HasUsableIPs(*ipnet)).To(BeFalse())
+		})
+
+		It("IPv4 /31 has no usable IPs", func() {
+			_, ipnet, _ := net.ParseCIDR("192.168.0.0/31")
+			Expect(HasUsableIPs(*ipnet)).To(BeFalse())
+		})
+
+		It("IPv6 /128 has no usable IPs", func() {
+			_, ipnet, _ := net.ParseCIDR("2000::/128")
+			Expect(HasUsableIPs(*ipnet)).To(BeFalse())
+		})
+
+		It("IPv6 /127 has no usable IPs", func() {
+			_, ipnet, _ := net.ParseCIDR("2000::/127")
+			Expect(HasUsableIPs(*ipnet)).To(BeFalse())
+		})
+	})
+
+	Context("larger subnets", func() {
+		It("IPv4 /30 has usable IPs", func() {
+			_, ipnet, _ := net.ParseCIDR("192.168.0.0/30")
+			Expect(HasUsableIPs(*ipnet)).To(BeTrue())
+		})
+
+		It("IPv6 /126 has usable IPs", func() {
+			_, ipnet, _ := net.ParseCIDR("2000::/126")
+			Expect(HasUsableIPs(*ipnet)).To(BeTrue())
+		})
+	})
+})
+
+var _ = Describe("IncIPAddress operations", func() {
+	When("IP addresses are increased without rolling over", func() {
+		It("works with IPv4", func() {
+			ip1 := net.ParseIP("192.168.2.23")
+			ip2 := IncIP(ip1)
+			Expect(ip2).To(Equal(net.ParseIP("192.168.2.24")))
+		})
+
+		It("works with IPv6", func() {
+			ip1 := net.ParseIP("ff02::1")
+			ip2 := IncIP(ip1)
+			Expect(ip2).To(Equal(net.ParseIP("ff02::2")))
+		})
+
+		It("works with IPv6 with ff", func() {
+			ip1 := net.ParseIP("ff02::ff")
+			ip2 := IncIP(ip1)
+			Expect(ip2).To(Equal(net.ParseIP("ff02::0:100")))
+		})
+	})
+
+	When("IP addresses are increased with rollover", func() {
+		It("can roll over a single octet", func() {
+			ip1 := net.ParseIP("192.168.2.255")
+			ip2 := IncIP(ip1)
+			Expect(ip2).To(Equal(net.ParseIP("192.168.3.0")))
+		})
+
+		It("can roll over 2 octets", func() {
+			ip1 := net.ParseIP("192.168.255.255")
+			ip2 := IncIP(ip1)
+			Expect(ip2).To(Equal(net.ParseIP("192.169.0.0")))
+		})
+
+		It("can roll over IPv6", func() {
+			ip1 := net.ParseIP("ff02::ffff")
+			ip2 := IncIP(ip1)
+			Expect(ip2).To(Equal(net.ParseIP("ff02::1:0")))
+		})
+
+		It("can roll over 4 IPv6 octets", func() {
+			ip1 := net.ParseIP("ff02::ffff:ffff")
+			ip2 := IncIP(ip1)
+			Expect(ip2).To(Equal(net.ParseIP("ff02::1:0:0")))
+		})
+
+		It("IPv4 addresses can overflow", func() {
+			ip1 := net.ParseIP("255.255.255.255")
+			ip2 := IncIP(ip1)
+			Expect(ip2).To(Equal(net.ParseIP("0.0.0.0")))
+		})
+
+		It("IPv6 addresses can overflow", func() {
+			ip1 := net.ParseIP("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff")
+			ip2 := IncIP(ip1)
+			Expect(ip2).To(Equal(net.ParseIP("::")))
+		})
+	})
+})
+
+var _ = Describe("DecIPAddress operations", func() {
+	When("IP addresses are decreased without rolling over", func() {
+		It("works with IPv4", func() {
+			ip1 := net.ParseIP("192.168.2.23")
+			ip2 := DecIP(ip1)
+			Expect(ip2).To(Equal(net.ParseIP("192.168.2.22")))
+		})
+
+		It("works with IPv6", func() {
+			ip1 := net.ParseIP("ff02::2")
+			ip2 := DecIP(ip1)
+			Expect(ip2).To(Equal(net.ParseIP("ff02::1")))
+		})
+
+		It("works with IPv6 with ff", func() {
+			ip1 := net.ParseIP("ff02::100")
+			ip2 := DecIP(ip1)
+			Expect(ip2).To(Equal(net.ParseIP("ff02::0:ff")))
+		})
+	})
+
+	When("IP addresses are decreased with rollover", func() {
+		It("can roll over a single octet", func() {
+			ip1 := net.ParseIP("192.168.3.0")
+			ip2 := DecIP(ip1)
+			Expect(ip2).To(Equal(net.ParseIP("192.168.2.255")))
+		})
+
+		It("can roll over 2 octets", func() {
+			ip1 := net.ParseIP("192.169.0.0")
+			ip2 := DecIP(ip1)
+			Expect(ip2).To(Equal(net.ParseIP("192.168.255.255")))
+		})
+
+		It("can roll over IPv6", func() {
+			ip1 := net.ParseIP("ff02::1:0")
+			ip2 := DecIP(ip1)
+			Expect(ip2).To(Equal(net.ParseIP("ff02::ffff")))
+		})
+
+		It("can roll over 4 IPv6 octets", func() {
+			ip1 := net.ParseIP("ff02::1:0:0")
+			ip2 := DecIP(ip1)
+			Expect(ip2).To(Equal(net.ParseIP("ff02::ffff:ffff")))
+		})
+
+		It("IPv4 addresses can overflow", func() {
+			ip1 := net.ParseIP("0.0.0.0")
+			ip2 := DecIP(ip1)
+			Expect(ip2).To(Equal(net.ParseIP("255.255.255.255")))
+		})
+
+		It("IPv6 addresses can overflow", func() {
+			ip1 := net.ParseIP("::")
+			ip2 := DecIP(ip1)
+			Expect(ip2).To(Equal(net.ParseIP("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff")))
+		})
+	})
+})
+
 var _ = Describe("IPGetOffset operations", func() {
 	It("correctly calculates the offset between two IPv4 IPs", func() {
 		ip1 := net.ParseIP("192.168.1.1")

@@ -25,6 +25,115 @@ func CompareIPs(ipX net.IP, ipY net.IP) int {
 	return 0
 }
 
+// IsIPInRange returns true if a given IP is within the continuous range of start and end IP (inclusively).
+func IsIPInRange(in net.IP, start net.IP, end net.IP) (bool, error) {
+	if in == nil || start == nil || end == nil {
+		return false, fmt.Errorf("cannot determine if IP is in range, either of the values is '<nil>', "+
+			"in: %v, start: %v, end: %v", in, start, end)
+	}
+	return CompareIPs(in, start) >= 0 && CompareIPs(in, end) <= 0, nil
+}
+
+// NetworkIP returns the network IP of the subnet.
+func NetworkIP(ipnet net.IPNet) net.IP {
+	byteIP := []byte(ipnet.IP)             // []byte representation of IP.
+	byteMask := []byte(ipnet.Mask)         // []byte representation of mask.
+	networkIP := make([]byte, len(byteIP)) // []byte holding target IP.
+	for k := range byteIP {
+		networkIP[k] = byteIP[k] & byteMask[k]
+	}
+	return net.IP(networkIP)
+}
+
+// SubnetBroadcastIP returns the broadcast IP for a given net.IPNet.
+// Mask will give us all fixed bits of the subnet (for the given byte)
+// Inverted mask will give us all moving bits of the subnet (for the given byte)
+// BroadcastIP = networkIP added to the inverted mask
+func SubnetBroadcastIP(ipnet net.IPNet) net.IP {
+	byteIP := []byte(ipnet.IP)               // []byte representation of IP.
+	byteMask := []byte(ipnet.Mask)           // []byte representation of mask.
+	broadcastIP := make([]byte, len(byteIP)) // []byte holding target IP.
+	for k := range byteIP {
+		invertedMask := byteMask[k] ^ 0xff                    // Inverted mask byte.
+		broadcastIP[k] = byteIP[k]&byteMask[k] | invertedMask // Take network part and add the inverted mask to it.
+	}
+	return net.IP(broadcastIP)
+}
+
+// FirstUsableIP returns the first usable IP (not the network IP) in a given net.IPNet.
+// This does not work for IPv4 /31 to /32 or IPv6 /127 to /128 netmasks.
+func FirstUsableIP(ipnet net.IPNet) (net.IP, error) {
+	if !HasUsableIPs(ipnet) {
+		return nil, fmt.Errorf("net mask is too short, subnet %s has no usable IP addresses, it is too small", ipnet)
+	}
+	return IncIP(NetworkIP(ipnet)), nil
+}
+
+// LastUsableIP returns the last usable IP (not the broadcast IP in a given net.IPNet).
+// This does not work for IPv4 /31 to /32 or IPv6 /127 to /128 netmasks.
+func LastUsableIP(ipnet net.IPNet) (net.IP, error) {
+	if !HasUsableIPs(ipnet) {
+		return nil, fmt.Errorf("net mask is too short, subnet %s has no usable IP addresses, it is too small", ipnet)
+	}
+	return DecIP(SubnetBroadcastIP(ipnet)), nil
+}
+
+// HasUsableIPs returns true if this subnet has usable IPs (i.e. not the network nor the broadcast IP).
+func HasUsableIPs(ipnet net.IPNet) bool {
+	ones, totalBits := ipnet.Mask.Size()
+	return totalBits-ones > 1
+}
+
+// IncIP increases the given IP address by one. IncIP will overflow for all 0xf adresses.
+func IncIP(ip net.IP) net.IP {
+	// Allocate a new IP.
+	newIP := make(net.IP, len(ip))
+	copy(newIP, ip)
+	byteIP := []byte(newIP)
+	// Get the end index (needed for IPv4 in 16 byte notation).
+	endIndex := 0
+	if ipv4 := newIP.To4(); ipv4 != nil {
+		endIndex = len(byteIP) - len(ipv4)
+	}
+
+	// Start with the rightmost index first, increment it. If the index is < 256, then no overflow happened and we
+	// increment and break else, continue to the next field in the byte.
+	for i := len(byteIP) - 1; i >= endIndex; i-- {
+		if byteIP[i] < 0xff {
+			byteIP[i]++
+			break
+		} else {
+			byteIP[i] = 0
+		}
+	}
+	return net.IP(byteIP)
+}
+
+// DecIP decreases the given IP address by one. DecIP will overlow for all 0 addresses.
+func DecIP(ip net.IP) net.IP {
+	// allocate a new IP
+	newIP := make(net.IP, len(ip))
+	copy(newIP, ip)
+	byteIP := []byte(newIP)
+	// Get the end index (needed for IPv4 in 16 byte notation).
+	endIndex := 0
+	if ipv4 := newIP.To4(); ipv4 != nil {
+		endIndex = len(byteIP) - len(ipv4)
+	}
+
+	// Start with the rightmost index first, decrement it. If the value != 0, then no overflow happened and we
+	// decrement and break. Else, continue to the next field in the byte.
+	for i := len(byteIP) - 1; i >= endIndex; i-- {
+		if byteIP[i] != 0 {
+			byteIP[i]--
+			break
+		} else {
+			byteIP[i] = 0xff
+		}
+	}
+	return net.IP(byteIP)
+}
+
 // IPGetOffset gets the absolute offset between ip1 and ip2, meaning that this offset will always be a positive number.
 func IPGetOffset(ip1, ip2 net.IP) (uint64, error) {
 	if ip1.To4() != nil && ip2.To4() == nil {
