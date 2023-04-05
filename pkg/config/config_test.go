@@ -8,6 +8,8 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 )
 
 func TestAllocate(t *testing.T) {
@@ -47,6 +49,11 @@ var _ = Describe("Allocation operations", func() {
 		Expect(ipamconfig.LeaderRenewDeadline).To(Equal(1000))
 		Expect(ipamconfig.LeaderRetryPeriod).To(Equal(500))
 
+	})
+
+	It("throws an error when no flat-files are found", func() {
+		_, _, err := GetFlatIPAM(true, &types.IPAMConfig{})
+		Expect(err).To(MatchError(NewConfigFileNotFoundError()))
 	})
 
 	It("can load a global flat-file config", func() {
