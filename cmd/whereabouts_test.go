@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"io/ioutil"
 	"net"
 	"os"
 	"strings"
@@ -145,7 +144,7 @@ var _ = Describe("Whereabouts operations", func() {
 
 	BeforeEach(func() {
 		var err error
-		tmpDir, err = ioutil.TempDir("/tmp", "whereabouts")
+		tmpDir, err = os.MkdirTemp("/tmp", "whereabouts")
 		Expect(err).ToNot(HaveOccurred())
 		kubeConfigPath = fmt.Sprintf("%s/%s", tmpDir, whereaboutsConfigFile)
 		Expect(os.WriteFile(kubeConfigPath, kubeconfig(), fs.ModePerm)).To(Succeed())
@@ -226,6 +225,30 @@ var _ = Describe("Whereabouts operations", func() {
 		ipRange := "fd::1/116"
 		ipGateway := "fd::f:1"
 		expectedAddress := "fd::1/116"
+
+		AllocateAndReleaseAddressesTest(
+			ipVersion,
+			ipamConfig(podName, podNamespace, ipRange, ipGateway, kubeConfigPath),
+			[]string{expectedAddress},
+		)
+	})
+
+	It("allocates and releases an IPv6 range that ends with zeroes with a Kubernetes backend", func() {
+
+		ipVersion := "6"
+		ipRange := "2001:db8:480:603d:0304:0403:000:0000-2001:db8:480:603d:0304:0403:0000:0004/64"
+		ipGateway := "2001:db8:480:603d::1"
+		expectedAddress := "2001:db8:480:603d:0304:0403:000:0000/64"
+
+		AllocateAndReleaseAddressesTest(
+			ipVersion,
+			ipamConfig(podName, podNamespace, ipRange, ipGateway, kubeConfigPath),
+			[]string{expectedAddress},
+		)
+
+		ipRange = "2001:db8:5422:0005::-2001:db8:5422:0005:7fff:ffff:ffff:ffff/64"
+		ipGateway = "2001:db8:5422:0005::1"
+		expectedAddress = "2001:db8:5422:0005::/64"
 
 		AllocateAndReleaseAddressesTest(
 			ipVersion,
