@@ -443,8 +443,8 @@ func generatePodAnnotations(ipNetworks ...ipInNetwork) map[string]string {
 		networks = append(networks, ipNetworkInfo.networkName)
 	}
 	networkAnnotations := map[string]string{
-		MultusNetworkAnnotation:       strings.Join(networks, ","),
-		MultusNetworkStatusAnnotation: generatePodNetworkStatusAnnotation(ipNetworks...),
+		multusv1.NetworkAttachmentAnnot: strings.Join(networks, ","),
+		multusv1.NetworkStatusAnnot:     generatePodNetworkStatusAnnotation(ipNetworks...),
 	}
 	return networkAnnotations
 }
