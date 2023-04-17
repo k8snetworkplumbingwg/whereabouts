@@ -13,6 +13,7 @@ set -u -e
 CNI_BIN_DIR=${CNI_BIN_DIR:-"/host/opt/cni/bin/"}
 WHEREABOUTS_KUBECONFIG_FILE_HOST=${WHEREABOUTS_KUBECONFIG_FILE_HOST:-"/etc/cni/net.d/whereabouts.d/whereabouts.kubeconfig"}
 CNI_CONF_DIR=${CNI_CONF_DIR:-"/host/etc/cni/net.d"}
+WHEREABOUTS_RECONCILER_CRON=${WHEREABOUTS_RECONCILER_CRON:-30 4 * * *}
 
 # Make a whereabouts.d directory (for our kubeconfig)
 
@@ -103,7 +104,7 @@ EOF
   "kubernetes": {
     "kubeconfig": "${WHEREABOUTS_KUBECONFIG_LITERAL}"
   },
-  "reconciler_cron_expression": "30 4 * * *"
+  "reconciler_cron_expression": "${WHEREABOUTS_RECONCILER_CRON}"
 }
 EOF
 
