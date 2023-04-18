@@ -1,5 +1,5 @@
 name: Image build
-on: [pull_request]
+on: [push]
 jobs:
   build-multiarch:
     name: Image build

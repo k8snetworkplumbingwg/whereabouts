@@ -2,7 +2,7 @@ name: Image push for master
 on:
   push:
     branches:
-      - master
+      - improved-images
 env:
   image-push-owner: 'k8snetworkplumbingwg'
 jobs:
