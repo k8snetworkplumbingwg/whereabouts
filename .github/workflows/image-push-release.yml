@@ -7,7 +7,7 @@ env:
   image-push-owner: 'k8snetworkplumbingwg'
 jobs:
   push-amd64:
-    name: Image push
+    name: Image push/ghcr
     runs-on: ubuntu-latest
     steps:
       - name: Check out code into the Go module directory
