@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -307,7 +308,9 @@ var _ = Describe("Whereabouts operations", func() {
 			Args:        cniArgs(podNamespace, podName),
 		}
 
-		ipamConf, cniVersion, err := config.LoadIPAMConfig([]byte(conf), cniArgs(podNamespace, podName), "")
+		confPath := filepath.Join(tmpDir, "whereabouts.conf")
+		Expect(os.WriteFile(confPath, []byte(conf), 0755)).To(Succeed())
+		ipamConf, cniVersion, err := config.LoadIPAMConfig([]byte(conf), cniArgs(podNamespace, podName), confPath)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ipamConf.IPRanges).NotTo(BeEmpty())
 		k8sClient = newK8sIPAM(
@@ -379,7 +382,9 @@ var _ = Describe("Whereabouts operations", func() {
 			Args:        cniArgs(podNamespace, podName),
 		}
 
-		ipamConf, cniVersion, err := config.LoadIPAMConfig([]byte(conf), cniArgs(podNamespace, podName), "")
+		confPath := filepath.Join(tmpDir, "whereabouts.conf")
+		Expect(os.WriteFile(confPath, []byte(conf), 0755)).To(Succeed())
+		ipamConf, cniVersion, err := config.LoadIPAMConfig([]byte(conf), cniArgs(podNamespace, podName), confPath)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ipamConf.IPRanges).NotTo(BeEmpty())
 		k8sClient = newK8sIPAM(
@@ -448,7 +453,9 @@ var _ = Describe("Whereabouts operations", func() {
 			Args:        cniArgs(podNamespace, podName),
 		}
 
-		ipamConf, cniVersion, err := config.LoadIPAMConfig([]byte(conf), cniArgs(podNamespace, podName), "")
+		confPath := filepath.Join(tmpDir, "whereabouts.conf")
+		Expect(os.WriteFile(confPath, []byte(conf), 0755)).To(Succeed())
+		ipamConf, cniVersion, err := config.LoadIPAMConfig([]byte(conf), cniArgs(podNamespace, podName), confPath)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ipamConf.IPRanges).NotTo(BeEmpty())
 		k8sClient = newK8sIPAM(
@@ -528,7 +535,9 @@ var _ = Describe("Whereabouts operations", func() {
 			Args:        cniArgs(podNamespace, podName),
 		}
 
-		ipamConf, cniVersion, err := config.LoadIPAMConfig([]byte(conf), cniArgs(podNamespace, podName), "")
+		confPath := filepath.Join(tmpDir, "whereabouts.conf")
+		Expect(os.WriteFile(confPath, []byte(conf), 0755)).To(Succeed())
+		ipamConf, cniVersion, err := config.LoadIPAMConfig([]byte(conf), cniArgs(podNamespace, podName), confPath)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ipamConf.IPRanges).NotTo(BeEmpty())
 		k8sClient = newK8sIPAM(
@@ -617,7 +626,9 @@ var _ = Describe("Whereabouts operations", func() {
 			Args:        cniArgs(podNamespace, podName),
 		}
 
-		ipamConf, cniVersion, err := config.LoadIPAMConfig([]byte(conf), cniArgs(podNamespace, podName), "")
+		confPath := filepath.Join(tmpDir, "whereabouts.conf")
+		Expect(os.WriteFile(confPath, []byte(conf), 0755)).To(Succeed())
+		ipamConf, cniVersion, err := config.LoadIPAMConfig([]byte(conf), cniArgs(podNamespace, podName), confPath)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ipamConf.IPRanges).NotTo(BeEmpty())
 		k8sClient = newK8sIPAM(
@@ -681,7 +692,9 @@ var _ = Describe("Whereabouts operations", func() {
 			Args:        cniArgs(podNamespace, podName),
 		}
 
-		ipamConf, cniVersion, err := config.LoadIPAMConfig([]byte(conf), cniArgs(podNamespace, podName), "")
+		confPath := filepath.Join(tmpDir, "whereabouts.conf")
+		Expect(os.WriteFile(confPath, []byte(conf), 0755)).To(Succeed())
+		ipamConf, cniVersion, err := config.LoadIPAMConfig([]byte(conf), cniArgs(podNamespace, podName), confPath)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ipamConf.IPRanges).To(HaveLen(2))
 		k8sClient = newK8sIPAM(
@@ -746,7 +759,9 @@ var _ = Describe("Whereabouts operations", func() {
 			Args:        cniArgs(podNamespace, podName),
 		}
 
-		ipamConf, cniVersion, err := config.LoadIPAMConfig([]byte(conf), cniArgs(podNamespace, podName), "")
+		confPath := filepath.Join(tmpDir, "whereabouts.conf")
+		Expect(os.WriteFile(confPath, []byte(conf), 0755)).To(Succeed())
+		ipamConf, cniVersion, err := config.LoadIPAMConfig([]byte(conf), cniArgs(podNamespace, podName), confPath)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ipamConf.IPRanges).To(HaveLen(2))
 		k8sClient = newK8sIPAM(
@@ -809,7 +824,9 @@ var _ = Describe("Whereabouts operations", func() {
 			Args:        cniArgs(podNamespace, podName),
 		}
 
-		ipamConf, cniVersion, err := config.LoadIPAMConfig([]byte(conf), cniArgs(podNamespace, podName), "")
+		confPath := filepath.Join(tmpDir, "whereabouts.conf")
+		Expect(os.WriteFile(confPath, []byte(conf), 0755)).To(Succeed())
+		ipamConf, cniVersion, err := config.LoadIPAMConfig([]byte(conf), cniArgs(podNamespace, podName), confPath)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ipamConf.IPRanges).NotTo(BeEmpty())
 		k8sClient = newK8sIPAM(
@@ -875,7 +892,9 @@ var _ = Describe("Whereabouts operations", func() {
 			Args:        cniArgs(podNamespace, podName),
 		}
 
-		ipamConf, cniVersion, err := config.LoadIPAMConfig([]byte(conf), cniArgs(podNamespace, podName), "")
+		confPath := filepath.Join(tmpDir, "whereabouts.conf")
+		Expect(os.WriteFile(confPath, []byte(conf), 0755)).To(Succeed())
+		ipamConf, cniVersion, err := config.LoadIPAMConfig([]byte(conf), cniArgs(podNamespace, podName), confPath)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ipamConf.IPRanges).NotTo(BeEmpty())
 		k8sClient = newK8sIPAM(
@@ -934,7 +953,9 @@ var _ = Describe("Whereabouts operations", func() {
 			}
 		  }`, backend)
 
-		ipamConf, cniVersion, err := config.LoadIPAMConfig([]byte(conf), cniArgs(podNamespace, podName), "")
+		confPath := filepath.Join(tmpDir, "whereabouts.conf")
+		Expect(os.WriteFile(confPath, []byte(conf), 0755)).To(Succeed())
+		ipamConf, cniVersion, err := config.LoadIPAMConfig([]byte(conf), cniArgs(podNamespace, podName), confPath)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ipamConf.IPRanges).NotTo(BeEmpty())
 		wbClient := *kubernetes.NewKubernetesClient(
@@ -1031,7 +1052,9 @@ var _ = Describe("Whereabouts operations", func() {
 			Args:        cniArgs(podNamespace, podName),
 		}
 
-		ipamConf, cniVersion, err := config.LoadIPAMConfig([]byte(conf), cniArgs(podNamespace, podName), "")
+		confPath := filepath.Join(tmpDir, "whereabouts.conf")
+		Expect(os.WriteFile(confPath, []byte(conf), 0755)).To(Succeed())
+		ipamConf, cniVersion, err := config.LoadIPAMConfig([]byte(conf), cniArgs(podNamespace, podName), confPath)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ipamConf.IPRanges).NotTo(BeEmpty())
 		wbClient := *kubernetes.NewKubernetesClient(
@@ -1083,7 +1106,9 @@ var _ = Describe("Whereabouts operations", func() {
 			Args:        cniArgs(podNamespace, podName),
 		}
 
-		secondIPAMConf, secondCNIVersion, err := config.LoadIPAMConfig([]byte(confsecond), cniArgs(podNamespace, podName), "")
+		secondConfPath := filepath.Join(tmpDir, "whereabouts.conf")
+		Expect(os.WriteFile(confPath, []byte(confsecond), 0755)).To(Succeed())
+		secondIPAMConf, secondCNIVersion, err := config.LoadIPAMConfig([]byte(confsecond), cniArgs(podNamespace, podName), secondConfPath)
 		Expect(err).NotTo(HaveOccurred())
 
 		// Allocate the IP
@@ -1149,7 +1174,9 @@ var _ = Describe("Whereabouts operations", func() {
 			Args:        cniArgs(podNamespace, podName),
 		}
 
-		ipamConf, cniVersion, err := config.LoadIPAMConfig([]byte(conf), cniArgs(podNamespace, podName), "")
+		confPath := filepath.Join(tmpDir, "whereabouts.conf")
+		Expect(os.WriteFile(confPath, []byte(conf), 0755)).To(Succeed())
+		ipamConf, cniVersion, err := config.LoadIPAMConfig([]byte(conf), cniArgs(podNamespace, podName), confPath)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ipamConf.IPRanges).NotTo(BeEmpty())
 		wbClient := *kubernetes.NewKubernetesClient(
@@ -1201,7 +1228,9 @@ var _ = Describe("Whereabouts operations", func() {
 			Args:        cniArgs(podNamespace, podName),
 		}
 
-		secondIPAMConf, secondCNIVersion, err := config.LoadIPAMConfig([]byte(confsecond), cniArgs(podNamespace, podName), "")
+		secondConfPath := filepath.Join(tmpDir, "whereabouts.conf")
+		Expect(os.WriteFile(confPath, []byte(confsecond), 0755)).To(Succeed())
+		secondIPAMConf, secondCNIVersion, err := config.LoadIPAMConfig([]byte(confsecond), cniArgs(podNamespace, podName), secondConfPath)
 		Expect(err).NotTo(HaveOccurred())
 
 		// Allocate the IP
@@ -1268,7 +1297,9 @@ var _ = Describe("Whereabouts operations", func() {
 			Args:        cniArgs(podNamespace, podName),
 		}
 
-		ipamConf, cniVersion, err := config.LoadIPAMConfig([]byte(conf), cniArgs(podNamespace, podName), "")
+		confPath := filepath.Join(tmpDir, "whereabouts.conf")
+		Expect(os.WriteFile(confPath, []byte(conf), 0755)).To(Succeed())
+		ipamConf, cniVersion, err := config.LoadIPAMConfig([]byte(conf), cniArgs(podNamespace, podName), confPath)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ipamConf.IPRanges).NotTo(BeEmpty())
 		wbClient := *kubernetes.NewKubernetesClient(
@@ -1320,7 +1351,9 @@ var _ = Describe("Whereabouts operations", func() {
 			Args:        cniArgs(podNamespace, podName),
 		}
 
-		secondIPAMConf, secondCNIVersion, err := config.LoadIPAMConfig([]byte(confsecond), cniArgs(podNamespace, podName), "")
+		secondConfPath := filepath.Join(tmpDir, "whereabouts.conf")
+		Expect(os.WriteFile(secondConfPath, []byte(confsecond), 0755)).To(Succeed())
+		secondIPAMConf, secondCNIVersion, err := config.LoadIPAMConfig([]byte(confsecond), cniArgs(podNamespace, podName), secondConfPath)
 		Expect(err).NotTo(HaveOccurred())
 
 		// Allocate the IP
@@ -1415,10 +1448,26 @@ func ipamConfig(podName string, namespace string, ipRange string, gw string, kub
 		return nil
 	}
 
-	ipamConfWithDefaults, _, err := config.LoadIPAMConfig(bytes, cniArgs(namespace, podName), "")
+	tmpDir, err := os.MkdirTemp("", "whereabouts")
 	if err != nil {
 		return nil
 	}
+	confPath := filepath.Join(tmpDir, "wherebouts.conf")
+	err = os.WriteFile(confPath, bytes, 0755)
+	if err != nil {
+		return nil
+	}
+
+	ipamConfWithDefaults, _, err := config.LoadIPAMConfig(bytes, cniArgs(namespace, podName), confPath)
+	if err != nil {
+		return nil
+	}
+
+	err = os.RemoveAll(tmpDir)
+	if err != nil {
+		return nil
+	}
+
 	return ipamConfWithDefaults
 }
 
