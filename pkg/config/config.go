@@ -256,11 +256,11 @@ func GetFlatIPAM(isControlLoop bool, IPAM *types.IPAMConfig, extraConfigPaths ..
 			}
 
 			foundflatfile = confpath
-			return flatipam, foundflatfile, err
+			return flatipam, foundflatfile, nil
 		}
 	}
-	var err error
-	return flatipam, foundflatfile, err
+
+	return flatipam, foundflatfile, NewConfigFileNotFoundError()
 }
 
 func handleEnvArgs(n *types.Net, numV6 int, numV4 int, args types.IPAMEnvArgs) (int, int, error) {
@@ -368,6 +368,16 @@ func NewInvalidPluginError(ipamType string) *InvalidPluginError {
 
 func (e *InvalidPluginError) Error() string {
 	return fmt.Sprintf("only interested in networks whose IPAM type is 'whereabouts'. This one was: %s", e.ipamType)
+}
+
+type ConfigFileNotFoundError struct{}
+
+func NewConfigFileNotFoundError() *ConfigFileNotFoundError {
+	return &ConfigFileNotFoundError{}
+}
+
+func (e *ConfigFileNotFoundError) Error() string {
+	return "config file not found"
 }
 
 func storageError() error {

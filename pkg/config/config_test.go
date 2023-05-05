@@ -4,10 +4,13 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"testing"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 )
 
 func TestAllocate(t *testing.T) {
@@ -16,6 +19,18 @@ func TestAllocate(t *testing.T) {
 }
 
 var _ = Describe("Allocation operations", func() {
+	var tmpDir string
+
+	BeforeEach(func() {
+		var err error
+		tmpDir, err = os.MkdirTemp("", "whereabouts")
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	AfterEach(func() {
+		Expect(os.RemoveAll(tmpDir)).To(Succeed())
+	})
+
 	It("can load a basic config", func() {
 
 		conf := `{
@@ -35,7 +50,10 @@ var _ = Describe("Allocation operations", func() {
         }
       }`
 
-		ipamconfig, _, err := LoadIPAMConfig([]byte(conf), "")
+		confPath := filepath.Join(tmpDir, "whereabouts.conf")
+		Expect(os.WriteFile(confPath, []byte(conf), 0755)).To(Succeed())
+
+		ipamconfig, _, err := LoadIPAMConfig([]byte(conf), "", confPath)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ipamconfig.LogLevel).To(Equal("debug"))
 		Expect(ipamconfig.LogFile).To(Equal("/tmp/whereabouts.log"))
@@ -47,6 +65,11 @@ var _ = Describe("Allocation operations", func() {
 		Expect(ipamconfig.LeaderRenewDeadline).To(Equal(1000))
 		Expect(ipamconfig.LeaderRetryPeriod).To(Equal(500))
 
+	})
+
+	It("throws an error when no flat-files are found", func() {
+		_, _, err := GetFlatIPAM(true, &types.IPAMConfig{})
+		Expect(err).To(MatchError(NewConfigFileNotFoundError()))
 	})
 
 	It("can load a global flat-file config", func() {
@@ -160,7 +183,10 @@ var _ = Describe("Allocation operations", func() {
         ]
     }`
 
-		ipamconfig, err := LoadIPAMConfiguration([]byte(conf), "")
+		confPath := filepath.Join(tmpDir, "whereabouts.conf")
+		Expect(os.WriteFile(confPath, []byte(conf), 0755)).To(Succeed())
+
+		ipamconfig, err := LoadIPAMConfiguration([]byte(conf), "", confPath)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ipamconfig.LogLevel).To(Equal("debug"))
 		Expect(ipamconfig.LogFile).To(Equal("/tmp/whereabouts.log"))
@@ -207,7 +233,10 @@ var _ = Describe("Allocation operations", func() {
         }
       }`
 
-		ipamConfig, _, err := LoadIPAMConfig([]byte(conf), "")
+		confPath := filepath.Join(tmpDir, "whereabouts.conf")
+		Expect(os.WriteFile(confPath, []byte(conf), 0755)).To(Succeed())
+
+		ipamConfig, _, err := LoadIPAMConfig([]byte(conf), "", confPath)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ipamConfig.IPRanges[0].Range).To(Equal("192.168.1.0/24"))
 		Expect(ipamConfig.IPRanges[0].RangeStart).To(Equal(net.ParseIP("192.168.1.5")))
@@ -232,7 +261,10 @@ var _ = Describe("Allocation operations", func() {
         }
       }`
 
-		ipamConfig, _, err := LoadIPAMConfig([]byte(conf), "")
+		confPath := filepath.Join(tmpDir, "whereabouts.conf")
+		Expect(os.WriteFile(confPath, []byte(conf), 0755)).To(Succeed())
+
+		ipamConfig, _, err := LoadIPAMConfig([]byte(conf), "", confPath)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ipamConfig.IPRanges[0].Range).To(Equal("192.168.1.0/24"))
 		Expect(ipamConfig.IPRanges[0].RangeStart).To(Equal(net.ParseIP("192.168.1.0")))
@@ -257,7 +289,10 @@ var _ = Describe("Allocation operations", func() {
         }
       }`
 
-		ipamConfig, _, err := LoadIPAMConfig([]byte(conf), "")
+		confPath := filepath.Join(tmpDir, "whereabouts.conf")
+		Expect(os.WriteFile(confPath, []byte(conf), 0755)).To(Succeed())
+
+		ipamConfig, _, err := LoadIPAMConfig([]byte(conf), "", confPath)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ipamConfig.IPRanges[0].Range).To(Equal("192.168.1.0/24"))
 		Expect(ipamConfig.IPRanges[0].RangeStart).To(Equal(net.ParseIP("192.168.1.44")))
@@ -283,7 +318,10 @@ var _ = Describe("Allocation operations", func() {
         }
       }`
 
-		ipamConfig, _, err := LoadIPAMConfig([]byte(conf), "")
+		confPath := filepath.Join(tmpDir, "whereabouts.conf")
+		Expect(os.WriteFile(confPath, []byte(conf), 0755)).To(Succeed())
+
+		ipamConfig, _, err := LoadIPAMConfig([]byte(conf), "", confPath)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ipamConfig.IPRanges[0].Range).To(Equal("192.168.1.0/24"))
 		Expect(ipamConfig.IPRanges[0].RangeStart).To(Equal(net.ParseIP("192.168.1.44")))
@@ -311,7 +349,10 @@ var _ = Describe("Allocation operations", func() {
         }
       }`
 
-		ipamConfig, _, err := LoadIPAMConfig([]byte(conf), "")
+		confPath := filepath.Join(tmpDir, "whereabouts.conf")
+		Expect(os.WriteFile(confPath, []byte(conf), 0755)).To(Succeed())
+
+		ipamConfig, _, err := LoadIPAMConfig([]byte(conf), "", confPath)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ipamConfig.IPRanges[0].Range).To(Equal("192.168.1.0/24"))
 		Expect(ipamConfig.IPRanges[0].RangeStart).To(Equal(net.ParseIP("192.168.1.44")))
@@ -333,7 +374,11 @@ var _ = Describe("Allocation operations", func() {
 				"gateway": "192.168.10.1"
 			}
 		}`
-		_, _, err := LoadIPAMConfig([]byte(invalidConf), "")
+
+		confPath := filepath.Join(tmpDir, "whereabouts.conf")
+		Expect(os.WriteFile(confPath, []byte(invalidConf), 0755)).To(Succeed())
+
+		_, _, err := LoadIPAMConfig([]byte(invalidConf), "", confPath)
 		Expect(err).To(MatchError("invalid range start for CIDR 192.168.2.16/28: 192.168.1.5"))
 	})
 
