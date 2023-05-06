@@ -89,7 +89,7 @@ retry kubectl create -f "${CNIS_DAEMONSET_PATH}"
 retry kubectl -n kube-system wait --for=condition=ready -l name="cni-plugins" pod --timeout=$TIMEOUT_K8
 echo "## build whereabouts"
 pushd "$ROOT"
-$OCI_BIN build . -t "$IMG_NAME"
+$OCI_BIN buildx build --load . -t "$IMG_NAME"
 popd
 
 echo "## load image into KinD"

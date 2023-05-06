@@ -1,11 +1,12 @@
 # This dockerfile is used for building for OpenShift
-FROM registry.ci.openshift.org/openshift/release:golang-1.19 as builder
+FROM --platform=$BUILDPLATFORM registry.ci.openshift.org/openshift/release:golang-1.19 as builder
 ADD . /go/src/github.com/k8snetworkplumbingwg/whereabouts
 WORKDIR /go/src/github.com/k8snetworkplumbingwg/whereabouts
-ENV CGO_ENABLED=1
+ENV CGO_ENABLED=0
 ENV GO111MODULE=on
-RUN go build -mod vendor -o bin/whereabouts     cmd/whereabouts.go
-RUN go build -mod vendor -o bin/ip-control-loop cmd/controlloop/controlloop.go
+ARG TARGETARCH TARGETOS
+RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -mod vendor -o bin/whereabouts     cmd/whereabouts.go
+RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -mod vendor -o bin/ip-control-loop cmd/controlloop/controlloop.go
 WORKDIR /
 
 FROM openshift/origin-base

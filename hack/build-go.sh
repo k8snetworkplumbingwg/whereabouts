@@ -38,6 +38,7 @@ echo "VERSION: ${VERSION}"
 echo "GIT_SHA: ${GIT_SHA}"
 echo "GIT_TREE_STATE: ${GIT_TREE_STATE}"
 echo "RELEASE_STATUS: ${RELEASE_STATUS}"
+echo "PLATFORM: ${GOOS}/${GOARCH}"
 VERSION_LDFLAGS="-X github.com/k8snetworkplumbingwg/whereabouts/pkg/version.Version=${VERSION} \
 -X github.com/k8snetworkplumbingwg/whereabouts/pkg/version.GitSHA=${GIT_SHA} \
 -X github.com/k8snetworkplumbingwg/whereabouts/pkg/version.GitTreeState=${GIT_TREE_STATE} \
