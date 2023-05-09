@@ -91,10 +91,8 @@ spec:
         app: whereabouts
         name: whereabouts
     spec:
-      hostNetwork: true      
+      hostNetwork: true
       serviceAccountName: whereabouts
-      nodeSelector:
-        kubernetes.io/arch: amd64
       tolerations:
       - operator: Exists
         effect: NoSchedule
@@ -106,7 +104,7 @@ spec:
           - >
             SLEEP=false /install-cni.sh &&
             /ip-control-loop -log-level debug
-        image: ghcr.io/k8snetworkplumbingwg/whereabouts:latest-amd64
+        image: ghcr.io/k8snetworkplumbingwg/whereabouts:latest
         env:
         - name: NODENAME
           valueFrom:
