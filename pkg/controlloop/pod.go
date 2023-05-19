@@ -27,12 +27,12 @@ import (
 	nadlister "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/client/listers/k8s.cni.cncf.io/v1"
 	"github.com/pkg/errors"
 
-	"github.com/k8snetworkplumbingwg/whereabouts/pkg/allocate"
 	whereaboutsv1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
 	wbclientset "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/clientset/versioned"
 	wbinformers "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/informers/externalversions"
 	wblister "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/listers/whereabouts.cni.cncf.io/v1alpha1"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/config"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/iphelpers"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
 	wbclient "github.com/k8snetworkplumbingwg/whereabouts/pkg/storage/kubernetes"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
@@ -320,7 +320,7 @@ func (pc *PodController) addressGarbageCollected(pod *v1.Pod, networkName string
 			v1.EventTypeNormal,
 			addressGarbageCollected,
 			"successful cleanup of IP address [%s] from network %s",
-			allocate.IPAddOffset(ip, uint64(index)),
+			iphelpers.IPAddOffset(ip, uint64(index)),
 			networkName)
 	}
 	return nil

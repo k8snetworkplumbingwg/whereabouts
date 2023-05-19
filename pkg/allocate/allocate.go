@@ -2,9 +2,9 @@ package allocate
 
 import (
 	"fmt"
-	"math"
 	"net"
 
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/iphelpers"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 )
@@ -81,231 +81,66 @@ func removeIdxFromSlice(s []types.IPReservation, i int) []types.IPReservation {
 	return s[:len(s)-1]
 }
 
-// byteSliceAdd adds ar1 to ar2
-// note: ar1/ar2 should be 16-length array
-func byteSliceAdd(ar1, ar2 []byte) ([]byte, error) {
-	if len(ar1) != len(ar2) {
-		return nil, fmt.Errorf("byteSliceAdd: bytes array mismatch: %v != %v", len(ar1), len(ar2))
+// IterateForAssignment iterates given an IP/IPNet and a list of reserved IPs and exluded subnets.
+// Valid IPs are contained within the ipnet, excluding the network and broadcast address.
+// If rangeStart is specified, it is respected if it lies within the ipnet.
+// If rangeEnd is specified, it is respected if it lies within the ipnet and if it is >= rangeStart.
+// reserveList holds a list of reserved IPs.
+// excludeRanges holds a list of subnets to be excluded (meaning the full subnet, including the network and broadcast IP).
+func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, reserveList []types.IPReservation, excludeRanges []string, containerID string, podRef string) (net.IP, []types.IPReservation, error) {
+	// Get the valid range, delimited by the ipnet's first and last usable IP as well as the rangeStart and rangeEnd.
+	firstIP, lastIP, err := iphelpers.GetIPRange(ipnet, rangeStart, rangeEnd)
+	if err != nil {
+		logging.Errorf("GetIPRange request failed with: %v", err)
+		return net.IP{}, reserveList, err
 	}
-	carry := uint(0)
+	logging.Debugf("IterateForAssignment input >> range_start: %v | range_end: %v | ipnet: %v | first IP: %v | last IP: %v",
+		rangeStart, rangeEnd, ipnet, firstIP, lastIP)
 
-	sumByte := make([]byte, 16)
-	for n := range ar1 {
-		sum := uint(ar1[15-n]) + uint(ar2[15-n]) + carry
-		carry = 0
-		if sum > 255 {
-			carry = 1
-		}
-		sumByte[15-n] = uint8(sum)
-	}
-
-	return sumByte, nil
-}
-
-// byteSliceSub subtracts ar2 from ar1. This function assumes that ar1 > ar2
-// note: ar1/ar2 should be 16-length array
-func byteSliceSub(ar1, ar2 []byte) ([]byte, error) {
-	if len(ar1) != len(ar2) {
-		return nil, fmt.Errorf("byteSliceSub: bytes array mismatch")
-	}
-	carry := int(0)
-
-	sumByte := make([]byte, 16)
-	for n := range ar1 {
-		var sum int
-		sum = int(ar1[15-n]) - int(ar2[15-n]) - carry
-		if sum < 0 {
-			sum = 0x100 - int(ar1[15-n]) - int(ar2[15-n]) - carry
-			carry = 1
-		} else {
-			carry = 0
-		}
-		sumByte[15-n] = uint8(sum)
-	}
-
-	return sumByte, nil
-}
-
-func ipAddrToUint64(ip net.IP) uint64 {
-	num := uint64(0)
-	ipArray := []byte(ip)
-	for n := range ipArray {
-		num = num << 8
-		num = uint64(ipArray[n]) + num
-	}
-	return num
-}
-
-func ipAddrFromUint64(num uint64) net.IP {
-	idxByte := make([]byte, 16)
-	i := num
-	for n := range idxByte {
-		idxByte[15-n] = byte(0xff & i)
-		i = i >> 8
-	}
-	return net.IP(idxByte)
-}
-
-// IPGetOffset gets offset between ip1 and ip2. This assumes ip1 > ip2 (from IP representation point of view)
-func IPGetOffset(ip1, ip2 net.IP) uint64 {
-	if ip1.To4() == nil && ip2.To4() != nil {
-		return 0
-	}
-
-	if ip1.To4() != nil && ip2.To4() == nil {
-		return 0
-	}
-
-	if len([]byte(ip1)) != len([]byte(ip2)) {
-		return 0
-	}
-
-	ipOffset, _ := byteSliceSub([]byte(ip1.To16()), []byte(ip2.To16()))
-	return ipAddrToUint64(ipOffset)
-}
-
-// IPAddOffset show IP address plus given offset
-func IPAddOffset(ip net.IP, offset uint64) net.IP {
-	// Check IPv4 and its offset range
-	if ip.To4() != nil && offset >= math.MaxUint32 {
-		return nil
-	}
-
-	// make pseudo IP variable for offset
-	idxIP := ipAddrFromUint64(offset)
-
-	b, _ := byteSliceAdd([]byte(ip.To16()), []byte(idxIP))
-	return net.IP(b)
-}
-
-// IterateForAssignment iterates given an IP/IPNet and a list of reserved IPs
-func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, reservelist []types.IPReservation, excludeRanges []string, containerID string, podRef string) (net.IP, []types.IPReservation, error) {
-	firstip := rangeStart.To16()
-	var lastip net.IP
-	if rangeEnd != nil {
-		lastip = rangeEnd.To16()
-	} else {
-		var err error
-		firstip, lastip, err = GetIPRange(rangeStart, ipnet)
-		if err != nil {
-			logging.Errorf("GetIPRange request failed with: %v", err)
-			return net.IP{}, reservelist, err
-		}
-	}
-	logging.Debugf("IterateForAssignment input >> ip: %v | ipnet: %v | first IP: %v | last IP: %v", rangeStart, ipnet, firstip, lastip)
-
+	// Build reserved map.
 	reserved := make(map[string]bool)
-	for _, r := range reservelist {
+	for _, r := range reserveList {
 		reserved[r.IP.String()] = true
 	}
-
-	// excluded,            "192.168.2.229/30", "192.168.1.229/30",
+	// Build excluded list, "192.168.2.229/30", "192.168.1.229/30".
 	excluded := []*net.IPNet{}
 	for _, v := range excludeRanges {
 		_, subnet, _ := net.ParseCIDR(v)
 		excluded = append(excluded, subnet)
 	}
 
-	// Iterate every IP address in the range
-	var assignedip net.IP
-	performedassignment := false
-	endip := IPAddOffset(lastip, uint64(1))
-	for i := firstip; ipnet.Contains(i) && !i.Equal(endip); i = IPAddOffset(i, uint64(1)) {
-		// if already reserved, skip it
-		if reserved[i.String()] {
+	// Iterate over every IP address in the range, accounting for reserved IPs and exclude ranges. Make sure that ip is
+	// within ipnet, and make sure that ip is smaller than lastIP.
+	for ip := firstIP; ipnet.Contains(ip) && iphelpers.CompareIPs(ip, lastIP) <= 0; ip = iphelpers.IncIP(ip) {
+		// If already reserved, skip it.
+		if reserved[ip.String()] {
 			continue
 		}
-
-		// Lastly, we need to check if this IP is within the range of excluded subnets
-		isAddrExcluded := false
-		for _, subnet := range excluded {
-			if subnet.Contains(i) {
-				isAddrExcluded = true
-				firstExcluded, _, _ := net.ParseCIDR(subnet.String())
-				_, lastExcluded, _ := GetIPRange(firstExcluded, *subnet)
-				if lastExcluded != nil {
-					if i.To4() != nil {
-						// exclude broadcast address
-						i = IPAddOffset(lastExcluded, uint64(1))
-					} else {
-						i = lastExcluded
-					}
-					logging.Debugf("excluding %v and moving to the next available ip: %v", subnet, i)
-				}
-			}
-		}
-		if isAddrExcluded {
+		// If this IP is within the range of one of the excluded subnets, jump to the exluded subnet's broadcast address
+		// and skip.
+		if skipTo := skipExcludedSubnets(ip, excluded); skipTo != nil {
+			ip = skipTo
 			continue
 		}
-
-		// Ok, this one looks like we can assign it!
-		performedassignment = true
-
-		assignedip = i
-		logging.Debugf("Reserving IP: |%v|", assignedip.String()+" "+containerID)
-		reservelist = append(reservelist, types.IPReservation{IP: assignedip, ContainerID: containerID, PodRef: podRef})
-		break
+		// Assign and reserve the IP and return.
+		logging.Debugf("Reserving IP: |%v|", ip.String()+" "+containerID)
+		reserveList = append(reserveList, types.IPReservation{IP: ip, ContainerID: containerID, PodRef: podRef})
+		return ip, reserveList, nil
 	}
 
-	if !performedassignment {
-		return net.IP{}, reservelist, AssignmentError{firstip, lastip, ipnet}
-	}
-
-	return assignedip, reservelist, nil
+	// No IP address for assignment found, return an error.
+	return net.IP{}, reserveList, AssignmentError{firstIP, lastIP, ipnet}
 }
 
-func mergeIPAddress(net, host []byte) ([]byte, error) {
-	if len(net) != len(host) {
-		return nil, fmt.Errorf("not matched")
+// skipExcludedSubnets iterates through all subnets and checks if ip is part of them. If i is part of one of the subnets,
+// return the subnet's broadcast address.
+func skipExcludedSubnets(ip net.IP, excluded []*net.IPNet) net.IP {
+	for _, subnet := range excluded {
+		if subnet.Contains(ip) {
+			broadcastIP := iphelpers.SubnetBroadcastIP(*subnet)
+			logging.Debugf("excluding %v and moving to the end of the excluded range: %v", subnet, broadcastIP)
+			return broadcastIP
+		}
 	}
-	addr := append([]byte{}, net...)
-	for i := range net {
-		addr[i] = net[i] | host[i]
-	}
-	return addr, nil
-}
-
-// GetIPRange returns the first and last IP in a range
-func GetIPRange(ip net.IP, ipnet net.IPNet) (net.IP, net.IP, error) {
-	mask := ipnet.Mask
-	ones, bits := mask.Size()
-	masklen := bits - ones
-
-	// Error when the mask isn't large enough.
-	if masklen < 2 {
-		return nil, nil, fmt.Errorf("net mask is too short, must be 2 or more: %v", masklen)
-	}
-
-	// get network part
-	network := ip.Mask(ipnet.Mask)
-	// get bitmask for host
-	hostMask := net.IPMask(append([]byte{}, ipnet.Mask...))
-	for i, n := range hostMask {
-		hostMask[i] = ^n
-	}
-	// get host part of ip
-	first := ip.Mask(net.IPMask(hostMask))
-	// if ip is just same as ipnet.IP, i.e. just network address,
-	// increment it for start ip
-	if ip.Equal(ipnet.IP) {
-		first[len(first)-1] = 0x1
-	}
-	// calculate last byte
-	last := hostMask
-	// if IPv4 case, decrement 1 for broadcasting address
-	if ip.To4() != nil {
-		last[len(last)-1]--
-	}
-	// get first ip and last ip based on network part + host part
-	firstIPbyte, _ := mergeIPAddress([]byte(network), first)
-	lastIPbyte, _ := mergeIPAddress([]byte(network), last)
-	firstIP := net.IP(firstIPbyte).To16()
-	lastIP := net.IP(lastIPbyte).To16()
-
-	return firstIP, lastIP, nil
-}
-
-// IsIPv4 checks if an IP is v4.
-func IsIPv4(checkip net.IP) bool {
-	return checkip.To4() != nil
+	return nil
 }

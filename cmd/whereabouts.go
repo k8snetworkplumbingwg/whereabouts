@@ -3,17 +3,18 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
+
 	"github.com/containernetworking/cni/pkg/skel"
 	cnitypes "github.com/containernetworking/cni/pkg/types"
 	"github.com/containernetworking/cni/pkg/types/current"
 	cniversion "github.com/containernetworking/cni/pkg/version"
-	"github.com/k8snetworkplumbingwg/whereabouts/pkg/allocate"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/config"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/iphelpers"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage/kubernetes"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/version"
-	"net"
 )
 
 func main() {
@@ -84,7 +85,7 @@ func cmdAdd(args *skel.CmdArgs, client *kubernetes.KubernetesIPAM, cniVersion st
 	var useVersion string
 	for _, newip := range newips {
 		// Determine if v4 or v6.
-		if allocate.IsIPv4(newip.IP) {
+		if iphelpers.IsIPv4(newip.IP) {
 			useVersion = "4"
 		} else {
 			useVersion = "6"
