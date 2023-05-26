@@ -75,7 +75,7 @@ if [ -f "$SERVICE_ACCOUNT_PATH/token" ]; then
   touch $WHEREABOUTS_KUBECONFIG
   chmod ${KUBECONFIG_MODE:-600} $WHEREABOUTS_KUBECONFIG
   cat > $WHEREABOUTS_KUBECONFIG <<EOF
-# Kubeconfig file for Multus CNI plugin.
+# Kubeconfig file for the Whereabouts CNI plugin.
 apiVersion: v1
 kind: Config
 clusters:
