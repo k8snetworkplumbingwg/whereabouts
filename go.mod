@@ -7,7 +7,7 @@ require (
 	github.com/containernetworking/cni v0.8.1
 	github.com/containernetworking/plugins v0.8.2
 	github.com/go-co-op/gocron v1.13.0
-	github.com/imdario/mergo v0.3.12
+	github.com/imdario/mergo v0.3.16
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/k8snetworkplumbingwg/network-attachment-definition-client v1.1.1-0.20210510153419-66a699ae3b05
 	github.com/onsi/ginkgo v1.16.5
