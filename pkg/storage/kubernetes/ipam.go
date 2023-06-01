@@ -147,6 +147,11 @@ func normalizeRange(ipRange string) string {
 	return normalized
 }
 
+// leaseLockName returns the name of the leaseLock to be used for leader election
+func leaseLockName(pi *PoolIdentifier) string {
+	return fmt.Sprintf("whereabouts-%s", IPPoolName(*pi))
+}
+
 func (i *KubernetesIPAM) getPool(ctx context.Context, name string, iprange string) (*whereaboutsv1alpha1.IPPool, error) {
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, storage.RequestTimeout)
 	defer cancel()
@@ -256,6 +261,7 @@ func (c *KubernetesOverlappingRangeStore) UpdateOverlappingRangeAllocation(ctx c
 	case whereaboutstypes.Deallocate:
 		verb = "deallocate"
 		err = c.client.WhereaboutsV1alpha1().OverlappingRangeIPReservations(c.namespace).Delete(ctx, clusteripres.GetName(), metav1.DeleteOptions{})
+		//TODO(adrianc): if object does not exist should we still return an error ?
 	}
 
 	if err != nil {
@@ -338,7 +344,7 @@ func (p *KubernetesIPPool) Update(ctx context.Context, reservations []whereabout
 
 // newLeaderElector creates a new leaderelection.LeaderElector and associated
 // channels by which to observe elections and depositions.
-func newLeaderElector(clientset kubernetes.Interface, namespace string, podNamespace string, podID string, leaseDuration int, renewDeadline int, retryPeriod int) (*leaderelection.LeaderElector, chan struct{}, chan struct{}) {
+func newLeaderElector(clientset kubernetes.Interface, namespace string, podNamespace string, podID string, leaseDuration int, renewDeadline int, retryPeriod int, leaseLockName string) (*leaderelection.LeaderElector, chan struct{}, chan struct{}) {
 	//log.WithField("context", "leaderelection")
 	// leaderOK will block gRPC startup until it's closed.
 	leaderOK := make(chan struct{})
@@ -348,7 +354,7 @@ func newLeaderElector(clientset kubernetes.Interface, namespace string, podNames
 
 	var rl = &resourcelock.LeaseLock{
 		LeaseMeta: metav1.ObjectMeta{
-			Name:      "whereabouts",
+			Name:      leaseLockName,
 			Namespace: namespace,
 		},
 		Client: clientset.CoordinationV1(),
@@ -394,7 +400,11 @@ func IPManagement(ctx context.Context, mode int, ipamConf whereaboutstypes.IPAMC
 	}
 
 	// setup leader election
-	le, leader, deposed := newLeaderElector(client.clientSet, client.namespace, ipamConf.PodNamespace, ipamConf.PodName, ipamConf.LeaderLeaseDuration, ipamConf.LeaderRenewDeadline, ipamConf.LeaderRetryPeriod)
+
+	// TODO(adrianc): leader election should be moved into IPManagementKubernetesUpdate to handle multiple ranges, for now assume only one range.
+	perPoolLeaseLockName := leaseLockName(&PoolIdentifier{IpRange: ipamConf.IPRanges[0].Range, NetworkName: ipamConf.NetworkName})
+	le, leader, deposed := newLeaderElector(client.clientSet,
+		client.namespace, ipamConf.PodNamespace, ipamConf.PodName, ipamConf.LeaderLeaseDuration, ipamConf.LeaderRenewDeadline, ipamConf.LeaderRetryPeriod, perPoolLeaseLockName)
 	var wg sync.WaitGroup
 	wg.Add(2)
 
@@ -477,7 +487,6 @@ func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *Kubernete
 
 	// handle the ip add/del until successful
 	var overlappingrangeallocations []whereaboutstypes.IPReservation
-	var ipforoverlappingrangeupdate net.IP
 	for _, ipRange := range ipamConf.IPRanges {
 	RETRYLOOP:
 		for j := 0; j < storage.DatastoreRetries; j++ {
@@ -530,14 +539,39 @@ func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *Kubernete
 						continue
 					}
 
-					ipforoverlappingrangeupdate = newip.IP
+					// reserve IP in overlappingIPRangeAllocation
+					err = overlappingrangestore.UpdateOverlappingRangeAllocation(requestCtx, mode, newip.IP, containerID, podRef)
+					// TODO: We should probably return a specific type of error in case k8s returns error AlreadyExsits, then exit early in case of any other error
+					if err != nil {
+						logging.Errorf("Failed to update overlappingRangeAllocation (%s). Continuing loop. %v", newip.IP, err)
+						continue
+					}
+
+					defer func() {
+						if err != nil {
+							cleanupErr := overlappingrangestore.UpdateOverlappingRangeAllocation(requestCtx, mode, newip.IP, containerID, podRef)
+							if cleanupErr != nil {
+								logging.Errorf("failed to cleanup overlappingRangeAllocation: %v", cleanupErr)
+							}
+						}
+					}()
 				}
 
 			case whereaboutstypes.Deallocate:
+				var ipforoverlappingrangeupdate net.IP
+
 				updatedreservelist, ipforoverlappingrangeupdate, err = allocate.DeallocateIP(reservelist, containerID)
 				if err != nil {
 					logging.Errorf("Error deallocating IP: %v", err)
 					return newips, err
+				}
+
+				if ipamConf.OverlappingRanges {
+					err = overlappingrangestore.UpdateOverlappingRangeAllocation(requestCtx, mode, ipforoverlappingrangeupdate, containerID, podRef)
+					if err != nil {
+						logging.Errorf("Error performing UpdateOverlappingRangeAllocation: %v", err)
+						continue
+					}
 				}
 			}
 
@@ -557,20 +591,13 @@ func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *Kubernete
 			err = pool.Update(requestCtx, usereservelist)
 			if err != nil {
 				logging.Errorf("IPAM error updating pool (attempt: %d): %v", j, err)
+
 				if e, ok := err.(storage.Temporary); ok && e.Temporary() {
 					continue
 				}
 				break RETRYLOOP
 			}
 			break RETRYLOOP
-		}
-
-		if ipamConf.OverlappingRanges {
-			err = overlappingrangestore.UpdateOverlappingRangeAllocation(requestCtx, mode, ipforoverlappingrangeupdate, containerID, podRef)
-			if err != nil {
-				logging.Errorf("Error performing UpdateOverlappingRangeAllocation: %v", err)
-				return newips, err
-			}
 		}
 
 		newips = append(newips, newip)
