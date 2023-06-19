@@ -234,6 +234,24 @@ The overlapping ranges feature is enabled by default, and will not allow an IP a
 
 Please note: This feature is only implemented for the Kubernetes storage backend.
 
+### Network names
+
+By default, it is not possible to configure the same CIDR range twice and have whereabouts assign from the ranges
+independently. However, this is useful in multi-tenant situations where more than one group is responsible for
+selecting CIDR ranges.
+
+By using parameter `network_name` *(string)*, administrators can tell whereabouts to assign IP addresses for the same
+CIDR range multiple times.
+
+Parameter `enable_overlapping_ranges` (see above) is scoped per network name.
+
+```
+(...)
+    "network_name": "network-with-independent-allocation",
+    "enable_overlapping_ranges": true,
+(...)
+```
+
 ## Building
 
 Run the build command from the `./hack` directory:
