@@ -43,11 +43,12 @@ func TestWhereaboutsE2E(t *testing.T) {
 var _ = Describe("Whereabouts functionality", func() {
 	Context("Test setup", func() {
 		const (
-			testNamespace   = "default"
-			ipv4TestRange   = "10.10.0.0/16"
-			testNetworkName = "wa-nad"
-			rsName          = "whereabouts-scale-test"
-			ipPoolCIDR      = "10.10.0.0/16"
+			testNamespace            = "default"
+			ipv4TestRange            = "10.10.0.0/16"
+			ipv4TestRangeOverlapping = "10.10.0.0/17"
+			testNetworkName          = "wa-nad"
+			rsName                   = "whereabouts-scale-test"
+			ipPoolCIDR               = "10.10.0.0/16"
 		)
 
 		var (
@@ -482,7 +483,7 @@ var _ = Describe("Whereabouts functionality", func() {
 			})
 		})
 
-		Context("Named ranges test", func() {
+		Context("OverlappingRangeIPReservation", func() {
 			const (
 				testNetwork2Name = "wa-nad-2"
 			)
@@ -491,26 +492,121 @@ var _ = Describe("Whereabouts functionality", func() {
 				pod2          *core.Pod
 			)
 
+			for _, enableOverlappingRanges := range []bool{true, false} {
+				When(fmt.Sprintf("a second net-attach-definition with \"enable_overlapping_ranges\": %t is created",
+					enableOverlappingRanges), func() {
+					BeforeEach(func() {
+						netAttachDef2 = macvlanNetworkWithWhereaboutsIPAMNetwork(testNetwork2Name, testNamespace,
+							ipv4TestRangeOverlapping, []string{}, "", false)
+
+						By("creating a second NetworkAttachmentDefinition for whereabouts")
+						_, err := clientInfo.AddNetAttachDef(netAttachDef2)
+						Expect(err).NotTo(HaveOccurred())
+					})
+
+					AfterEach(func() {
+						Expect(clientInfo.DelNetAttachDef(netAttachDef2)).To(Succeed())
+					})
+
+					BeforeEach(func() {
+						const (
+							singlePodName  = "whereabouts-basic-test"
+							singlePod2Name = "whereabouts-basic-test-2"
+						)
+						var err error
+
+						By("creating a pod with whereabouts net-attach-def")
+						pod, err = clientInfo.ProvisionPod(
+							singlePodName,
+							testNamespace,
+							podTierLabel(singlePodName),
+							entities.PodNetworkSelectionElements(testNetworkName),
+						)
+						Expect(err).NotTo(HaveOccurred())
+
+						By("creating a second pod with the second whereabouts net-attach-def")
+						pod2, err = clientInfo.ProvisionPod(
+							singlePod2Name,
+							testNamespace,
+							podTierLabel(singlePodName),
+							entities.PodNetworkSelectionElements(testNetwork2Name),
+						)
+						Expect(err).NotTo(HaveOccurred())
+
+					})
+
+					AfterEach(func() {
+						By("deleting pod with whereabouts net-attach-def")
+						Expect(clientInfo.DeletePod(pod)).To(Succeed())
+						By("deleting the second pod with whereabouts net-attach-def")
+						Expect(clientInfo.DeletePod(pod2)).To(Succeed())
+					})
+
+					It("allocates the correct IP address to the second pod", func() {
+						By("checking pod IP is within whereabouts IPAM range")
+						secondaryIfaceIPs, err := retrievers.SecondaryIfaceIPValue(pod)
+						Expect(err).NotTo(HaveOccurred())
+						Expect(secondaryIfaceIPs).NotTo(BeEmpty())
+
+						By("checking pod 2 IP is within whereabouts IPAM range")
+						secondaryIfaceIPs2, err := retrievers.SecondaryIfaceIPValue(pod2)
+						Expect(err).NotTo(HaveOccurred())
+						Expect(secondaryIfaceIPs2).NotTo(BeEmpty())
+
+						if enableOverlappingRanges {
+							By("checking pod 2 IP is different from pod 1 IP")
+							Expect(secondaryIfaceIPs[0]).NotTo(Equal(secondaryIfaceIPs2[0]))
+						} else {
+							By("checking pod 2 IP equals pod 1 IP")
+							Expect(secondaryIfaceIPs[0]).To(Equal(secondaryIfaceIPs2[0]))
+						}
+					})
+				})
+			}
+		})
+
+		Context("Named ranges test", func() {
+			const (
+				namedNetworkName = "named-range"
+				testNetwork2Name = "wa-nad-2"
+				testNetwork3Name = "wa-nad-3"
+			)
+			var (
+				netAttachDef2 *nettypes.NetworkAttachmentDefinition
+				netAttachDef3 *nettypes.NetworkAttachmentDefinition
+				pod2          *core.Pod
+				pod3          *core.Pod
+			)
+
 			BeforeEach(func() {
 				var (
 					err error
 				)
 
-				netAttachDef2 = macvlanNetworkWithWhereaboutsIPAMNetwork(testNetwork2Name, testNamespace, ipv4TestRange, []string{}, testNetwork2Name, false)
+				netAttachDef2 = macvlanNetworkWithWhereaboutsIPAMNetwork(testNetwork2Name, testNamespace,
+					ipv4TestRange, []string{}, namedNetworkName, true)
+				netAttachDef3 = macvlanNetworkWithWhereaboutsIPAMNetwork(testNetwork3Name, testNamespace,
+					ipv4TestRangeOverlapping, []string{}, namedNetworkName, true)
 
 				By("creating a second NetworkAttachmentDefinition for whereabouts")
 				_, err = clientInfo.AddNetAttachDef(netAttachDef2)
+				Expect(err).NotTo(HaveOccurred())
+
+				By("creating a third NetworkAttachmentDefinition for whereabouts")
+				_, err = clientInfo.AddNetAttachDef(netAttachDef3)
 				Expect(err).NotTo(HaveOccurred())
 			})
 
 			AfterEach(func() {
 				Expect(clientInfo.DelNetAttachDef(netAttachDef2)).To(Succeed())
+				Expect(clientInfo.DelNetAttachDef(netAttachDef3)).To(Succeed())
 			})
 
 			BeforeEach(func() {
 				const (
 					singlePodName  = "whereabouts-basic-test"
 					singlePod2Name = "whereabouts-basic-test-2"
+					singlePod3Name = "whereabouts-basic-test-3"
 				)
 				var err error
 
@@ -531,6 +627,15 @@ var _ = Describe("Whereabouts functionality", func() {
 					entities.PodNetworkSelectionElements(testNetwork2Name),
 				)
 				Expect(err).NotTo(HaveOccurred())
+
+				By("creating a third pod with the third whereabouts net-attach-def")
+				pod3, err = clientInfo.ProvisionPod(
+					singlePod3Name,
+					testNamespace,
+					podTierLabel(singlePodName),
+					entities.PodNetworkSelectionElements(testNetwork3Name),
+				)
+				Expect(err).NotTo(HaveOccurred())
 			})
 
 			AfterEach(func() {
@@ -538,20 +643,27 @@ var _ = Describe("Whereabouts functionality", func() {
 				Expect(clientInfo.DeletePod(pod)).To(Succeed())
 				By("deleting the second pod with whereabouts net-attach-def")
 				Expect(clientInfo.DeletePod(pod2)).To(Succeed())
+				By("deleting the third pod with whereabouts net-attach-def")
+				Expect(clientInfo.DeletePod(pod3)).To(Succeed())
 			})
 
-			It("allocates the same IP to the Pods as they are in differenct address collision domains", func() {
+			It("allocates the same IP to the Pods as they are in different address collision domains", func() {
 				By("checking pod IP is within whereabouts IPAM range")
 				secondaryIfaceIPs, err := retrievers.SecondaryIfaceIPValue(pod)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(secondaryIfaceIPs).NotTo(BeEmpty())
 
-				By("checking pod 2 IP is within whereabouts IPAM range")
+				By("checking pod 2 IP is within whereabouts IPAM range and has the same IP as pod 1")
 				secondaryIfaceIPs2, err := retrievers.SecondaryIfaceIPValue(pod2)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(secondaryIfaceIPs2).NotTo(BeEmpty())
-
 				Expect(secondaryIfaceIPs[0]).To(Equal(secondaryIfaceIPs2[0]))
+
+				By("checking pod 3 IP is within whereabouts IPAM range and has a different IP from pod 2")
+				secondaryIfaceIPs3, err := retrievers.SecondaryIfaceIPValue(pod3)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(secondaryIfaceIPs3).NotTo(BeEmpty())
+				Expect(secondaryIfaceIPs2[0]).NotTo(Equal(secondaryIfaceIPs3[0]))
 			})
 		})
 	})

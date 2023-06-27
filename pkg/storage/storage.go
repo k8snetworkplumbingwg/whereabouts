@@ -32,8 +32,9 @@ type Store interface {
 
 // OverlappingRangeStore is an interface for wrapping overlappingrange storage options
 type OverlappingRangeStore interface {
-	IsAllocatedInOverlappingRange(ctx context.Context, ip net.IP) (bool, error)
-	UpdateOverlappingRangeAllocation(ctx context.Context, mode int, ip net.IP, containerID string, podRef string) error
+	IsAllocatedInOverlappingRange(ctx context.Context, ip net.IP, networkName string) (bool, error)
+	UpdateOverlappingRangeAllocation(ctx context.Context, mode int, ip net.IP, containerID string, podRef,
+		networkName string) error
 }
 
 type Temporary interface {
