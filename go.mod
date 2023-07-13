@@ -5,7 +5,7 @@ go 1.19
 require (
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/containernetworking/cni v0.8.1
-	github.com/containernetworking/plugins v0.8.2
+	github.com/containernetworking/plugins v0.8.6
 	github.com/go-co-op/gocron v1.13.0
 	github.com/imdario/mergo v0.3.12
 	github.com/json-iterator/go v1.1.12 // indirect
