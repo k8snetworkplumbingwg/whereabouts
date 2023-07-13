@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
@@ -164,9 +165,12 @@ func (rl *ReconcileLooper) findClusterWideIPReservations(ctx context.Context) er
 
 	for _, clusterWideIPReservation := range clusterWideIPReservations {
 		ip := clusterWideIPReservation.GetName()
+		// De-normalize the IP
+		denormalizedip := strings.ReplaceAll(ip, "-", ":")
+
 		podRef := clusterWideIPReservation.Spec.PodRef
 
-		if !rl.isPodAlive(podRef, ip) {
+		if !rl.isPodAlive(podRef, denormalizedip) {
 			logging.Debugf("pod ref %s is not listed in the live pods list", podRef)
 			rl.orphanedClusterWideIPs = append(rl.orphanedClusterWideIPs, clusterWideIPReservation)
 		}
