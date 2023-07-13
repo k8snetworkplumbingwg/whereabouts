@@ -21,8 +21,8 @@ RUN mkdir -p /usr/src/whereabouts/images && \
        mkdir -p /usr/src/whereabouts/bin && \
        mkdir -p /usr/src/whereabouts/rhel9/bin && \
        mkdir -p /usr/src/whereabouts/rhel8/bin
-COPY --from=rhel9 /go/src/github.com/k8snetworkplumbingwg/whereabouts/bin/whereabouts     /usr/src/whereabouts/bin
-COPY --from=rhel9 /go/src/github.com/k8snetworkplumbingwg/whereabouts/bin/ip-control-loop /usr/src/whereabouts/bin
+COPY --from=rhel8 /go/src/github.com/k8snetworkplumbingwg/whereabouts/bin/whereabouts     /usr/src/whereabouts/bin
+COPY --from=rhel8 /go/src/github.com/k8snetworkplumbingwg/whereabouts/bin/ip-control-loop /usr/src/whereabouts/bin
 COPY --from=rhel9 /go/src/github.com/k8snetworkplumbingwg/whereabouts/bin/whereabouts     /usr/src/whereabouts/rhel9/bin
 COPY --from=rhel9 /go/src/github.com/k8snetworkplumbingwg/whereabouts/bin/ip-control-loop /usr/src/whereabouts/rhel9/bin
 COPY --from=rhel8 /go/src/github.com/k8snetworkplumbingwg/whereabouts/bin/whereabouts     /usr/src/whereabouts/rhel8/bin
