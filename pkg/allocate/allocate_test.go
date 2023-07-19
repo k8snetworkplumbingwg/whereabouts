@@ -113,6 +113,33 @@ var _ = Describe("Allocation operations", func() {
 
 	})
 
+	It("can IterateForAssignment on an IPv4 address excluding a range which is a single IP", func() {
+		firstip, ipnet, err := net.ParseCIDR("192.168.0.0/29")
+		Expect(err).NotTo(HaveOccurred())
+
+		// figure out the range start.
+		calculatedrangestart := net.ParseIP(firstip.Mask(ipnet.Mask).String())
+
+		var ipres []types.IPReservation
+		exrange := []string{"192.168.0.1"}
+		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(fmt.Sprint(newip)).To(Equal("192.168.0.2"))
+	})
+
+	It("correctly handles invalid syntax for an exclude range with IPv4", func() {
+		firstip, ipnet, err := net.ParseCIDR("192.168.0.0/29")
+		Expect(err).NotTo(HaveOccurred())
+
+		// figure out the range start.
+		calculatedrangestart := net.ParseIP(firstip.Mask(ipnet.Mask).String())
+
+		var ipres []types.IPReservation
+		exrange := []string{"192.168.0.1/123"}
+		_, _, err = IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
+		Expect(err).To(MatchError(HavePrefix("could not parse exclude range")))
+	})
+
 	It("can IterateForAssignment on an IPv6 address excluding a range", func() {
 
 		firstip, ipnet, err := net.ParseCIDR("100::2:1/125")
@@ -126,6 +153,32 @@ var _ = Describe("Allocation operations", func() {
 		newip, _, _ := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
 		Expect(fmt.Sprint(newip)).To(Equal("100::2:4"))
 
+	})
+
+	It("can IterateForAssignment on an IPv6 address excluding a range which is a single IP", func() {
+		firstip, ipnet, err := net.ParseCIDR("100::2:1/125")
+		Expect(err).NotTo(HaveOccurred())
+
+		// figure out the range start.
+		calculatedrangestart := net.ParseIP(firstip.Mask(ipnet.Mask).String())
+
+		var ipres []types.IPReservation
+		exrange := []string{"100::2:1"}
+		newip, _, _ := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
+		Expect(fmt.Sprint(newip)).To(Equal("100::2:2"))
+	})
+
+	It("correctly handles invalid syntax for an exclude range with IPv6", func() {
+		firstip, ipnet, err := net.ParseCIDR("100::2:1/125")
+		Expect(err).NotTo(HaveOccurred())
+
+		// figure out the range start.
+		calculatedrangestart := net.ParseIP(firstip.Mask(ipnet.Mask).String())
+
+		var ipres []types.IPReservation
+		exrange := []string{"100::2::1"}
+		_, _, err = IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
+		Expect(err).To(MatchError(HavePrefix("could not parse exclude range")))
 	})
 
 	It("can IterateForAssignment on an IPv6 address excluding a very large range", func() {
