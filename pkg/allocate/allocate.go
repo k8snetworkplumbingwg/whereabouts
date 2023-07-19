@@ -11,13 +11,15 @@ import (
 
 // AssignmentError defines an IP assignment error.
 type AssignmentError struct {
-	firstIP net.IP
-	lastIP  net.IP
-	ipnet   net.IPNet
+	firstIP       net.IP
+	lastIP        net.IP
+	ipnet         net.IPNet
+	excludeRanges []string
 }
 
 func (a AssignmentError) Error() string {
-	return fmt.Sprintf("Could not allocate IP in range: ip: %v / - %v / range: %#v", a.firstIP, a.lastIP, a.ipnet)
+	return fmt.Sprintf("Could not allocate IP in range: ip: %v / - %v / range: %s / excludeRanges: %v",
+		a.firstIP, a.lastIP, a.ipnet.String(), a.excludeRanges)
 }
 
 // AssignIP assigns an IP using a range and a reserve list.
@@ -129,7 +131,7 @@ func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, r
 	}
 
 	// No IP address for assignment found, return an error.
-	return net.IP{}, reserveList, AssignmentError{firstIP, lastIP, ipnet}
+	return net.IP{}, reserveList, AssignmentError{firstIP, lastIP, ipnet, excludeRanges}
 }
 
 // skipExcludedSubnets iterates through all subnets and checks if ip is part of them. If i is part of one of the subnets,
