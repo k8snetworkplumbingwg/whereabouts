@@ -104,10 +104,14 @@ func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, r
 	for _, r := range reserveList {
 		reserved[r.IP.String()] = true
 	}
+
 	// Build excluded list, "192.168.2.229/30", "192.168.1.229/30".
 	excluded := []*net.IPNet{}
 	for _, v := range excludeRanges {
-		_, subnet, _ := net.ParseCIDR(v)
+		subnet, err := parseExcludedRange(v)
+		if err != nil {
+			return net.IP{}, reserveList, fmt.Errorf("could not parse exclude range, err: %q", err)
+		}
 		excluded = append(excluded, subnet)
 	}
 
@@ -145,4 +149,29 @@ func skipExcludedSubnets(ip net.IP, excluded []*net.IPNet) net.IP {
 		}
 	}
 	return nil
+}
+
+// parseExcludedRange parses a provided string to a net.IPNet.
+// If the provided string is a valid CIDR, return the net.IPNet for that CIDR.
+// If the provided string is a valid IP address, add the /32 or /128 prefix to form the CIDR and return the net.IPNet.
+// Otherwise, return the error.
+func parseExcludedRange(s string) (*net.IPNet, error) {
+	// Try parsing CIDRs.
+	_, subnet, err := net.ParseCIDR(s)
+	if err == nil {
+		return subnet, nil
+	}
+	// The user might have given a single IP address, try parsing that - if it does not parse, return the error that
+	// we got earlier.
+	ip := net.ParseIP(s)
+	if ip == nil {
+		return nil, err
+	}
+	// If the address parses, check if it's IPv4 or IPv6 and add the correct prefix.
+	if ip.To4() != nil {
+		_, subnet, err = net.ParseCIDR(fmt.Sprintf("%s/32", s))
+	} else {
+		_, subnet, err = net.ParseCIDR(fmt.Sprintf("%s/128", s))
+	}
+	return subnet, err
 }
