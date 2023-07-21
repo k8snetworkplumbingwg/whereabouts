@@ -241,6 +241,72 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 		})
 	})
 
+	Context("reconciling cluster wide IPs - overlapping IPs (ipv6)", func() {
+		const (
+			numberOfPods       = 1
+			ipv6FirstIPInRange = "2001:1b74:0480:60b1:0000:0000:0000:0002"
+			networkName        = "dummyNetwork"
+			networkRange       = "2001:1b74:480:60b1::10/64"
+			poolName           = "dummyPool"
+		)
+
+		var (
+			pods           []*v1.Pod
+			pools          []v1alpha1.IPPool
+			clusterWideIPs []v1alpha1.OverlappingRangeIPReservation
+			wbClient       wbclient.Interface
+		)
+
+		wrapToRuntimeObject := func(pods ...*v1.Pod) []runtime.Object {
+			var runtimeObjects []runtime.Object
+			for _, pod := range pods {
+				runtimeObjects = append(runtimeObjects, pod)
+			}
+			return runtimeObjects
+		}
+
+		BeforeEach(func() {
+			ips := []string{ipv6FirstIPInRange}
+			networks := []string{networkName}
+			for i := 0; i < numberOfPods; i++ {
+				pod := generatePod(namespace, fmt.Sprintf("pod%d", i+1), ipInNetwork{
+					ip:          ips[i],
+					networkName: networks[i%2], // pod1 and pod3 connected to network1; pod2 connected to network2
+				})
+				pods = append(pods, pod)
+			}
+			k8sClientSet = fakek8sclient.NewSimpleClientset(wrapToRuntimeObject(pods...)...)
+		})
+
+		BeforeEach(func() {
+			firstPool := generateIPPoolSpec(networkRange, namespace, poolName, pods[0].GetName())
+			wbClient = fakewbclient.NewSimpleClientset(firstPool)
+			pools = append(pools, *firstPool)
+		})
+
+		BeforeEach(func() {
+			podIPs := []string{ipv6FirstIPInRange}
+			for i := 0; i < numberOfPods; i++ {
+				var clusterWideIP v1alpha1.OverlappingRangeIPReservation
+				ownerPodRef := fmt.Sprintf("%s/%s", namespace, pods[i].GetName())
+				_, err := wbClient.WhereaboutsV1alpha1().OverlappingRangeIPReservations(namespace).Create(context.TODO(), generateClusterWideIPReservation(namespace, podIPs[i], ownerPodRef), metav1.CreateOptions{})
+				Expect(err).NotTo(HaveOccurred())
+				clusterWideIPs = append(clusterWideIPs, clusterWideIP)
+			}
+		})
+
+		It("will not delete an IP address that isn't orphaned after running reconciler", func() {
+			newReconciler, err := NewReconcileLooperWithClient(context.TODO(), kubernetes.NewKubernetesClient(wbClient, k8sClientSet, timeout), timeout)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(newReconciler.ReconcileOverlappingIPAddresses(context.TODO())).To(Succeed())
+
+			expectedClusterWideIPs := 1
+			clusterWideIPAllocations, err := wbClient.WhereaboutsV1alpha1().OverlappingRangeIPReservations(namespace).List(context.TODO(), metav1.ListOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(clusterWideIPAllocations.Items).To(HaveLen(expectedClusterWideIPs))
+		})
+	})
+
 	Context("a pod in pending state, without an IP in its network-status", func() {
 		const poolName = "pool1"
 
