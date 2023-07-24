@@ -304,6 +304,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 			clusterWideIPAllocations, err := wbClient.WhereaboutsV1alpha1().OverlappingRangeIPReservations(namespace).List(context.TODO(), metav1.ListOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(clusterWideIPAllocations.Items).To(HaveLen(expectedClusterWideIPs))
+			Expect(k8sClientSet.CoreV1().Pods(namespace).Delete(context.TODO(), pods[0].Name, metav1.DeleteOptions{})).NotTo(HaveOccurred())
 		})
 	})
 
