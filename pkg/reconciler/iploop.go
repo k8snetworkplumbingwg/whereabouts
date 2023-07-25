@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
@@ -164,9 +165,14 @@ func (rl *ReconcileLooper) findClusterWideIPReservations(ctx context.Context) er
 
 	for _, clusterWideIPReservation := range clusterWideIPReservations {
 		ip := clusterWideIPReservation.GetName()
+		// De-normalize the IP
+		// In the UpdateOverlappingRangeAllocation function, the IP address is created with a "normalized" name to comply with the k8s api.
+		// We must denormalize here in order to properly look up the IP address in the regular format, which pods use.
+		denormalizedip := strings.ReplaceAll(ip, "-", ":")
+
 		podRef := clusterWideIPReservation.Spec.PodRef
 
-		if !rl.isPodAlive(podRef, ip) {
+		if !rl.isPodAlive(podRef, denormalizedip) {
 			logging.Debugf("pod ref %s is not listed in the live pods list", podRef)
 			rl.orphanedClusterWideIPs = append(rl.orphanedClusterWideIPs, clusterWideIPReservation)
 		}
