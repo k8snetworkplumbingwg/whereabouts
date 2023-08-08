@@ -48,6 +48,7 @@ rules:
   verbs:
   - list
   - watch
+  - get
 - apiGroups: [""]
   resources:
   - nodes
@@ -111,6 +112,8 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: spec.nodeName
+        - name: WHEREABOUTS_RECONCILER_CRON
+          value: 1 * * * *
         - name: WHEREABOUTS_NAMESPACE
           valueFrom:
             fieldRef:
