@@ -6,7 +6,7 @@ require (
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/containernetworking/cni v0.8.1
 	github.com/containernetworking/plugins v0.8.2
-	github.com/go-co-op/gocron v1.13.0
+	github.com/go-co-op/gocron v1.31.2
 	github.com/imdario/mergo v0.3.12
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/k8snetworkplumbingwg/network-attachment-definition-client v1.1.1-0.20210510153419-66a699ae3b05
@@ -23,7 +23,7 @@ require (
 
 require (
 	github.com/robfig/cron/v3 v3.0.1 // indirect
-	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4 // indirect
+	go.uber.org/atomic v1.9.0 // indirect
 	sigs.k8s.io/json v0.0.0-20211208200746-9f7c6b3444d2 // indirect
 )
 
