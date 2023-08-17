@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/containernetworking/cni/pkg/skel"
 	cnitypes "github.com/containernetworking/cni/pkg/types"
@@ -18,18 +19,24 @@ import (
 )
 
 func main() {
+	var startTime time.Time
 	skel.PluginMain(func(args *skel.CmdArgs) error {
 		ipamConf, confVersion, err := config.LoadIPAMConfig(args.StdinData, args.Args)
 		if err != nil {
 			logging.Errorf("IPAM configuration load failed: %s", err)
 			return err
 		}
-		logging.Debugf("ADD - IPAM configuration successfully read: %+v", *ipamConf)
+
+		startTime = time.Now()
+		logging.Debugf("ADD - IPAM plugin start. Config: %+v", *ipamConf)
 		ipam, err := kubernetes.NewKubernetesIPAM(args.ContainerID, *ipamConf)
 		if err != nil {
 			return logging.Errorf("failed to create Kubernetes IPAM manager: %v", err)
 		}
-		defer func() { safeCloseKubernetesBackendConnection(ipam) }()
+		defer func() {
+			safeCloseKubernetesBackendConnection(ipam)
+			logging.Debugf("ADD - IPAM plugin finished. Took: %q Config: %+v", time.Since(startTime).String(), *ipamConf)
+		}()
 		return cmdAdd(args, ipam, confVersion)
 	},
 		cmdCheck,
@@ -39,13 +46,17 @@ func main() {
 				logging.Errorf("IPAM configuration load failed: %s", err)
 				return err
 			}
-			logging.Debugf("DEL - IPAM configuration successfully read: %+v", *ipamConf)
 
+			startTime = time.Now()
+			logging.Debugf("DEL - IPAM plugin start. Config: %+v", *ipamConf)
 			ipam, err := kubernetes.NewKubernetesIPAM(args.ContainerID, *ipamConf)
 			if err != nil {
 				return logging.Errorf("IPAM client initialization error: %v", err)
 			}
-			defer func() { safeCloseKubernetesBackendConnection(ipam) }()
+			defer func() {
+				safeCloseKubernetesBackendConnection(ipam)
+				logging.Debugf("DEL - IPAM plugin finished. Took: %q Config: %+v", time.Since(startTime).String(), *ipamConf)
+			}()
 			return cmdDel(args, ipam)
 		},
 		cniversion.All,
