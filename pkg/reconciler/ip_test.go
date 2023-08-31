@@ -331,8 +331,8 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("cannot be reconciled", func() {
-			Expect(reconcileLooper.ReconcileIPPools(context.TODO())).To(BeEmpty())
+		It("can be reconciled", func() {
+			Expect(reconcileLooper.ReconcileIPPools(context.TODO())).NotTo(BeEmpty())
 		})
 	})
 })
