@@ -398,6 +398,31 @@ var _ = Describe("Allocation operations", func() {
 				HavePrefix(
 					"LoadIPAMConfig - JSON Parsing Error: invalid character 'a' looking for beginning of object key string")))
 	})
+
+	It("can pass arbitrary cni-args", func() {
+		const (
+			arbitraryCNIArgsKey   = "asdfg"
+			arbitraryCNIArgsValue = "9872626"
+		)
+		var globalConf string = `{
+			"datastore": "kubernetes",
+			"kubernetes": {
+				"kubeconfig": "/etc/cni/net.d/whereabouts.d/whereabouts.kubeconfig"
+			},
+			"log_file": "/tmp/whereabouts.log",
+			"log_level": "debug",
+			"gateway": "192.168.5.5",
+			"enable_overlapping_ranges": true
+		}`
+		Expect(os.WriteFile("/tmp/whereabouts.conf", []byte(globalConf), 0755)).To(Succeed())
+
+		ipamconfig, _, err := LoadIPAMConfig(
+			[]byte(generateIPAMConfWithArbitraryCNIArg(arbitraryCNIArgsKey, arbitraryCNIArgsValue)),
+			"",
+		)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ipamconfig.Args.CNI).To(HaveKeyWithValue(arbitraryCNIArgsKey, arbitraryCNIArgsValue))
+	})
 })
 
 func generateIPAMConfWithOverlappingRanges() string {
@@ -428,4 +453,23 @@ func generateIPAMConfWithoutOverlappingRanges() string {
 			"enable_overlapping_ranges": false
 		}
 	}`
+}
+
+func generateIPAMConfWithArbitraryCNIArg(k, v string) string {
+	return fmt.Sprintf(`{
+		"cniVersion": "0.3.1",
+		"name": "mynet",
+		"type": "ipvlan",
+		"master": "foo0",
+		"ipam": {
+			"range": "192.168.2.230/24",
+			"configuration_path": "/tmp/whereabouts.conf",
+			"type": "whereabouts",
+            "args": {
+                "cni": {
+                    %q: %q
+                }
+            }
+		}
+	}`, k, v)
 }

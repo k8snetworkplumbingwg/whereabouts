@@ -52,7 +52,7 @@ func LoadIPAMConfig(bytes []byte, envArgs string, extraConfigPaths ...string) (*
 	}
 	n.IPAM.PodName = string(args.K8S_POD_NAME)
 	n.IPAM.PodNamespace = string(args.K8S_POD_NAMESPACE)
-
+	n.IPAM.Args = n.Args
 	flatipam, foundflatfile, err := GetFlatIPAM(false, n.IPAM, extraConfigPaths...)
 	if err != nil {
 		return nil, "", err
@@ -78,6 +78,11 @@ func LoadIPAMConfig(bytes []byte, envArgs string, extraConfigPaths ...string) (*
 		logging.Debugf("Used defaults from parsed flat file config @ %s", foundflatfile)
 	}
 
+	n.IPAM.Args = n.Args
+	logging.Debugf("carried over the IPAM args: %v", n.Args.CNI)
+	for k, v := range n.Args.CNI {
+		logging.Debugf("k: %q, v: %q", k, v)
+	}
 	if n.IPAM.Range != "" {
 
 		oldRange := types.RangeConfiguration{

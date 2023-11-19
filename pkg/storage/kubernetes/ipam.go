@@ -29,6 +29,13 @@ import (
 	"gomodules.xyz/jsonpatch/v2"
 )
 
+const (
+	StickyIPRequestOwnerTypeAnnotation    = "whereabouts.cni.cncf.io/ownerType"
+	StickyIPRequestOwnerIDAnnotation      = "whereabouts.cni.cncf.io/ownerID"
+	StickyIPRequestOwnerNameAnnotation    = "whereabouts.cni.cncf.io/ownerName"
+	StickyIPRequestOwnerVersionAnnotation = "whereabouts.cni.cncf.io/ownerVersion"
+)
+
 // NewKubernetesIPAM returns a new KubernetesIPAM Client configured to a kubernetes CRD backend
 func NewKubernetesIPAM(containerID string, ipamConf whereaboutstypes.IPAMConfig) (*KubernetesIPAM, error) {
 	var namespace string
@@ -193,8 +200,8 @@ type KubernetesOverlappingRangeStore struct {
 }
 
 // GetOverlappingRangeStore returns a clusterstore interface
-func (i *KubernetesIPAM) GetOverlappingRangeStore() (storage.OverlappingRangeStore, error) {
-	return &KubernetesOverlappingRangeStore{i.client, i.containerID, i.namespace}, nil
+func (i *KubernetesIPAM) GetOverlappingRangeStore(namespace string) (storage.OverlappingRangeStore, error) {
+	return &KubernetesOverlappingRangeStore{i.client, i.containerID, namespace}, nil
 }
 
 // IsAllocatedInOverlappingRange checks for IP addresses to see if they're allocated cluster wide, for overlapping
@@ -221,33 +228,99 @@ func (c *KubernetesOverlappingRangeStore) IsAllocatedInOverlappingRange(ctx cont
 	return true, nil
 }
 
+func (c *KubernetesOverlappingRangeStore) RetrievePreviousAllocation(ctx context.Context, ownerRef string, networkName string) (*whereaboutsv1alpha1.OverlappingRangeIPReservation, error) {
+	ownerLabelSelector := fmt.Sprintf("persistentips.cni.cncf.io/owner=%s", ownerRef)
+	logging.Debugf("owner label selector: %q", ownerLabelSelector)
+	prevAllocations, err := c.client.WhereaboutsV1alpha1().OverlappingRangeIPReservations(c.namespace).List(
+		ctx,
+		metav1.ListOptions{LabelSelector: ownerLabelSelector},
+	)
+	if err != nil && errors.IsNotFound(err) {
+		// cluster ip reservation does not exist, this appears to be good news.
+		// logging.Debugf("IP %v is not reserved cluster wide, allowing.", ip)
+		return nil, nil
+	} else if err != nil {
+		logging.Errorf("error getting k8s OverlappingRangeIPReservation for network %q: %s", networkName, err)
+		return nil, fmt.Errorf("k8s get OverlappingRangeIPReservation error: %s", err)
+	}
+	if len(prevAllocations.Items) > 0 {
+		return &prevAllocations.Items[0], nil
+	}
+	return nil, nil
+}
+
 // UpdateOverlappingRangeAllocation updates clusterwide allocation for overlapping ranges.
-func (c *KubernetesOverlappingRangeStore) UpdateOverlappingRangeAllocation(ctx context.Context, mode int, ip net.IP,
-	containerID, podRef, networkName string) error {
+func (c *KubernetesOverlappingRangeStore) UpdateOverlappingRangeAllocation(
+	ctx context.Context,
+	mode int,
+	ip net.IP,
+	containerID, podRef, networkName string,
+	ownerReference *metav1.OwnerReference,
+	existingAllocation *whereaboutsv1alpha1.OverlappingRangeIPReservation,
+) error {
 	normalizedIP := normalizeIP(ip, networkName)
 
-	clusteripres := &whereaboutsv1alpha1.OverlappingRangeIPReservation{
-		ObjectMeta: metav1.ObjectMeta{Name: normalizedIP, Namespace: c.namespace},
+	var ownerReferences []metav1.OwnerReference
+	if ownerReference != nil {
+		logging.Debugf("adding owner reference %v", ownerReference)
+		ownerReferences = append(ownerReferences, *ownerReference)
 	}
 
 	var err error
 	var verb string
+	clusteripres := &whereaboutsv1alpha1.OverlappingRangeIPReservation{}
+
 	switch mode {
 	case whereaboutstypes.Allocate:
 		// Put together our cluster ip reservation
 		verb = "allocate"
 
-		clusteripres.Spec = whereaboutsv1alpha1.OverlappingRangeIPReservationSpec{
-			ContainerID: containerID,
-			PodRef:      podRef,
+		if existingAllocation != nil {
+			clusteripres = existingAllocation.DeepCopy()
+			clusteripres.OwnerReferences = ownerReferences
+			clusteripres.Spec.PodRef = podRef
+			clusteripres.Spec.ContainerID = containerID
+		} else {
+			clusteripres = &whereaboutsv1alpha1.OverlappingRangeIPReservation{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            normalizedIP,
+					Namespace:       c.namespace,
+					OwnerReferences: ownerReferences,
+				},
+				Spec: whereaboutsv1alpha1.OverlappingRangeIPReservationSpec{
+					ContainerID: containerID,
+					PodRef:      podRef,
+				},
+			}
 		}
 
-		_, err = c.client.WhereaboutsV1alpha1().OverlappingRangeIPReservations(c.namespace).Create(
-			ctx, clusteripres, metav1.CreateOptions{})
+		if ownerReference != nil {
+			logging.Debugf("properly labeling %s with %v", normalizedIP, *ownerReference)
+			clusteripres.Labels = map[string]string{
+				"persistentips.cni.cncf.io/owner": ipReservationLabel(ownerReference),
+			}
+		}
+
+		logging.Debugf("allocation to persist: %v", *clusteripres)
+
+		if existingAllocation == nil {
+			logging.Debugf("will CREATE reservation for %q", normalizedIP)
+			_, err = c.client.WhereaboutsV1alpha1().OverlappingRangeIPReservations(c.namespace).Create(
+				ctx, clusteripres, metav1.CreateOptions{})
+		} else {
+			logging.Debugf("will UPDATE reservation for %q", normalizedIP)
+			_, err = c.client.WhereaboutsV1alpha1().OverlappingRangeIPReservations(c.namespace).Update(
+				ctx, clusteripres, metav1.UpdateOptions{},
+			)
+		}
 
 	case whereaboutstypes.Deallocate:
 		verb = "deallocate"
-		err = c.client.WhereaboutsV1alpha1().OverlappingRangeIPReservations(c.namespace).Delete(ctx, clusteripres.GetName(), metav1.DeleteOptions{})
+		err = c.client.WhereaboutsV1alpha1().OverlappingRangeIPReservations(c.namespace).Delete(
+			ctx,
+			normalizedIP,
+			metav1.DeleteOptions{},
+		)
 	}
 
 	if err != nil {
@@ -256,6 +329,10 @@ func (c *KubernetesOverlappingRangeStore) UpdateOverlappingRangeAllocation(ctx c
 
 	logging.Debugf("K8s UpdateOverlappingRangeAllocation success on %v: %+v", verb, clusteripres)
 	return nil
+}
+
+func ipReservationLabel(ownerReference *metav1.OwnerReference) string {
+	return fmt.Sprintf("%s.%s.%s", ownerReference.Kind, ownerReference.Name, ownerReference.UID)
 }
 
 // normalizeIP normalizes the IP. This is important for IPv6 which doesn't make for valid CR names. It also allows us
@@ -485,6 +562,8 @@ func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *Kubernete
 	// handle the ip add/del until successful
 	var overlappingrangeallocations []whereaboutstypes.IPReservation
 	var ipforoverlappingrangeupdate net.IP
+	var previousAllocation *whereaboutsv1alpha1.OverlappingRangeIPReservation
+
 	for _, ipRange := range ipamConf.IPRanges {
 	RETRYLOOP:
 		for j := 0; j < storage.DatastoreRetries; j++ {
@@ -495,7 +574,7 @@ func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *Kubernete
 				// retry the IPAM loop if the context has not been cancelled
 			}
 
-			overlappingrangestore, err = ipam.GetOverlappingRangeStore()
+			overlappingrangestore, err = ipam.GetOverlappingRangeStore(ipamConf.PodNamespace)
 			if err != nil {
 				logging.Errorf("IPAM error getting OverlappingRangeStore: %v", err)
 				return newips, err
@@ -524,11 +603,45 @@ func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *Kubernete
 				// When it's allocated overlappingrange wide, we add it to a local reserved list
 				// And we try again.
 				if ipamConf.OverlappingRanges {
-					isAllocated, err := overlappingrangestore.IsAllocatedInOverlappingRange(requestCtx, newip.IP,
-						ipamConf.NetworkName)
-					if err != nil {
-						logging.Errorf("Error checking overlappingrange allocation: %v", err)
-						return newips, err
+					var isAllocated bool
+					ownerID, hasOwnerIDAnnotation := ipamConf.Args.CNI[StickyIPRequestOwnerIDAnnotation]
+					ownerName, hasOwnerNameAnnotation := ipamConf.Args.CNI[StickyIPRequestOwnerNameAnnotation]
+					ownerType, hasOwnerTypeAnnotation := ipamConf.Args.CNI[StickyIPRequestOwnerTypeAnnotation]
+					ownerVersion, hasOwnerVersionAnnotation := ipamConf.Args.CNI[StickyIPRequestOwnerVersionAnnotation]
+
+					var ownerRef *metav1.OwnerReference
+
+					hasOwnerInfo := hasOwnerTypeAnnotation && hasOwnerNameAnnotation && hasOwnerIDAnnotation && hasOwnerVersionAnnotation
+					if hasOwnerInfo {
+						logging.Debugf("adding owner reference to persistent IP Allocation %q", ipforoverlappingrangeupdate.String())
+						ownerRef = &metav1.OwnerReference{
+							APIVersion: ownerVersion,
+							Kind:       ownerType,
+							Name:       ownerName,
+							UID:        types.UID(ownerID),
+						}
+
+						previousAllocation, err = overlappingrangestore.RetrievePreviousAllocation(
+							requestCtx,
+							ipReservationLabel(ownerRef),
+							ipamConf.NetworkName,
+						)
+
+						if err == nil && previousAllocation != nil {
+							logging.Debugf("found previous allocation for %s: %s", podRef, previousAllocation)
+							newip.IP = net.ParseIP(previousAllocation.Name)
+						} else if err != nil {
+							_ = logging.Errorf("could not retrieve previous allocations for %v: %v", ownerRef, err)
+						} else {
+							logging.Debugf("no prev allocation found for %q", ipamConf.NetworkName)
+						}
+					} else {
+						isAllocated, err = overlappingrangestore.IsAllocatedInOverlappingRange(requestCtx, newip.IP,
+							ipamConf.NetworkName)
+						if err != nil {
+							logging.Errorf("Error checking overlappingrange allocation: %v", err)
+							return newips, err
+						}
 					}
 
 					if isAllocated {
@@ -574,11 +687,39 @@ func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *Kubernete
 		}
 
 		if ipamConf.OverlappingRanges {
-			err = overlappingrangestore.UpdateOverlappingRangeAllocation(requestCtx, mode, ipforoverlappingrangeupdate,
-				containerID, podRef, ipamConf.NetworkName)
-			if err != nil {
-				logging.Errorf("Error performing UpdateOverlappingRangeAllocation: %v", err)
-				return newips, err
+			ownerID, hasOwnerIDAnnotation := ipamConf.Args.CNI[StickyIPRequestOwnerIDAnnotation]
+			ownerName, hasOwnerNameAnnotation := ipamConf.Args.CNI[StickyIPRequestOwnerNameAnnotation]
+			ownerType, hasOwnerTypeAnnotation := ipamConf.Args.CNI[StickyIPRequestOwnerTypeAnnotation]
+			ownerVersion, hasOwnerVersionAnnotation := ipamConf.Args.CNI[StickyIPRequestOwnerVersionAnnotation]
+
+			var ownerRef *metav1.OwnerReference
+
+			hasOwnerInfo := hasOwnerTypeAnnotation && hasOwnerNameAnnotation && hasOwnerIDAnnotation && hasOwnerVersionAnnotation
+			if hasOwnerInfo {
+				logging.Debugf("adding owner reference to persistent IP Allocation %q", ipforoverlappingrangeupdate.String())
+				ownerRef = &metav1.OwnerReference{
+					APIVersion: ownerVersion,
+					Kind:       ownerType,
+					Name:       ownerName,
+					UID:        types.UID(ownerID),
+				}
+			}
+
+			// we only update the allocation for create / update  *or* pods without owner references.
+			if mode == whereaboutstypes.Allocate || !hasOwnerInfo {
+				if previousAllocation != nil {
+					logging.Debugf(
+						"will UPDATE persistent IP allocation for %q. previousAllocation: %v",
+						ipforoverlappingrangeupdate.String(),
+						*previousAllocation,
+					)
+				}
+				err = overlappingrangestore.UpdateOverlappingRangeAllocation(requestCtx, mode, ipforoverlappingrangeupdate,
+					containerID, podRef, ipamConf.NetworkName, ownerRef, previousAllocation)
+				if err != nil {
+					logging.Errorf("Error performing UpdateOverlappingRangeAllocation: %v", err)
+					return newips, err
+				}
 			}
 		}
 
