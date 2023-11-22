@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 
 	gocron "github.com/go-co-op/gocron"
@@ -28,8 +29,9 @@ import (
 )
 
 const (
-	allNamespaces  = ""
-	controllerName = "pod-ip-controlloop"
+	allNamespaces        = ""
+	controllerName       = "pod-ip-controlloop"
+	reconciler_cron_file = "cron-schedule/reconciler_cron_file"
 )
 
 const (
@@ -66,7 +68,7 @@ func main() {
 	defer networkController.Shutdown()
 
 	s := gocron.NewScheduler(time.UTC)
-	schedule := cronExpressionFromFlatFile()
+	schedule := determineCronExpression()
 
 	_, err = s.Cron(schedule).Do(func() { // user configurable cron expression in install-cni.sh
 		reconciler.ReconcileIPs(errorChan)
@@ -164,11 +166,19 @@ func newEventRecorder(broadcaster record.EventBroadcaster) record.EventRecorder 
 	return broadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: controllerName})
 }
 
-func cronExpressionFromFlatFile() string {
+func determineCronExpression() string {
 	flatipam, _, err := config.GetFlatIPAM(true, &types.IPAMConfig{}, "")
 	if err != nil {
-		_ = logging.Errorf("could not get flatipam: %v", err)
+		_ = logging.Errorf("could not get flatipam config: %v", err)
 		os.Exit(couldNotGetFlatIPAM)
 	}
-	return flatipam.IPAM.ReconcilerCronExpression
+
+	// We read the expression from a file if present, otherwise we use ReconcilerCronExpression
+	fileContents, err := os.ReadFile("cron-schedule/reconciler_cron_file") // Yuki~ this might be what needs changing if anything. Perhaps it's going to use the wrong filepath.
+	if err != nil {
+		_ = logging.Errorf("could not read file: %v, using expression from flatfile: %v", err, flatipam.IPAM.ReconcilerCronExpression)
+		return flatipam.IPAM.ReconcilerCronExpression
+	}
+	logging.Verbosef("using expression: %v", strings.TrimSpace(string(fileContents))) // do i need to trim spaces? idk i think the file would JUST be the expression?
+	return strings.TrimSpace(string(fileContents))
 }
