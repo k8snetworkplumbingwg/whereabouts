@@ -71,6 +71,14 @@ rules:
   - update
   - get
 ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: whereabouts-cron-reconciler-config
+  namespace: kube-system
+data:
+  whereabouts-cron-config: "0-59/2 * * * *"
+---
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -116,6 +124,11 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
+        - name: WHEREABOUTS_RECONCILER_CRON
+          valueFrom:
+            configMapKeyRef:
+              name: "whereabouts-cron-reconciler-config"
+              key: "whereabouts-cron-config"
         resources:
           requests:
             cpu: "100m"
