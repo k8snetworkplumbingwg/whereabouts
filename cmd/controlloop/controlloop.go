@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	gocron "github.com/go-co-op/gocron"
+	"github.com/go-co-op/gocron/v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -29,9 +29,8 @@ import (
 )
 
 const (
-	allNamespaces        = ""
-	controllerName       = "pod-ip-controlloop"
-	reconciler_cron_file = "cron-schedule/reconciler_cron_file"
+	allNamespaces  = ""
+	controllerName = "pod-ip-controlloop"
 )
 
 const (
@@ -67,24 +66,33 @@ func main() {
 	networkController.Start(stopChan)
 	defer networkController.Shutdown()
 
-	s := gocron.NewScheduler(time.UTC)
+	s, err := gocron.NewScheduler(gocron.WithLocation(time.UTC))
+	if err != nil {
+		os.Exit(123)
+	}
 	schedule := determineCronExpression()
 
-	_, err = s.Cron(schedule).Do(func() { // user configurable cron expression in install-cni.sh
-		reconciler.ReconcileIPs(errorChan)
-	})
+	job, err := s.NewJob(
+		gocron.CronJob(schedule, false),
+		gocron.NewTask(func() {
+			reconciler.ReconcileIPs(errorChan)
+		}),
+	)
 	if err != nil {
 		_ = logging.Errorf("error with cron expression schedule: %v", err)
 		os.Exit(cronExpressionError)
 	}
 
-	s.StartAsync()
+	logging.Verbosef("started cron with job ID: %q", job.ID().String())
+	s.Start()
 
 	for {
 		select {
 		case <-stopChan:
 			logging.Verbosef("shutting down network controller")
-			s.Stop()
+			if err := s.Shutdown(); err != nil {
+				_ = logging.Errorf("error shutting : %v", err)
+			}
 			return
 		case err := <-errorChan:
 			if err == nil {
@@ -174,7 +182,7 @@ func determineCronExpression() string {
 	}
 
 	// We read the expression from a file if present, otherwise we use ReconcilerCronExpression
-	fileContents, err := os.ReadFile("cron-schedule/reconciler_cron_file") // Yuki~ this might be what needs changing if anything. Perhaps it's going to use the wrong filepath.
+	fileContents, err := os.ReadFile("/cron-schedule/reconciler_cron_file")
 	if err != nil {
 		_ = logging.Errorf("could not read file: %v, using expression from flatfile: %v", err, flatipam.IPAM.ReconcilerCronExpression)
 		return flatipam.IPAM.ReconcilerCronExpression
