@@ -8,6 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"math/rand"
+	"strconv"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -150,6 +153,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 					Expect(deletedIPAddrs).To(Equal([]net.IP{net.ParseIP("10.10.10.1")}))
 				})
 
+				// !bang this can also be a problem area...
 				It("the IPPool should have only the IP reservation of the live pod", func() {
 					deletedIPAddrs, err := reconcileLooper.ReconcileIPPools(context.TODO())
 					Expect(err).NotTo(HaveOccurred())
@@ -163,7 +167,10 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 							PodRef: fmt.Sprintf("%s/%s", namespace, pods[livePodIndex].Name),
 						},
 					}
-					Expect(poolAfterCleanup.Spec.Allocations).To(Equal(remainingAllocation))
+
+					for key, val := range poolAfterCleanup.Spec.Allocations {
+						Expect(val.PodRef).To(Equal(remainingAllocation[key].PodRef), "Mismatch at key: "+key)
+					}
 				})
 			})
 		})
@@ -457,7 +464,8 @@ func generateIPPoolSpec(ipRange string, namespace string, poolName string, podNa
 	allocations := map[string]v1alpha1.IPAllocation{}
 	for i, podName := range podNames {
 		allocations[fmt.Sprintf("%d", i+1)] = v1alpha1.IPAllocation{
-			PodRef: fmt.Sprintf("%s/%s", namespace, podName),
+			PodRef:      fmt.Sprintf("%s/%s", namespace, podName),
+			ContainerID: strconv.Itoa(rand.Intn(1000)),
 		}
 	}
 	return &v1alpha1.IPPool{

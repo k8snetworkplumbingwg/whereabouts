@@ -177,7 +177,6 @@ func composePodRef(pod v1.Pod) string {
 func (rl ReconcileLooper) ReconcileIPPools(ctx context.Context) ([]net.IP, error) {
 	matchByContainerID := func(reservations []types.IPReservation, containerID string) int {
 		foundidx := -1
-		fmt.Printf("!bang ------------- %+v", reservations)
 		for idx, v := range reservations {
 			if v.ContainerID == containerID {
 				return idx
