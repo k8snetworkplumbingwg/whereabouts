@@ -36,10 +36,13 @@ const (
 )
 
 const (
-	couldNotCreateController = 1
-	couldNotReadFlatfile     = 1
-	couldNotGetFlatIPAM      = 1
-	cronExpressionError      = 1
+	_ int = iota
+	couldNotCreateController
+	couldNotGetFlatIPAM
+	cronExpressionError
+	cronSchedulerCreationError
+	fileWatcherError
+	fileWatcherAddWatcherError
 )
 
 const (
@@ -70,7 +73,7 @@ func main() {
 
 	s, err := gocron.NewScheduler(gocron.WithLocation(time.UTC))
 	if err != nil {
-		os.Exit(123)
+		os.Exit(cronSchedulerCreationError)
 	}
 	schedule := determineCronExpression()
 
@@ -91,14 +94,14 @@ func main() {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		_ = logging.Errorf("error creating configuration watcher: %v", err)
-		os.Exit(321)
+		os.Exit(fileWatcherError)
 	}
 	defer watcher.Close()
 
 	go syncConfiguration(watcher, s, job, errorChan)
 	if err := watcher.Add(reconcilerCronConfiguration); err != nil {
 		_ = logging.Errorf("error adding watcher to config %q: %v", reconcilerCronConfiguration, err)
-		os.Exit(1234)
+		os.Exit(fileWatcherAddWatcherError)
 	}
 
 	for {
