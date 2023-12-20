@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/go-co-op/gocron/v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
@@ -29,8 +30,9 @@ import (
 )
 
 const (
-	allNamespaces  = ""
-	controllerName = "pod-ip-controlloop"
+	allNamespaces               = ""
+	controllerName              = "pod-ip-controlloop"
+	reconcilerCronConfiguration = "/cron-schedule/config"
 )
 
 const (
@@ -85,6 +87,19 @@ func main() {
 
 	logging.Verbosef("started cron with job ID: %q", job.ID().String())
 	s.Start()
+
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		_ = logging.Errorf("error creating configuration watcher: %v", err)
+		os.Exit(321)
+	}
+	defer watcher.Close()
+
+	go syncConfiguration(watcher, s, job, errorChan)
+	if err := watcher.Add(reconcilerCronConfiguration); err != nil {
+		_ = logging.Errorf("error adding watcher to config %q: %v", reconcilerCronConfiguration, err)
+		os.Exit(1234)
+	}
 
 	for {
 		select {
@@ -182,11 +197,55 @@ func determineCronExpression() string {
 	}
 
 	// We read the expression from a file if present, otherwise we use ReconcilerCronExpression
-	fileContents, err := os.ReadFile("/cron-schedule/reconciler_cron_file")
+	fileContents, err := os.ReadFile(reconcilerCronConfiguration)
 	if err != nil {
 		_ = logging.Errorf("could not read file: %v, using expression from flatfile: %v", err, flatipam.IPAM.ReconcilerCronExpression)
 		return flatipam.IPAM.ReconcilerCronExpression
 	}
 	logging.Verbosef("using expression: %v", strings.TrimSpace(string(fileContents))) // do i need to trim spaces? idk i think the file would JUST be the expression?
 	return strings.TrimSpace(string(fileContents))
+}
+
+func syncConfiguration(
+	watcher *fsnotify.Watcher,
+	scheduler gocron.Scheduler,
+	job gocron.Job,
+	errorChannel chan error,
+) {
+	for {
+		select {
+		case event, ok := <-watcher.Events:
+			if !ok {
+				return
+			}
+
+			updatedSchedule := determineCronExpression()
+			logging.Verbosef(
+				"configuration updated to file %q. New cron expression: %s",
+				event.Name,
+				updatedSchedule,
+			)
+			updatedJob, err := scheduler.Update(
+				job.ID(),
+				gocron.CronJob(updatedSchedule, false),
+				gocron.NewTask(func() {
+					reconciler.ReconcileIPs(errorChannel)
+				}),
+			)
+			if err != nil {
+				_ = logging.Errorf("error updating job %q configuration: %v", job.ID().String(), err)
+			}
+
+			logging.Verbosef(
+				"successfully updated CRON configuration id %q - new cron expression: %s",
+				updatedJob.ID().String(),
+				updatedSchedule,
+			)
+		case err, ok := <-watcher.Errors:
+			_ = logging.Errorf("error when listening to config changes: %v", err)
+			if !ok {
+				return
+			}
+		}
+	}
 }
