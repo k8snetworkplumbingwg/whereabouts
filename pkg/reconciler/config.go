@@ -21,17 +21,36 @@ type ConfigWatcher struct {
 	job             gocron.Job
 	scheduler       gocron.Scheduler
 	handlerFunc     func()
+	jobFactoryFunc  func(string) gocron.JobDefinition
 	watcher         *fsnotify.Watcher
 }
 
 func NewConfigWatcher(configPath string, scheduler gocron.Scheduler, configWatcher *fsnotify.Watcher, handlerFunc func()) (*ConfigWatcher, error) {
+	return newConfigWatcher(
+		configPath,
+		scheduler,
+		configWatcher,
+		func(schedule string) gocron.JobDefinition {
+			return gocron.CronJob(schedule, false)
+		},
+		handlerFunc,
+	)
+}
+
+func newConfigWatcher(
+	configPath string,
+	scheduler gocron.Scheduler,
+	configWatcher *fsnotify.Watcher,
+	cronJobFactoryFunc func(string) gocron.JobDefinition,
+	handlerFunc func(),
+) (*ConfigWatcher, error) {
 	schedule, err := determineCronExpression(configPath)
 	if err != nil {
 		return nil, err
 	}
 
 	job, err := scheduler.NewJob(
-		gocron.CronJob(schedule, false),
+		cronJobFactoryFunc(schedule),
 		gocron.NewTask(handlerFunc),
 	)
 	if err != nil {
@@ -46,6 +65,7 @@ func NewConfigWatcher(configPath string, scheduler gocron.Scheduler, configWatch
 		scheduler:       scheduler,
 		watcher:         configWatcher,
 		handlerFunc:     handlerFunc,
+		jobFactoryFunc:  cronJobFactoryFunc,
 	}, nil
 }
 
@@ -100,7 +120,7 @@ func (c *ConfigWatcher) syncConfig(relevantEventPredicate func(event fsnotify.Ev
 			}
 			updatedJob, err := c.scheduler.Update(
 				c.job.ID(),
-				gocron.CronJob(updatedSchedule, false),
+				c.jobFactoryFunc(updatedSchedule),
 				gocron.NewTask(c.handlerFunc),
 			)
 			if err != nil {

@@ -29,18 +29,18 @@ var _ = Describe("Reconciler configuration watcher", func() {
 		configDir, err = os.MkdirTemp("", "config")
 		Expect(err).NotTo(HaveOccurred())
 		const (
-			initialCron   = "0/1 2 3 * *"
-			dummyFileName = "DUMMY"
+			initialCronWithSeconds = "0/1 2 3 * * *"
+			dummyFileName          = "DUMMY"
 		)
 		dummyConfig, err = os.Create(filepath.Join(configDir, filepath.Base(dummyFileName)))
 		Expect(err).NotTo(HaveOccurred())
 
-		Expect(dummyConfig.Write([]byte(initialCron))).To(Equal(len(initialCron)))
+		Expect(dummyConfig.Write([]byte(initialCronWithSeconds))).To(Equal(len(initialCronWithSeconds)))
 		scheduler, err := gocron.NewScheduler()
 		Expect(err).NotTo(HaveOccurred())
 		watcher, err = fsnotify.NewWatcher()
 		Expect(err).NotTo(HaveOccurred())
-		config, err = NewConfigWatcher(
+		config, err = newConfigWatcherForTests(
 			dummyConfig.Name(),
 			scheduler,
 			watcher,
@@ -59,15 +59,27 @@ var _ = Describe("Reconciler configuration watcher", func() {
 	})
 
 	When("the cron job expression is updated in the file-system", func() {
-		const updatedCron = "0/1 * * * *"
+		const updatedCronWithSeconds = "0/1 * * * * *"
 
 		BeforeEach(func() {
-			Expect(dummyConfig.WriteAt([]byte(updatedCron), 0)).To(Equal(len(updatedCron)))
+			Expect(dummyConfig.WriteAt([]byte(updatedCronWithSeconds), 0)).To(Equal(len(updatedCronWithSeconds)))
 		})
 
 		It("the current schedule is updated, and the handler function executed", func() {
-			Eventually(func() string { return config.currentSchedule }).Should(Equal(updatedCron))
+			Eventually(func() string { return config.currentSchedule }).Should(Equal(updatedCronWithSeconds))
 			Eventually(mailbox).WithTimeout(time.Minute).Should(Receive())
 		})
 	})
 })
+
+func newConfigWatcherForTests(configPath string, scheduler gocron.Scheduler, configWatcher *fsnotify.Watcher, handlerFunc func()) (*ConfigWatcher, error) {
+	return newConfigWatcher(
+		configPath,
+		scheduler,
+		configWatcher,
+		func(schedule string) gocron.JobDefinition {
+			return gocron.CronJob(schedule, true)
+		},
+		handlerFunc,
+	)
+}
