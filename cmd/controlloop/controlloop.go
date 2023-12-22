@@ -193,15 +193,14 @@ func newEventRecorder(broadcaster record.EventBroadcaster) record.EventRecorder 
 }
 
 func determineCronExpression() string {
-	flatipam, _, err := config.GetFlatIPAM(true, &types.IPAMConfig{}, "")
-	if err != nil {
-		_ = logging.Errorf("could not get flatipam config: %v", err)
-		os.Exit(couldNotGetFlatIPAM)
-	}
-
 	// We read the expression from a file if present, otherwise we use ReconcilerCronExpression
 	fileContents, err := os.ReadFile(reconcilerCronConfiguration)
 	if err != nil {
+		flatipam, _, err := config.GetFlatIPAM(true, &types.IPAMConfig{}, "")
+		if err != nil {
+			_ = logging.Errorf("could not get flatipam config: %v", err)
+			os.Exit(couldNotGetFlatIPAM)
+		}
 		_ = logging.Errorf("could not read file: %v, using expression from flatfile: %v", err, flatipam.IPAM.ReconcilerCronExpression)
 		return flatipam.IPAM.ReconcilerCronExpression
 	}
