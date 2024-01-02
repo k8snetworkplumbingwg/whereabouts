@@ -7,7 +7,8 @@ import (
 	"os/signal"
 	"time"
 
-	gocron "github.com/go-co-op/gocron"
+	"github.com/fsnotify/fsnotify"
+	"github.com/go-co-op/gocron/v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -20,23 +21,23 @@ import (
 
 	wbclient "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/clientset/versioned"
 	wbinformers "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/informers/externalversions"
-	"github.com/k8snetworkplumbingwg/whereabouts/pkg/config"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/controlloop"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/reconciler"
-	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 )
 
 const (
-	allNamespaces  = ""
-	controllerName = "pod-ip-controlloop"
+	allNamespaces               = ""
+	controllerName              = "pod-ip-controlloop"
+	reconcilerCronConfiguration = "/cron-schedule/config"
 )
 
 const (
-	couldNotCreateController = 1
-	couldNotReadFlatfile     = 1
-	couldNotGetFlatIPAM      = 1
-	cronExpressionError      = 1
+	_ int = iota
+	couldNotCreateController
+	cronSchedulerCreationError
+	fileWatcherError
+	couldNotCreateConfigWatcherError
 )
 
 const (
@@ -65,24 +66,44 @@ func main() {
 	networkController.Start(stopChan)
 	defer networkController.Shutdown()
 
-	s := gocron.NewScheduler(time.UTC)
-	schedule := cronExpressionFromFlatFile()
-
-	_, err = s.Cron(schedule).Do(func() { // user configurable cron expression in install-cni.sh
-		reconciler.ReconcileIPs(errorChan)
-	})
+	s, err := gocron.NewScheduler(gocron.WithLocation(time.UTC))
 	if err != nil {
-		_ = logging.Errorf("error with cron expression schedule: %v", err)
-		os.Exit(cronExpressionError)
+		os.Exit(cronSchedulerCreationError)
 	}
 
-	s.StartAsync()
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		_ = logging.Errorf("error creating configuration watcher: %v", err)
+		os.Exit(fileWatcherError)
+	}
+	defer watcher.Close()
+
+	reconcilerConfigWatcher, err := reconciler.NewConfigWatcher(
+		reconcilerCronConfiguration,
+		s,
+		watcher,
+		func() {
+			reconciler.ReconcileIPs(errorChan)
+		},
+	)
+	if err != nil {
+		os.Exit(couldNotCreateConfigWatcherError)
+	}
+	s.Start()
+
+	const reconcilerConfigMntFile = "/cron-schedule/..data"
+	p := func(e fsnotify.Event) bool {
+		return e.Name == reconcilerConfigMntFile && e.Op&fsnotify.Create == fsnotify.Create
+	}
+	reconcilerConfigWatcher.SyncConfiguration(p)
 
 	for {
 		select {
 		case <-stopChan:
 			logging.Verbosef("shutting down network controller")
-			s.Stop()
+			if err := s.Shutdown(); err != nil {
+				_ = logging.Errorf("error shutting : %v", err)
+			}
 			return
 		case err := <-errorChan:
 			if err == nil {
@@ -162,13 +183,4 @@ func newEventBroadcaster(k8sClientset kubernetes.Interface) record.EventBroadcas
 
 func newEventRecorder(broadcaster record.EventBroadcaster) record.EventRecorder {
 	return broadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: controllerName})
-}
-
-func cronExpressionFromFlatFile() string {
-	flatipam, _, err := config.GetFlatIPAM(true, &types.IPAMConfig{}, "")
-	if err != nil {
-		_ = logging.Errorf("could not get flatipam: %v", err)
-		os.Exit(couldNotGetFlatIPAM)
-	}
-	return flatipam.IPAM.ReconcilerCronExpression
 }

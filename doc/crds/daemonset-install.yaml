@@ -70,6 +70,18 @@ rules:
   - patch
   - update
   - get
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: whereabouts-config
+  namespace: kube-system
+  annotations:
+    kubernetes.io/description: |
+      Configmap containing user customizable cronjob schedule
+data:
+  cron-expression: "30 4 * * *" # Default schedule is once per day at 4:30am. Users may configure this value to their liking.
 ---
 apiVersion: apps/v1
 kind: DaemonSet
@@ -130,6 +142,8 @@ spec:
           mountPath: /host/opt/cni/bin
         - name: cni-net-dir
           mountPath: /host/etc/cni/net.d
+        - name: cron-scheduler-configmap
+          mountPath: /cron-schedule
       volumes:
         - name: cnibin
           hostPath:
@@ -137,3 +151,10 @@ spec:
         - name: cni-net-dir
           hostPath:
             path: /etc/cni/net.d
+        - name: cron-scheduler-configmap
+          configMap:
+            name: "whereabouts-config"
+            defaultMode: 0744
+            items:
+            - key: "cron-expression"
+              path: "config"
