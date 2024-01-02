@@ -138,8 +138,6 @@ You'll note that in the `ipam` section there's a lot less parameters than are us
 
 *NOTE: configuring cron expression prior to cluster launch will only work for **non-Openshift** Kubernetes clusters, such as a vanilla Kubernetes cluster. Skip to the next section if you have an Openshift cluster or a cluster that has already launched.*
 
-Yuki~ do we even need to support configuring via flatfile? Leaving it for now, but hey, food for thought.
-
 You may want to provide a cron expression to configure how frequently the ip-reconciler runs. For clusters that have not yet been launched, this can be configured via the flatfile.
 
 You can speficy the `WHEREABOUTS_RECONCILER_CRON` environment variable in your daemonset definition file to override the default cron expression:
@@ -150,8 +148,6 @@ You can speficy the `WHEREABOUTS_RECONCILER_CRON` environment variable in your d
 ```
 
 ## Reconciler Cron Expression Configuration for live clusters via configmap (optional)
-
-Yuki~ README: this section may belong in the CNO since the steps outlined are not technically part of whereabouts. I'm not sure, and suggestions are welcome.
 
 You may want to provide a cron expression to configure how frequently the ip-reconciler runs. For **Openshift** Kubernetes clusters, this is done via updating the cron-scheduler-configmap. 
 
