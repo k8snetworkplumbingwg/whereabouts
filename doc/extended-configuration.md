@@ -149,9 +149,9 @@ You can speficy the `WHEREABOUTS_RECONCILER_CRON` environment variable in your d
 
 You may want to provide a cron expression to configure how frequently the ip-reconciler runs.
 
-You can check that the cron-scheduler-configmap is present by running `kubectl get configmaps` in the namespace used for Whereabouts.
+You can check that the whereabouts-config is present by running `kubectl get configmaps` in the namespace used for Whereabouts.
 
-To update the cron-scheduler-configmap, run `kubectl edit configmap cron-scheduler-configmap` and adjust the value to a valid cron expression of your liking. Shortly after, the reconciler schedule will update.
+To update the whereabouts-config, run `kubectl edit configmap whereabouts-config` and adjust the value to a valid cron expression of your liking. Shortly after, the reconciler schedule will update.
 
 ## Installing etcd. (optional)
 
