@@ -136,8 +136,6 @@ You'll note that in the `ipam` section there's a lot less parameters than are us
 
 ## Reconciler Cron Expression configuration for clusters via flatfile (optional)
 
-*NOTE: configuring cron expression prior to cluster launch will only work for **non-Openshift** Kubernetes clusters, such as a vanilla Kubernetes cluster. Skip to the next section if you have an Openshift cluster or a cluster that has already launched.*
-
 You may want to provide a cron expression to configure how frequently the ip-reconciler runs. For clusters that have not yet been launched, this can be configured via the flatfile.
 
 You can speficy the `WHEREABOUTS_RECONCILER_CRON` environment variable in your daemonset definition file to override the default cron expression:
@@ -149,13 +147,11 @@ You can speficy the `WHEREABOUTS_RECONCILER_CRON` environment variable in your d
 
 ## Reconciler Cron Expression Configuration for live clusters via configmap (optional)
 
-You may want to provide a cron expression to configure how frequently the ip-reconciler runs. For **Openshift** Kubernetes clusters, this is done via updating the cron-scheduler-configmap. 
+You may want to provide a cron expression to configure how frequently the ip-reconciler runs.
 
-You can check that the cron-scheduler-configmap is present by running `oc get configmaps` in the openshift-multus namespace.
+You can check that the cron-scheduler-configmap is present by running `kubectl get configmaps` in the namespace used for Whereabouts.
 
-To update the cron-scheduler-configmap, run `oc edit configmap cron-scheduler-configmap` and adjust the value to a valid cron expression of your liking. Shortly after, the reconciler schedule will update.
-
-If you are using a non-Openshift cluster, you can do the same steps, but you will need to look for the configmap in the kube-system namespace.
+To update the cron-scheduler-configmap, run `kubectl edit configmap cron-scheduler-configmap` and adjust the value to a valid cron expression of your liking. Shortly after, the reconciler schedule will update.
 
 ## Installing etcd. (optional)
 
