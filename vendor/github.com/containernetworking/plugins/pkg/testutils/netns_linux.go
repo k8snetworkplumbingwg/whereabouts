@@ -22,19 +22,38 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"syscall"
+
+	"golang.org/x/sys/unix"
 
 	"github.com/containernetworking/plugins/pkg/ns"
-	"golang.org/x/sys/unix"
 )
 
-const nsRunDir = "/var/run/netns"
+func getNsRunDir() string {
+	xdgRuntimeDir := os.Getenv("XDG_RUNTIME_DIR")
+
+	/// If XDG_RUNTIME_DIR is set, check if the current user owns /var/run.  If
+	// the owner is different, we are most likely running in a user namespace.
+	// In that case use $XDG_RUNTIME_DIR/netns as runtime dir.
+	if xdgRuntimeDir != "" {
+		if s, err := os.Stat("/var/run"); err == nil {
+			st, ok := s.Sys().(*syscall.Stat_t)
+			if ok && int(st.Uid) != os.Geteuid() {
+				return path.Join(xdgRuntimeDir, "netns")
+			}
+		}
+	}
+
+	return "/var/run/netns"
+}
 
 // Creates a new persistent (bind-mounted) network namespace and returns an object
 // representing that namespace, without switching to it.
 func NewNS() (ns.NetNS, error) {
+	nsRunDir := getNsRunDir()
 
 	b := make([]byte, 16)
-	_, err := rand.Reader.Read(b)
+	_, err := rand.Read(b)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate random netns name: %v", err)
 	}
@@ -42,7 +61,7 @@ func NewNS() (ns.NetNS, error) {
 	// Create the directory for mounting network namespaces
 	// This needs to be a shared mountpoint in case it is mounted in to
 	// other namespaces (containers)
-	err = os.MkdirAll(nsRunDir, 0755)
+	err = os.MkdirAll(nsRunDir, 0o755)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +154,7 @@ func NewNS() (ns.NetNS, error) {
 func UnmountNS(ns ns.NetNS) error {
 	nsPath := ns.Path()
 	// Only unmount if it's been bind-mounted (don't touch namespaces in /proc...)
-	if strings.HasPrefix(nsPath, nsRunDir) {
+	if strings.HasPrefix(nsPath, getNsRunDir()) {
 		if err := unix.Unmount(nsPath, 0); err != nil {
 			return fmt.Errorf("failed to unmount NS: at %s: %v", nsPath, err)
 		}

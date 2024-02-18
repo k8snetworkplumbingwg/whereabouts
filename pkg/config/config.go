@@ -1,3 +1,4 @@
+// Package config includes configuration utilities for whereabouts
 package config
 
 import (
@@ -9,7 +10,6 @@ import (
 	"strings"
 
 	cnitypes "github.com/containernetworking/cni/pkg/types"
-	types020 "github.com/containernetworking/cni/pkg/types/020"
 	"github.com/imdario/mergo"
 
 	netutils "k8s.io/utils/net"
@@ -211,7 +211,7 @@ func configureStatic(n *types.Net, args types.IPAMEnvArgs) error {
 
 	// CNI spec 0.2.0 and below supported only one v4 and v6 address
 	if numV4 > 1 || numV6 > 1 {
-		for _, v := range types020.SupportedVersions {
+		for _, v := range []string{"", "0.1.0", "0.2.0"} {
 			if n.CNIVersion == v {
 				return fmt.Errorf("CNI version %v does not support more than 1 address per family", n.CNIVersion)
 			}
