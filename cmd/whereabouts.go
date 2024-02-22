@@ -1,3 +1,4 @@
+// Package main contains the beginning of the wereabouts cmd
 package main
 
 import (
@@ -7,7 +8,7 @@ import (
 
 	"github.com/containernetworking/cni/pkg/skel"
 	cnitypes "github.com/containernetworking/cni/pkg/types"
-	"github.com/containernetworking/cni/pkg/types/current"
+	current "github.com/containernetworking/cni/pkg/types/040"
 	cniversion "github.com/containernetworking/cni/pkg/version"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/config"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/iphelpers"

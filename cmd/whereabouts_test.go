@@ -16,7 +16,7 @@ import (
 
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
-	"github.com/containernetworking/cni/pkg/types/current"
+	current "github.com/containernetworking/cni/pkg/types/040"
 	"github.com/containernetworking/plugins/pkg/testutils"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
