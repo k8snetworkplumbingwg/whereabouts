@@ -16,7 +16,7 @@ import (
 
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
-	current "github.com/containernetworking/cni/pkg/types/040"
+	current "github.com/containernetworking/cni/pkg/types/100"
 	"github.com/containernetworking/plugins/pkg/testutils"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -84,7 +84,6 @@ func AllocateAndReleaseAddressesTest(ipVersion string, ipamConf *whereaboutstype
 		// Gomega is cranky about slices with different caps
 		ExpectWithOffset(1, *result.IPs[0]).To(Equal(
 			current.IPConfig{
-				Version: ipVersion,
 				Address: mustCIDR(expectedAddresses[i]),
 				Gateway: ipamConf.Gateway,
 			}))
@@ -107,7 +106,6 @@ func AllocateAndReleaseAddressesTest(ipVersion string, ipamConf *whereaboutstype
 
 		Expect(*result.IPs[0]).To(Equal(
 			current.IPConfig{
-				Version: ipVersion,
 				Address: mustCIDR(expectedAddresses[i]),
 				Gateway: ipamConf.Gateway,
 			}))
@@ -333,7 +331,6 @@ var _ = Describe("Whereabouts operations", func() {
 		// Gomega is cranky about slices with different caps
 		Expect(*result.IPs[0]).To(Equal(
 			current.IPConfig{
-				Version: "4",
 				Address: mustCIDR("192.168.1.32/24"),
 				Gateway: net.ParseIP("192.168.10.1"),
 			}))
@@ -407,7 +404,6 @@ var _ = Describe("Whereabouts operations", func() {
 		// Gomega is cranky about slices with different caps
 		Expect(*result.IPs[0]).To(Equal(
 			current.IPConfig{
-				Version: "6",
 				Address: mustCIDR("2001::3/116"),
 				Gateway: net.ParseIP("2001::f:1"),
 			}))
@@ -478,7 +474,6 @@ var _ = Describe("Whereabouts operations", func() {
 		// Gomega is cranky about slices with different caps
 		Expect(*result.IPs[0]).To(Equal(
 			current.IPConfig{
-				Version: "6",
 				Address: mustCIDR("caa5::8000/112"),
 				Gateway: net.ParseIP("2001::f:1"),
 			}))
@@ -561,21 +556,18 @@ var _ = Describe("Whereabouts operations", func() {
 
 		Expect(*result.IPs[0]).To(Equal(
 			current.IPConfig{
-				Version: "4",
 				Address: mustCIDR("192.168.1.33/28"),
 				Gateway: net.ParseIP("192.168.1.1"),
 			}))
 
 		Expect(*result.IPs[1]).To(Equal(
 			current.IPConfig{
-				Version: "4",
 				Address: mustCIDR("10.10.0.1/24"),
 				Gateway: net.ParseIP("10.10.0.254"),
 			}))
 
 		Expect(*result.IPs[2]).To(Equal(
 			current.IPConfig{
-				Version: "6",
 				Address: mustCIDR("3ffe:ffff:0:01ff::1/64"),
 				Gateway: net.ParseIP("3ffe:ffff:0::1"),
 			},
@@ -850,7 +842,6 @@ var _ = Describe("Whereabouts operations", func() {
 
 		Expect(*result.IPs[0]).To(Equal(
 			current.IPConfig{
-				Version: "4",
 				Address: mustCIDR("192.168.1.5/24"),
 				Gateway: net.ParseIP("192.168.10.1"),
 			}))
@@ -918,7 +909,6 @@ var _ = Describe("Whereabouts operations", func() {
 
 		Expect(*result.IPs[0]).To(Equal(
 			current.IPConfig{
-				Version: "4",
 				Address: mustCIDR("192.168.1.5/24"),
 				Gateway: net.ParseIP("192.168.10.1"),
 			}))
@@ -987,7 +977,6 @@ var _ = Describe("Whereabouts operations", func() {
 
 			Expect(*result.IPs[0]).To(Equal(
 				current.IPConfig{
-					Version: "4",
 					Address: mustCIDR(fmt.Sprintf("192.168.1.%d/24", 5+i)),
 					Gateway: net.ParseIP("192.168.10.1"),
 				}))
@@ -1076,7 +1065,6 @@ var _ = Describe("Whereabouts operations", func() {
 		// Gomega is cranky about slices with different caps
 		ExpectWithOffset(1, *result.IPs[0]).To(Equal(
 			current.IPConfig{
-				Version: "4",
 				Address: mustCIDR("192.168.22.1/24"),
 			}))
 
@@ -1124,7 +1112,6 @@ var _ = Describe("Whereabouts operations", func() {
 		// Gomega is cranky about slices with different caps
 		ExpectWithOffset(1, *result.IPs[0]).To(Equal(
 			current.IPConfig{
-				Version: "4",
 				Address: mustCIDR("192.168.22.2/28"),
 			}))
 
@@ -1198,7 +1185,6 @@ var _ = Describe("Whereabouts operations", func() {
 		// Gomega is cranky about slices with different caps
 		ExpectWithOffset(1, *result.IPs[0]).To(Equal(
 			current.IPConfig{
-				Version: "6",
 				Address: mustCIDR("2001::2:3:1/124"),
 			}))
 
@@ -1246,7 +1232,6 @@ var _ = Describe("Whereabouts operations", func() {
 		// Gomega is cranky about slices with different caps
 		ExpectWithOffset(1, *result.IPs[0]).To(Equal(
 			current.IPConfig{
-				Version: "6",
 				Address: mustCIDR("2001::2:3:2/126"),
 			}))
 
@@ -1321,7 +1306,6 @@ var _ = Describe("Whereabouts operations", func() {
 		// Gomega is cranky about slices with different caps
 		ExpectWithOffset(1, *result.IPs[0]).To(Equal(
 			current.IPConfig{
-				Version: "4",
 				Address: mustCIDR("192.168.33.1/24"),
 			}))
 
@@ -1369,7 +1353,6 @@ var _ = Describe("Whereabouts operations", func() {
 		// Gomega is cranky about slices with different caps
 		ExpectWithOffset(1, *result.IPs[0]).To(Equal(
 			current.IPConfig{
-				Version: "4",
 				Address: mustCIDR("192.168.33.1/28"),
 			}))
 

@@ -8,10 +8,9 @@ import (
 
 	"github.com/containernetworking/cni/pkg/skel"
 	cnitypes "github.com/containernetworking/cni/pkg/types"
-	current "github.com/containernetworking/cni/pkg/types/040"
+	current "github.com/containernetworking/cni/pkg/types/100"
 	cniversion "github.com/containernetworking/cni/pkg/version"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/config"
-	"github.com/k8snetworkplumbingwg/whereabouts/pkg/iphelpers"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage/kubernetes"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
@@ -83,17 +82,8 @@ func cmdAdd(args *skel.CmdArgs, client *kubernetes.KubernetesIPAM, cniVersion st
 		return fmt.Errorf("error at storage engine: %w", err)
 	}
 
-	var useVersion string
 	for _, newip := range newips {
-		// Determine if v4 or v6.
-		if iphelpers.IsIPv4(newip.IP) {
-			useVersion = "4"
-		} else {
-			useVersion = "6"
-		}
-
 		result.IPs = append(result.IPs, &current.IPConfig{
-			Version: useVersion,
 			Address: newip,
 			Gateway: client.Config.Gateway})
 	}
@@ -101,7 +91,6 @@ func cmdAdd(args *skel.CmdArgs, client *kubernetes.KubernetesIPAM, cniVersion st
 	// Assign all the static IP elements.
 	for _, v := range client.Config.Addresses {
 		result.IPs = append(result.IPs, &current.IPConfig{
-			Version: v.Version,
 			Address: v.Address,
 			Gateway: v.Gateway})
 	}
