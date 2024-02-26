@@ -1,5 +1,5 @@
 # This dockerfile is used for building for OpenShift
-FROM registry.ci.openshift.org/openshift/release:golang-1.20 as builder
+FROM registry.ci.openshift.org/openshift/release:golang-1.21 as builder
 ADD . /go/src/github.com/k8snetworkplumbingwg/whereabouts
 WORKDIR /go/src/github.com/k8snetworkplumbingwg/whereabouts
 ENV CGO_ENABLED=1
