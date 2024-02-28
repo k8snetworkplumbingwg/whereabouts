@@ -16,7 +16,7 @@ jobs:
         go-version: ${{ matrix.go-version }}
 
     - name: Checkout code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
 
     - name: Install kubebuilder tools
       run: ./hack/install-kubebuilder-tools.sh
