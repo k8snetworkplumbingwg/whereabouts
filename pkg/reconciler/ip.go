@@ -2,6 +2,7 @@ package reconciler
 
 import (
 	"context"
+	"os"
 	"time"
 
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
@@ -16,13 +17,20 @@ func ReconcileIPs(errorChan chan error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(defaultReconcilerTimeout*time.Second))
 	defer cancel()
 
-	ipReconcileLoop, err := NewReconcileLooper(ctx, defaultReconcilerTimeout)
+	var err error
+	var ipReconcileLoop *ReconcileLooper
+	kubeConfigFile := os.Getenv("KUBECONFIG")
+
+	if kubeConfigFile == "" {
+		ipReconcileLoop, err = NewReconcileLooper(ctx, defaultReconcilerTimeout)
+	} else {
+		ipReconcileLoop, err = NewReconcileLooperWithKubeconfig(ctx, kubeConfigFile, defaultReconcilerTimeout)
+	}
 	if err != nil {
 		_ = logging.Errorf("failed to create the reconcile looper: %v", err)
 		errorChan <- err
 		return
 	}
-
 	cleanedUpIps, err := ipReconcileLoop.ReconcileIPPools(ctx)
 	if err != nil {
 		_ = logging.Errorf("failed to clean up IP for allocations: %v", err)

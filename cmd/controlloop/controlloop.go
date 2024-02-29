@@ -15,6 +15,7 @@ import (
 	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/clientcmd"
 
 	nadclient "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/client/clientset/versioned"
 	nadinformers "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/client/informers/externalversions"
@@ -125,9 +126,19 @@ func handleSignals(stopChannel chan struct{}, signals ...os.Signal) {
 }
 
 func newPodController(stopChannel chan struct{}) (*controlloop.PodController, error) {
-	cfg, err := rest.InClusterConfig()
+	var cfg *rest.Config
+	var err error
+	cfg, err = rest.InClusterConfig()
 	if err != nil {
-		return nil, fmt.Errorf("failed to implicitly generate the kubeconfig: %w", err)
+		logging.Debugf("failed to generate the kubeconfig from service account: %v", err)
+		kubeConfigFile := os.Getenv("KUBECONFIG")
+		if kubeConfigFile == "" {
+			return nil, fmt.Errorf("KUBECONFIG environment variable not set")
+		}
+		cfg, err = clientcmd.BuildConfigFromFlags("", kubeConfigFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate kubeconfig from file %s: %v", kubeConfigFile, err)
+		}
 	}
 
 	k8sClientSet, err := kubernetes.NewForConfig(cfg)
