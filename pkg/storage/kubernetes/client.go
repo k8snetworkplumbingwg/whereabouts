@@ -2,10 +2,12 @@ package kubernetes
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -134,4 +136,19 @@ func (i *Client) DeleteOverlappingIP(ctx context.Context, clusterWideIP *whereab
 
 	return i.client.WhereaboutsV1alpha1().OverlappingRangeIPReservations(clusterWideIP.GetNamespace()).Delete(
 		ctxWithTimeout, clusterWideIP.GetName(), metav1.DeleteOptions{})
+}
+
+func (i *Client) PatchOverlappingIP(ctx context.Context, clusterWideIP *whereaboutsv1alpha1.OverlappingRangeIPReservation) (*whereaboutsv1alpha1.OverlappingRangeIPReservation, error) {
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, storage.RequestTimeout)
+	defer cancel()
+
+	patchBytes, err := json.Marshal(map[string]interface{}{
+		"spec": clusterWideIP.Spec,
+	})
+	if err != nil {
+		return nil, logging.Errorf("Error marshaling overlappingrangeipreservations.whereabouts.cni.cncf.io spec: %v", err)
+	}
+
+	return i.client.WhereaboutsV1alpha1().OverlappingRangeIPReservations(clusterWideIP.GetNamespace()).Patch(
+		ctxWithTimeout, clusterWideIP.Name, types.MergePatchType, patchBytes, metav1.PatchOptions{})
 }

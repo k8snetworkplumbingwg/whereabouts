@@ -1,5 +1,3 @@
-//go:build test
-// +build test
 
 package controlloop
 
@@ -10,6 +8,7 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	types "k8s.io/apimachinery/pkg/types"
 
 	nad "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 
@@ -58,12 +57,13 @@ func nodeSpec(name string) *v1.Node {
 	}
 }
 
-func podSpec(name string, namespace string, nodeName string, networks ...string) *v1.Pod {
+func podSpec(name string, namespace string, uid string, nodeName string, networks ...string) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        name,
 			Namespace:   namespace,
 			Annotations: podNetworkSelectionElements(networks...),
+			UID:         types.UID(uid),
 		},
 		Spec: v1.PodSpec{
 			NodeName: nodeName,

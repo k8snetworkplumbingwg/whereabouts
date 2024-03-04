@@ -52,6 +52,7 @@ func LoadIPAMConfig(bytes []byte, envArgs string, extraConfigPaths ...string) (*
 	}
 	n.IPAM.PodName = string(args.K8S_POD_NAME)
 	n.IPAM.PodNamespace = string(args.K8S_POD_NAMESPACE)
+	n.IPAM.PodUID = string(args.K8S_POD_UID)
 
 	flatipam, foundflatfile, err := GetFlatIPAM(false, n.IPAM, extraConfigPaths...)
 	if err != nil {

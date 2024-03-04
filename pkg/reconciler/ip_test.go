@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -18,6 +20,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	kubetypes "k8s.io/apimachinery/pkg/types"
 	k8sclient "k8s.io/client-go/kubernetes"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
 
@@ -44,11 +47,9 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 	var (
 		reconcileLooper *ReconcileLooper
 		k8sClientSet    k8sclient.Interface
+		pod             *v1.Pod
 	)
-
 	Context("reconciling IP pools with a single running pod", func() {
-		var pod *v1.Pod
-
 		BeforeEach(func() {
 			pod = generatePod(namespace, podName, ipInNetwork{ip: firstIPInRange, networkName: networkName})
 			k8sClientSet = fakek8sclient.NewSimpleClientset(pod)
@@ -63,7 +64,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 			)
 
 			BeforeEach(func() {
-				pool = generateIPPoolSpec(ipRange, namespace, poolName, pod.Name)
+				pool = generateIPPoolSpec(ipRange, namespace, poolName, pod)
 				wbClient = fakewbclient.NewSimpleClientset(pool)
 			})
 
@@ -102,7 +103,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 			secondIPInRange = "10.10.10.2"
 		)
 
-		var pods []v1.Pod
+		var pods []*v1.Pod
 
 		BeforeEach(func() {
 			pods = nil
@@ -115,7 +116,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 				if i == livePodIndex {
 					k8sClientSet = fakek8sclient.NewSimpleClientset(pod)
 				}
-				pods = append(pods, *pod)
+				pods = append(pods, pod)
 			}
 		})
 
@@ -128,11 +129,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 			)
 
 			BeforeEach(func() {
-				var podNames []string
-				for _, pod := range pods {
-					podNames = append(podNames, pod.Name)
-				}
-				pool = generateIPPoolSpec(ipRange, namespace, poolName, podNames...)
+				pool = generateIPPoolSpec(ipRange, namespace, poolName, pods...)
 				wbClient = fakewbclient.NewSimpleClientset(pool)
 			})
 
@@ -159,7 +156,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 
 					remainingAllocation := map[string]v1alpha1.IPAllocation{
 						"2": {
-							PodRef: fmt.Sprintf("%s/%s", namespace, pods[livePodIndex].Name),
+							PodRef: ComposePodRef(*pods[livePodIndex]),
 						},
 					}
 					Expect(poolAfterCleanup.Spec.Allocations).To(Equal(remainingAllocation))
@@ -211,8 +208,8 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 		})
 
 		BeforeEach(func() {
-			firstPool := generateIPPoolSpec(firstNetworkRange, namespace, firstPoolName, pods[0].GetName(), pods[2].GetName())
-			secondPool := generateIPPoolSpec(secondNetworkRange, namespace, secondPoolName, pods[1].GetName())
+			firstPool := generateIPPoolSpec(firstNetworkRange, namespace, firstPoolName, pods[0], pods[2])
+			secondPool := generateIPPoolSpec(secondNetworkRange, namespace, secondPoolName, pods[1])
 			wbClient = fakewbclient.NewSimpleClientset(firstPool, secondPool)
 			pools = append(pools, *firstPool, *secondPool)
 		})
@@ -221,7 +218,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 			podIPs := []string{firstIPInRange, secondIPInRange, thirdIPInRange}
 			for i := 0; i < numberOfPods; i++ {
 				var clusterWideIP v1alpha1.OverlappingRangeIPReservation
-				ownerPodRef := fmt.Sprintf("%s/%s", namespace, pods[i].GetName())
+				ownerPodRef := ComposePodRef(*pods[i])
 				_, err := wbClient.WhereaboutsV1alpha1().OverlappingRangeIPReservations(namespace).Create(context.TODO(), generateClusterWideIPReservation(namespace, podIPs[i], ownerPodRef), metav1.CreateOptions{})
 				Expect(err).NotTo(HaveOccurred())
 				clusterWideIPs = append(clusterWideIPs, clusterWideIP)
@@ -279,7 +276,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 		})
 
 		BeforeEach(func() {
-			firstPool := generateIPPoolSpec(networkRange, namespace, poolName, pods[0].GetName())
+			firstPool := generateIPPoolSpec(networkRange, namespace, poolName, pods[0])
 			wbClient = fakewbclient.NewSimpleClientset(firstPool)
 			pools = append(pools, *firstPool)
 		})
@@ -288,7 +285,7 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 			podIPs := []string{ipv6FirstIPInRange}
 			for i := 0; i < numberOfPods; i++ {
 				var clusterWideIP v1alpha1.OverlappingRangeIPReservation
-				ownerPodRef := fmt.Sprintf("%s/%s", namespace, pods[i].GetName())
+				ownerPodRef := ComposePodRef(*pods[i])
 				_, err := wbClient.WhereaboutsV1alpha1().OverlappingRangeIPReservations(namespace).Create(context.TODO(), generateClusterWideIPReservation(namespace, podIPs[i], ownerPodRef), metav1.CreateOptions{})
 				Expect(err).NotTo(HaveOccurred())
 				clusterWideIPs = append(clusterWideIPs, clusterWideIP)
@@ -319,20 +316,19 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 
 		BeforeEach(func() {
 			var err error
-			pod, err = k8sClientSet.CoreV1().Pods(namespace).Create(
-				context.TODO(),
-				generatePendingPod(namespace, podName),
-				metav1.CreateOptions{})
-			Expect(err).NotTo(HaveOccurred())
+			pod = generatePendingPod(namespace, podName)
+			k8sClientSet = fakek8sclient.NewSimpleClientset(pod)
 
-			pool = generateIPPoolSpec(ipRange, namespace, poolName, pod.Name)
+			pool = generateIPPoolSpec(ipRange, namespace, poolName, pod)
 			wbClient = fakewbclient.NewSimpleClientset(pool)
 			reconcileLooper, err = NewReconcileLooperWithClient(context.TODO(), kubernetes.NewKubernetesClient(wbClient, k8sClientSet, timeout), timeout)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("can be reconciled", func() {
-			Expect(reconcileLooper.ReconcileIPPools(context.TODO())).NotTo(BeEmpty())
+			ips, err := reconcileLooper.ReconcileIPPools(context.TODO())
+			Expect(ips).NotTo(BeEmpty())
+			Expect(err).NotTo(HaveOccurred())
 		})
 	})
 })
@@ -380,10 +376,11 @@ var _ = Describe("IPReconciler", func() {
 			ipCIDR         = "192.168.14.0/24"
 			namespace      = "default"
 			podName        = "pod1"
+			podUID         = "pod1-uid"
 		)
 
 		BeforeEach(func() {
-			podRef := "default/pod1"
+			podRef := "default/pod1:pod1-uid"
 			reservations := generateIPReservation(firstIPInRange, podRef)
 
 			pool := generateIPPool(ipCIDR, podRef)
@@ -403,10 +400,10 @@ var _ = Describe("IPReconciler", func() {
 
 		Context("and they are actually multiple IPs", func() {
 			BeforeEach(func() {
-				podRef := "default/pod2"
+				podRef := "default/pod2:pod2-uid"
 				reservations := generateIPReservation("192.168.14.2", podRef)
 
-				pool := generateIPPool(ipCIDR, podRef, "default/pod2", "default/pod3")
+				pool := generateIPPool(ipCIDR, podRef, "default/pod2:pod2-uid", "default/pod3")
 				orphanedIPAddr := OrphanedIPReservations{
 					Pool:        dummyPool{orphans: reservations, pool: pool},
 					Allocations: reservations,
@@ -425,8 +422,8 @@ var _ = Describe("IPReconciler", func() {
 		Context("but the IP reservation owner does not match", func() {
 			var reservationPodRef string
 			BeforeEach(func() {
-				reservationPodRef = "default/pod2"
-				podRef := "default/pod1"
+				reservationPodRef = "default/pod2:pod2-uid"
+				podRef := "default/pod1:pod1-uid"
 				reservations := generateIPReservation(firstIPInRange, podRef)
 				erroredReservations := generateIPReservation(firstIPInRange, reservationPodRef)
 
@@ -448,11 +445,11 @@ var _ = Describe("IPReconciler", func() {
 	})
 })
 
-func generateIPPoolSpec(ipRange string, namespace string, poolName string, podNames ...string) *v1alpha1.IPPool {
+func generateIPPoolSpec(ipRange string, namespace string, poolName string, pods ...*v1.Pod) *v1alpha1.IPPool {
 	allocations := map[string]v1alpha1.IPAllocation{}
-	for i, podName := range podNames {
+	for i, pod := range pods {
 		allocations[fmt.Sprintf("%d", i+1)] = v1alpha1.IPAllocation{
-			PodRef: fmt.Sprintf("%s/%s", namespace, podName),
+			PodRef: ComposePodRef(*pod),
 		}
 	}
 	return &v1alpha1.IPPool{
@@ -484,6 +481,7 @@ func generatePod(namespace string, podName string, ipNetworks ...ipInNetwork) *v
 			Name:        podName,
 			Namespace:   namespace,
 			Annotations: generatePodAnnotations(ipNetworks...),
+			UID:         kubetypes.UID(uuid.NewString()),
 		},
 		Spec: v1.PodSpec{
 			Containers: []v1.Container{

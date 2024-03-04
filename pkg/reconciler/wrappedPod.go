@@ -42,7 +42,7 @@ func indexPods(livePodList []v1.Pod, whereaboutsPodNames map[string]void) map[st
 	podMap := map[string]podWrapper{}
 
 	for _, pod := range livePodList {
-		podRef := composePodRef(pod)
+		podRef := ComposePodRef(pod)
 		if _, isWhereaboutsPod := whereaboutsPodNames[podRef]; !isWhereaboutsPod {
 			continue
 		}
@@ -64,7 +64,7 @@ func getFlatIPSet(pod v1.Pod) (map[string]void, error) {
 		return ipSet, logging.Errorf(
 			"could not parse network annotation %s for pod: %s; error: %v",
 			networkStatusAnnotationValue,
-			composePodRef(pod),
+			ComposePodRef(pod),
 			err)
 	}
 
@@ -76,7 +76,7 @@ func getFlatIPSet(pod v1.Pod) (map[string]void, error) {
 
 		for _, ip := range network.IPs {
 			ipSet[ip] = empty
-			logging.Debugf("Added IP %s for pod %s", ip, composePodRef(pod))
+			logging.Debugf("Added IP %s for pod %s", ip, ComposePodRef(pod))
 		}
 	}
 	return ipSet, nil

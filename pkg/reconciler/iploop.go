@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"regexp"
 	"strings"
 	"time"
 
@@ -54,17 +55,22 @@ func NewReconcileLooperWithClient(ctx context.Context, k8sClient *kubernetes.Cli
 		return nil, logging.Errorf("failed to retrieve all IP pools: %v", err)
 	}
 
+	looper := &ReconcileLooper{
+		k8sClient:      *k8sClient,
+		requestTimeout: timeout,
+	}
 	pods, err := k8sClient.ListPods(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	whereaboutsPodRefs := getPodRefsServedByWhereabouts(ipPools)
-	looper := &ReconcileLooper{
-		k8sClient:           *k8sClient,
-		liveWhereaboutsPods: indexPods(pods, whereaboutsPodRefs),
-		requestTimeout:      timeout,
+	// migrate the podRef format if needed
+	if err := looper.migrationPodRef(ctx, ipPools); err != nil {
+		return nil, logging.Errorf("failed to migrate podRef: %v", err)
 	}
+
+	whereaboutsPodRefs := getPodRefsServedByWhereabouts(ipPools)
+	looper.liveWhereaboutsPods = indexPods(pods, whereaboutsPodRefs)
 
 	if err := looper.findOrphanedIPsPerPool(ipPools); err != nil {
 		return nil, err
@@ -170,8 +176,71 @@ func splitPodRef(podRef string) (string, string) {
 	return namespacedName[0], namespacedName[1]
 }
 
-func composePodRef(pod v1.Pod) string {
-	return fmt.Sprintf("%s/%s", pod.GetNamespace(), pod.GetName())
+func ComposePodRef(pod v1.Pod) string {
+	return fmt.Sprintf("%s/%s:%s", pod.GetNamespace(), pod.GetName(), pod.GetUID())
+}
+
+func (rl ReconcileLooper) convertLegacyPodRef(podRef string) (string, error) {
+	podInfo := strings.Split(podRef, "/")
+	if len(podInfo) != 2 {
+		return "", logging.Errorf("podRef %s is invalid", podRef)
+	}
+	pod, err := rl.k8sClient.GetPod(podInfo[0], podInfo[1])
+	if err != nil {
+		return "", logging.Errorf("failed to get pod %s", pod.Name)
+	}
+	newPodRef := ComposePodRef(*pod)
+	logging.Debugf("converted podRef %s to %s", podRef, newPodRef)
+	return newPodRef, nil
+}
+
+// migrationPodRef will migrate the podRef format from 'Namespace/PodName' to
+// 'Namespace/PodName:PodUID' for existing pools. This shall be a one-time job.
+func (rl ReconcileLooper) migrationPodRef(ctx context.Context, ipPools []storage.IPPool) error {
+	pattern := `^([^\s/]+)/([^\s/]+):([^\s/]+)$`
+
+	reservations, err := rl.k8sClient.ListOverlappingIPs(ctx)
+	if err != nil {
+		return logging.Errorf("failed to list overlappingrangeipreservations %v", err)
+	}
+	for _, ip := range reservations {
+		if regexp.MustCompile(pattern).MatchString(ip.Spec.PodRef) {
+			continue
+		}
+		ip.Spec.PodRef, err = rl.convertLegacyPodRef(ip.Spec.PodRef)
+		if err != nil {
+			return err
+		}
+		_, err := rl.k8sClient.PatchOverlappingIP(ctx, &ip)
+		if err != nil {
+			return logging.Errorf("failed to update overlappingrangeipreservation %s: %v", ip.Spec.PodRef, err)
+		}
+	}
+
+	var ipReservations []types.IPReservation
+	for _, pool := range ipPools {
+		ipReservations = nil
+		needUpdate := false
+		for _, r := range pool.Allocations() {
+			if !regexp.MustCompile(pattern).MatchString(r.PodRef) {
+				r.PodRef, err = rl.convertLegacyPodRef(r.PodRef)
+				if err != nil {
+					return err
+				}
+				needUpdate = true
+			}
+			ipReservations = append(ipReservations, r)
+		}
+		if needUpdate {
+			logging.Debugf("update ippool with reservation %v", ipReservations)
+			err = pool.Update(ctx, ipReservations)
+			if err != nil {
+				return logging.Errorf("failed to update ippool: %v", err)
+			}
+		}
+	}
+
+	return nil
 }
 
 func (rl ReconcileLooper) ReconcileIPPools(ctx context.Context) ([]net.IP, error) {

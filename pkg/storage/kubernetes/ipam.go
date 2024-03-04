@@ -345,7 +345,7 @@ func (p *KubernetesIPPool) Update(ctx context.Context, reservations []whereabout
 
 // newLeaderElector creates a new leaderelection.LeaderElector and associated
 // channels by which to observe elections and depositions.
-func newLeaderElector(clientset kubernetes.Interface, namespace string, podNamespace string, podID string, leaseDuration int, renewDeadline int, retryPeriod int) (*leaderelection.LeaderElector, chan struct{}, chan struct{}) {
+func newLeaderElector(clientset kubernetes.Interface, namespace string, podNamespace string, podID string, podUID string, leaseDuration int, renewDeadline int, retryPeriod int) (*leaderelection.LeaderElector, chan struct{}, chan struct{}) {
 	//log.WithField("context", "leaderelection")
 	// leaderOK will block gRPC startup until it's closed.
 	leaderOK := make(chan struct{})
@@ -360,7 +360,7 @@ func newLeaderElector(clientset kubernetes.Interface, namespace string, podNames
 		},
 		Client: clientset.CoordinationV1(),
 		LockConfig: resourcelock.ResourceLockConfig{
-			Identity: fmt.Sprintf("%s/%s", podNamespace, podID),
+			Identity: fmt.Sprintf("%s/%s:%s", podNamespace, podID, podUID),
 		},
 	}
 
@@ -401,7 +401,7 @@ func IPManagement(ctx context.Context, mode int, ipamConf whereaboutstypes.IPAMC
 	}
 
 	// setup leader election
-	le, leader, deposed := newLeaderElector(client.clientSet, client.namespace, ipamConf.PodNamespace, ipamConf.PodName, ipamConf.LeaderLeaseDuration, ipamConf.LeaderRenewDeadline, ipamConf.LeaderRetryPeriod)
+	le, leader, deposed := newLeaderElector(client.clientSet, client.namespace, ipamConf.PodNamespace, ipamConf.PodName, ipamConf.PodUID, ipamConf.LeaderLeaseDuration, ipamConf.LeaderRenewDeadline, ipamConf.LeaderRetryPeriod)
 	var wg sync.WaitGroup
 	wg.Add(2)
 

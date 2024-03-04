@@ -70,6 +70,7 @@ type IPAMConfig struct {
 	ConfigurationPath        string           `json:"configuration_path"`
 	PodName                  string
 	PodNamespace             string
+	PodUID                   string
 	NetworkName              string `json:"network_name,omitempty"`
 }
 
@@ -106,6 +107,7 @@ func (ic *IPAMConfig) UnmarshalJSON(data []byte) error {
 		ConfigurationPath        string           `json:"configuration_path"`
 		PodName                  string
 		PodNamespace             string
+		PodUID                   string
 		NetworkName              string `json:"network_name,omitempty"`
 	}
 
@@ -142,13 +144,14 @@ func (ic *IPAMConfig) UnmarshalJSON(data []byte) error {
 		ConfigurationPath:        ipamConfigAlias.ConfigurationPath,
 		PodName:                  ipamConfigAlias.PodName,
 		PodNamespace:             ipamConfigAlias.PodNamespace,
+		PodUID:                   ipamConfigAlias.PodUID,
 		NetworkName:              ipamConfigAlias.NetworkName,
 	}
 	return nil
 }
 
 func (ic *IPAMConfig) GetPodRef() string {
-	return fmt.Sprintf("%s/%s", ic.PodNamespace, ic.PodName)
+	return fmt.Sprintf("%s/%s:%s", ic.PodNamespace, ic.PodName, ic.PodUID)
 }
 
 func backwardsCompatibleIPAddress(ip string) net.IP {
@@ -166,6 +169,7 @@ type IPAMEnvArgs struct {
 	GATEWAY                    cnitypes.UnmarshallableString `json:"gateway,omitempty"`
 	K8S_POD_NAME               cnitypes.UnmarshallableString //revive:disable-line
 	K8S_POD_NAMESPACE          cnitypes.UnmarshallableString //revive:disable-line
+	K8S_POD_UID                cnitypes.UnmarshallableString //revive:disable-line
 	K8S_POD_INFRA_CONTAINER_ID cnitypes.UnmarshallableString //revive:disable-line
 }
 

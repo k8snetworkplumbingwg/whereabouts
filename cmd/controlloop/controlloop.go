@@ -14,8 +14,8 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/tools/record"
 
 	nadclient "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/client/clientset/versioned"
 	nadinformers "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/client/informers/externalversions"
@@ -39,6 +39,7 @@ const (
 	cronSchedulerCreationError
 	fileWatcherError
 	couldNotCreateConfigWatcherError
+	initialReconsileFailed
 )
 
 const (
@@ -78,6 +79,16 @@ func main() {
 		os.Exit(fileWatcherError)
 	}
 	defer watcher.Close()
+
+	// trigger one immediate reconcile before cron job start
+	go reconciler.ReconcileIPs(errorChan)
+	err = <-errorChan
+	if err == nil {
+		logging.Verbosef("initial reconciler success")
+	} else {
+		logging.Verbosef("initial reconciler failure: %s", err)
+		os.Exit(initialReconsileFailed)
+	}
 
 	reconcilerConfigWatcher, err := reconciler.NewConfigWatcher(
 		reconcilerCronConfiguration,

@@ -12,6 +12,7 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 var _ = Describe("Pod Wrapper operations", func() {
@@ -72,12 +73,13 @@ var _ = Describe("Pod Wrapper operations", func() {
 		}
 	}
 
-	generatePodSpecWithNameAndNamespace := func(name string, namespace string, ips ...string) v1.Pod {
+	generatePodSpecWithNameAndNamespace := func(name string, namespace string, uid string, ips ...string) v1.Pod {
 		return v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Annotations: generateMultusNetworkStatusAnnotationFromIPs(ips...),
 				Name:        name,
 				Namespace:   namespace,
+				UID:         types.UID(uid),
 			},
 		}
 	}
@@ -138,6 +140,7 @@ var _ = Describe("Pod Wrapper operations", func() {
 			ips       []string
 			name      string
 			namespace string
+			uid       string
 		}
 
 		table.DescribeTable("", func(podsInfo ...podInfo) {
@@ -145,9 +148,9 @@ var _ = Describe("Pod Wrapper operations", func() {
 			whereaboutsPods := map[string]void{}
 
 			for _, info := range podsInfo {
-				newPod := generatePodSpecWithNameAndNamespace(info.name, info.namespace, info.ips...)
+				newPod := generatePodSpecWithNameAndNamespace(info.name, info.namespace, info.uid, info.ips...)
 				pods = append(pods, newPod)
-				whereaboutsPods[composePodRef(newPod)] = void{}
+				whereaboutsPods[ComposePodRef(newPod)] = void{}
 			}
 			expectedPodWrapper := map[string]podWrapper{}
 			for _, info := range podsInfo {
@@ -155,7 +158,7 @@ var _ = Describe("Pod Wrapper operations", func() {
 				for _, ip := range info.ips {
 					indexedPodIPs[ip] = void{}
 				}
-				expectedPodWrapper[fmt.Sprintf("%s/%s", info.namespace, info.name)] = podWrapper{ips: indexedPodIPs}
+				expectedPodWrapper[fmt.Sprintf("%s/%s:%s", info.namespace, info.name, info.uid)] = podWrapper{ips: indexedPodIPs}
 			}
 
 			Expect(indexPods(pods, whereaboutsPods)).To(Equal(expectedPodWrapper))
@@ -165,17 +168,20 @@ var _ = Describe("Pod Wrapper operations", func() {
 				ips:       []string{"10.10.10.10"},
 				name:      "pod1",
 				namespace: "default",
+				uid:       "pod1uid",
 			}),
 			table.Entry("when multiple pods are passed",
 				podInfo{
 					ips:       []string{"10.10.10.10"},
 					name:      "pod1",
 					namespace: "default",
+					uid:       "pod1uid",
 				},
 				podInfo{
 					ips:       []string{"192.168.14.14", "200.200.200.200s"},
 					name:      "pod200",
 					namespace: "secretns",
+					uid:       "pod2uid",
 				}))
 	})
 })

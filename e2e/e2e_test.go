@@ -428,8 +428,9 @@ var _ = Describe("Whereabouts functionality", func() {
 
 				Context("deleting a pod from the statefulset", func() {
 					var (
-						containerID string
-						podRef      string
+						containerID      string
+						podRef           string
+						decomposedPodRef []string
 					)
 
 					BeforeEach(func() {
@@ -443,9 +444,11 @@ var _ = Describe("Whereabouts functionality", func() {
 						containerID = ipPool.Spec.Allocations["1"].ContainerID
 						podRef = ipPool.Spec.Allocations["1"].PodRef
 
-						decomposedPodRef := strings.Split(podRef, "/")
+						decomposedPodRef = strings.Split(podRef, ":")
 						Expect(decomposedPodRef).To(HaveLen(2))
-						podName := decomposedPodRef[1]
+						podNameNamespace := strings.Split(decomposedPodRef[0], "/")
+						Expect(podNameNamespace).To(HaveLen(2))
+						podName := podNameNamespace[1]
 
 						rightNow := int64(0)
 						Expect(clientInfo.Client.CoreV1().Pods(namespace).Delete(
@@ -476,8 +479,7 @@ var _ = Describe("Whereabouts functionality", func() {
 							metav1.GetOptions{})
 						Expect(err).NotTo(HaveOccurred())
 						Expect(ipPool.Spec.Allocations).NotTo(BeEmpty())
-
-						Expect(allocationForPodRef(podRef, *ipPool).ContainerID).NotTo(Equal(containerID))
+						Expect(allocationForPodName(decomposedPodRef[0], *ipPool).ContainerID).NotTo(Equal(containerID))
 					})
 				})
 			})
@@ -669,9 +671,9 @@ var _ = Describe("Whereabouts functionality", func() {
 	})
 })
 
-func allocationForPodRef(podRef string, ipPool v1alpha1.IPPool) *v1alpha1.IPAllocation {
+func allocationForPodName(podName string, ipPool v1alpha1.IPPool) *v1alpha1.IPAllocation {
 	for _, allocation := range ipPool.Spec.Allocations {
-		if allocation.PodRef == podRef {
+		if strings.Contains(allocation.PodRef, podName) {
 			return &allocation
 		}
 	}

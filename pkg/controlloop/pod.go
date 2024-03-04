@@ -36,6 +36,7 @@ import (
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
 	wbclient "github.com/k8snetworkplumbingwg/whereabouts/pkg/storage/kubernetes"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/reconciler"
 )
 
 const (
@@ -177,6 +178,7 @@ func (pc *PodController) processNextWorkItem() bool {
 func (pc *PodController) garbageCollectPodIPs(pod *v1.Pod) error {
 	podNamespace := pod.GetNamespace()
 	podName := pod.GetName()
+	podUID := pod.GetUID()
 
 	ifaceStatuses, err := podNetworkStatus(pod)
 	if err != nil {
@@ -199,12 +201,12 @@ func (pc *PodController) garbageCollectPodIPs(pod *v1.Pod) error {
 		}
 
 		logging.Verbosef("the NAD's config: %s", nad.Spec)
-		ipamConfig, err := ipamConfiguration(nad, podNamespace, podName, mountPath)
+		ipamConfig, err := ipamConfiguration(nad, podNamespace, podName, string(podUID), mountPath)
 		if err != nil && isInvalidPluginType(err) {
 			logging.Debugf("error while computing something: %v", err)
 			continue
 		} else if err != nil {
-			return fmt.Errorf("failed to create an IPAM configuration for the pod %s iface %s: %+v", podID(podNamespace, podName), ifaceStatus.Name, err)
+			return fmt.Errorf("failed to create an IPAM configuration for the pod %s iface %s: %+v", reconciler.ComposePodRef(*pod), ifaceStatus.Name, err)
 		}
 
 		var pools []*whereaboutsv1alpha1.IPPool
@@ -222,7 +224,7 @@ func (pc *PodController) garbageCollectPodIPs(pod *v1.Pod) error {
 
 		for _, pool := range pools {
 			for allocationIndex, allocation := range pool.Spec.Allocations {
-				if allocation.PodRef == podID(podNamespace, podName) {
+				if allocation.PodRef == reconciler.ComposePodRef(*pod) {
 					logging.Verbosef("stale allocation to cleanup: %+v", allocation)
 
 					client := *wbclient.NewKubernetesClient(nil, pc.k8sClient, 0)
@@ -260,13 +262,11 @@ func (pc *PodController) handleResult(pod *v1.Pod, err error) {
 		return
 	}
 
-	podNamespace := pod.GetNamespace()
-	podName := pod.GetName()
 	currentRetries := pc.workqueue.NumRequeues(pod)
 	if currentRetries <= maxRetries {
 		logging.Verbosef(
 			"re-queuing IP address reconciliation request for pod %s; retry #: %d",
-			podID(podNamespace, podName),
+			reconciler.ComposePodRef(*pod),
 			currentRetries)
 		pc.workqueue.AddRateLimited(pod)
 		return
@@ -329,7 +329,7 @@ func (pc *PodController) addressGarbageCollected(pod *v1.Pod, networkName string
 func (pc *PodController) addressGarbageCollectionFailed(pod *v1.Pod, err error) {
 	logging.Errorf(
 		"dropping pod [%s] deletion out of the queue - could not reconcile IP: %+v",
-		podID(pod.GetNamespace(), pod.GetName()),
+		reconciler.ComposePodRef(*pod),
 		err)
 
 	pc.workqueue.Forget(pod)
@@ -340,7 +340,7 @@ func (pc *PodController) addressGarbageCollectionFailed(pod *v1.Pod, err error) 
 			v1.EventTypeWarning,
 			addressGarbageCollectionFailed,
 			"failed to garbage collect addresses for pod %s",
-			podID(pod.GetNamespace(), pod.GetName()))
+			reconciler.ComposePodRef(*pod))
 	}
 }
 
@@ -351,12 +351,8 @@ func onPodDelete(queue workqueue.RateLimitingInterface, obj interface{}) {
 		return
 	}
 
-	logging.Verbosef("deleted pod [%s]", podID(pod.GetNamespace(), pod.GetName()))
+	logging.Verbosef("deleted pod [%s]", reconciler.ComposePodRef(*pod))
 	queue.Add(stripPod(pod)) // we only need the pod's metadata & its network-status annotations. Hence we strip it.
-}
-
-func podID(podNamespace string, podName string) string {
-	return fmt.Sprintf("%s/%s", podNamespace, podName)
 }
 
 func podNetworkStatus(pod *v1.Pod) ([]nadv1.NetworkStatus, error) {
@@ -370,7 +366,7 @@ func podNetworkStatus(pod *v1.Pod) ([]nadv1.NetworkStatus, error) {
 	return ifaceStatuses, nil
 }
 
-func ipamConfiguration(nad *nadv1.NetworkAttachmentDefinition, podNamespace string, podName string, mountPath string) (*types.IPAMConfig, error) {
+func ipamConfiguration(nad *nadv1.NetworkAttachmentDefinition, podNamespace string, podName string, podUID string, mountPath string) (*types.IPAMConfig, error) {
 	mounterWhereaboutsConfigFilePath := mountPath + whereaboutsConfigPath
 
 	ipamConfig, err := config.LoadIPAMConfiguration([]byte(nad.Spec.Config), "", mounterWhereaboutsConfigFilePath)
@@ -379,6 +375,7 @@ func ipamConfiguration(nad *nadv1.NetworkAttachmentDefinition, podNamespace stri
 	}
 	ipamConfig.PodName = podName
 	ipamConfig.PodNamespace = podNamespace
+	ipamConfig.PodUID = podUID
 	ipamConfig.Kubernetes.KubeConfigPath = mountPath + ipamConfig.Kubernetes.KubeConfigPath // must use the mount path
 
 	return ipamConfig, nil

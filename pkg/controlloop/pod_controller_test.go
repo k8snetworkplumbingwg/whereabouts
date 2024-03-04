@@ -26,6 +26,7 @@ import (
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
 	wbclient "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/clientset/versioned"
 	fakewbclient "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/clientset/versioned/fake"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/reconciler"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage/kubernetes"
 )
 
@@ -62,6 +63,7 @@ var _ = Describe("IPControlLoop", func() {
 		const (
 			networkName = "meganet"
 			podName     = "tiny-winy-pod"
+			podUID      = "tiny-winy-pod-uid"
 			nodeName    = "hypernode"
 		)
 
@@ -74,7 +76,7 @@ var _ = Describe("IPControlLoop", func() {
 		)
 
 		BeforeEach(func() {
-			pod = podSpec(podName, namespace, nodeName, networkName)
+			pod = podSpec(podName, namespace, nodeName, podUID, networkName)
 			node = nodeSpec(nodeName)
 			k8sClient = fakek8sclient.NewSimpleClientset(pod, node)
 			os.Setenv("NODENAME", nodeName)
@@ -120,7 +122,7 @@ var _ = Describe("IPControlLoop", func() {
 			)
 
 			BeforeEach(func() {
-				dummyNetworkPool = ipPool(kubernetes.PoolIdentifier{IpRange: dummyNetIPRange, NetworkName: kubernetes.UnnamedNetwork}, ipPoolsNamespace(), podReference(pod))
+				dummyNetworkPool = ipPool(kubernetes.PoolIdentifier{IpRange: dummyNetIPRange, NetworkName: kubernetes.UnnamedNetwork}, ipPoolsNamespace(), reconciler.ComposePodRef(*pod))
 				wbClient = fakewbclient.NewSimpleClientset(dummyNetworkPool)
 			})
 
@@ -213,14 +215,14 @@ var _ = Describe("IPControlLoop", func() {
 								context.TODO(), dummyNetworkPool.GetName(), metav1.GetOptions{})
 							return ipPool.Spec.Allocations, err
 						}).Should(
-							ContainElements(v1alpha1.IPAllocation{PodRef: podID(pod.GetNamespace(), pod.GetName())}),
+							ContainElements(v1alpha1.IPAllocation{PodRef: reconciler.ComposePodRef(*pod)}),
 							"the ip control loop cannot garbage collect the stale address without accessing the attachment configuration")
 					})
 
 					It("registers a DROP FROM QUEUE event over the event recorder", func() {
 						expectedEventString := fmt.Sprintf(
 							"Warning IPAddressGarbageCollectionFailed failed to garbage collect addresses for pod %s",
-							podID(pod.GetNamespace(), pod.GetName()))
+							reconciler.ComposePodRef(*pod))
 						Eventually(<-eventRecorder.Events).Should(Equal(expectedEventString))
 					})
 				})
@@ -286,10 +288,6 @@ func newFakeNetAttachDefClient(namespace string, networkAttachments ...nad.Netwo
 		}
 	}
 	return netAttachDefClient, nil
-}
-
-func podReference(pod *v1.Pod) string {
-	return fmt.Sprintf("%s/%s", pod.GetNamespace(), pod.GetName())
 }
 
 func dummyWhereaboutsConfig() string {
