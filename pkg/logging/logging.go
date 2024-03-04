@@ -40,7 +40,7 @@ var loggingStderr bool
 var loggingFp *os.File
 var loggingLevel Level
 
-const defaultTimestampFormat = time.RFC3339
+const defaultTimestampFormat = time.RFC3339Nano
 
 func (l Level) String() string {
 	switch l {
