@@ -579,8 +579,8 @@ func WithTags(tags ...string) JobOption {
 // listeners that can be used to listen for job events.
 type EventListener func(*internalJob) error
 
-// AfterJobRuns is used to listen for when a job has run regardless
-// of any returned error value, and run the provided function.
+// AfterJobRuns is used to listen for when a job has run
+// without an error, and then run the provided function.
 func AfterJobRuns(eventListenerFunc func(jobID uuid.UUID, jobName string)) EventListener {
 	return func(j *internalJob) error {
 		if eventListenerFunc == nil {
@@ -756,30 +756,35 @@ type monthlyJob struct {
 func (m monthlyJob) next(lastRun time.Time) time.Time {
 	daysList := make([]int, len(m.days))
 	copy(daysList, m.days)
-	firstDayNextMonth := time.Date(lastRun.Year(), lastRun.Month()+1, 1, 0, 0, 0, 0, lastRun.Location())
-	for _, daySub := range m.daysFromEnd {
-		// getting a combined list of all the daysList and the negative daysList
-		// which count backwards from the first day of the next month
-		// -1 == the last day of the month
-		day := firstDayNextMonth.AddDate(0, 0, daySub).Day()
-		daysList = append(daysList, day)
-	}
-	slices.Sort(daysList)
 
-	firstPass := true
-	next := m.nextMonthDayAtTime(lastRun, daysList, firstPass)
+	daysFromEnd := m.handleNegativeDays(lastRun, daysList, m.daysFromEnd)
+	next := m.nextMonthDayAtTime(lastRun, daysFromEnd, true)
 	if !next.IsZero() {
 		return next
 	}
-	firstPass = false
 
 	from := time.Date(lastRun.Year(), lastRun.Month()+time.Month(m.interval), 1, 0, 0, 0, 0, lastRun.Location())
 	for next.IsZero() {
-		next = m.nextMonthDayAtTime(from, daysList, firstPass)
+		daysFromEnd = m.handleNegativeDays(from, daysList, m.daysFromEnd)
+		next = m.nextMonthDayAtTime(from, daysFromEnd, false)
 		from = from.AddDate(0, int(m.interval), 0)
 	}
 
 	return next
+}
+
+func (m monthlyJob) handleNegativeDays(from time.Time, days, negativeDays []int) []int {
+	var out []int
+	// getting a list of the days from the end of the following month
+	// -1 == the last day of the month
+	firstDayNextMonth := time.Date(from.Year(), from.Month()+1, 1, 0, 0, 0, 0, from.Location())
+	for _, daySub := range negativeDays {
+		day := firstDayNextMonth.AddDate(0, 0, daySub).Day()
+		out = append(out, day)
+	}
+	out = append(out, days...)
+	slices.Sort(out)
+	return out
 }
 
 func (m monthlyJob) nextMonthDayAtTime(lastRun time.Time, days []int, firstPass bool) time.Time {
@@ -831,12 +836,22 @@ func (o oneTimeJob) next(_ time.Time) time.Time {
 // Job provides the available methods on the job
 // available to the caller.
 type Job interface {
+	// ID returns the job's unique identifier.
 	ID() uuid.UUID
+	// LastRun returns the time of the job's last run
 	LastRun() (time.Time, error)
+	// Name returns the name defined on the job.
 	Name() string
+	// NextRun returns the time of the job's next scheduled run.
 	NextRun() (time.Time, error)
-	Tags() []string
+	// RunNow runs the job once, now. This does not alter
+	// the existing run schedule, and will respect all job
+	// and scheduler limits. This means that running a job now may
+	// cause the job's regular interval to be rescheduled due to
+	// the instance being run by RunNow blocking your run limit.
 	RunNow() error
+	// Tags returns the job's string tags.
+	Tags() []string
 }
 
 var _ Job = (*job)(nil)
@@ -853,12 +868,10 @@ type job struct {
 	runJobRequest chan runJobRequest
 }
 
-// ID returns the job's unique identifier.
 func (j job) ID() uuid.UUID {
 	return j.id
 }
 
-// LastRun returns the time of the job's last run
 func (j job) LastRun() (time.Time, error) {
 	ij := requestJob(j.id, j.jobOutRequest)
 	if ij == nil || ij.id == uuid.Nil {
@@ -867,12 +880,10 @@ func (j job) LastRun() (time.Time, error) {
 	return ij.lastRun, nil
 }
 
-// Name returns the name defined on the job.
 func (j job) Name() string {
 	return j.name
 }
 
-// NextRun returns the time of the job's next scheduled run.
 func (j job) NextRun() (time.Time, error) {
 	ij := requestJob(j.id, j.jobOutRequest)
 	if ij == nil || ij.id == uuid.Nil {
@@ -881,14 +892,10 @@ func (j job) NextRun() (time.Time, error) {
 	return ij.nextRun, nil
 }
 
-// Tags returns the job's string tags.
 func (j job) Tags() []string {
 	return j.tags
 }
 
-// RunNow runs the job once, now. This does not alter
-// the existing run schedule, and will respect all job
-// and scheduler limits.
 func (j job) RunNow() error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()

@@ -20,12 +20,12 @@ require (
 	k8s.io/kube-openapi v0.0.0-20220413171646-5e7f5fdc6da6
 )
 
-require github.com/go-co-op/gocron/v2 v2.1.0
+require github.com/go-co-op/gocron/v2 v2.2.5
 
 require (
 	github.com/jonboulle/clockwork v0.4.0 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
-	golang.org/x/exp v0.0.0-20231206192017-f3f8817b8deb // indirect
+	golang.org/x/exp v0.0.0-20231219180239-dc181d75b848 // indirect
 	sigs.k8s.io/json v0.0.0-20211208200746-9f7c6b3444d2 // indirect
 )
 
@@ -44,7 +44,7 @@ require (
 	github.com/google/gnostic v0.6.9 // indirect
 	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
-	github.com/google/uuid v1.5.0 // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
