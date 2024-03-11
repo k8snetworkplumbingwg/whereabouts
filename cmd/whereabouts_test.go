@@ -47,7 +47,6 @@ func AllocateAndReleaseAddressesTest(ipVersion string, ipamConf *whereaboutstype
 		ifname       string = "eth0"
 		nspath       string = "/some/where"
 		cniVersion          = "0.3.1"
-		podName             = "dummyPOD"
 		podNamespace        = "dummyNS"
 	)
 
@@ -62,12 +61,13 @@ func AllocateAndReleaseAddressesTest(ipVersion string, ipamConf *whereaboutstype
 		fakek8sclient.NewSimpleClientset(),
 		0)
 	for i := 0; i < len(expectedAddresses); i++ {
+		ipamConf.PodName = fmt.Sprintf("pod-%d", i)
 		args := &skel.CmdArgs{
 			ContainerID: fmt.Sprintf("dummy-%d", i),
 			Netns:       nspath,
 			IfName:      ifname,
 			StdinData:   cniConf,
-			Args:        cniArgs(podNamespace, podName),
+			Args:        cniArgs(podNamespace, ipamConf.PodName),
 		}
 		client := mutateK8sIPAM(args.ContainerID, ipamConf, wbClient)
 
@@ -956,6 +956,8 @@ var _ = Describe("Whereabouts operations", func() {
 		var ipArgs []*skel.CmdArgs
 		// allocate 8 IPs (192.168.1.5 - 192.168.1.12); the entirety of the pool defined above
 		for i := 0; i < 8; i++ {
+			podName := fmt.Sprintf("pod-%d", i)
+			ipamConf.PodName = podName
 			args := &skel.CmdArgs{
 				ContainerID: fmt.Sprintf("dummy-%d", i),
 				Netns:       nspath,
@@ -982,7 +984,7 @@ var _ = Describe("Whereabouts operations", func() {
 				}))
 			ipArgs = append(ipArgs, args)
 		}
-
+		ipamConf.PodName = podName
 		// assigning more IPs should result in error due to the defined range_start - range_end
 		args := &skel.CmdArgs{
 			ContainerID: "dummy-failure",
@@ -1014,6 +1016,8 @@ var _ = Describe("Whereabouts operations", func() {
 	It("detects IPv4 addresses used in other ranges, to allow for overlapping IP address ranges", func() {
 		const ifname string = "eth0"
 		const nspath string = "/some/where"
+		const podName1 string = "pod-1"
+		const podName2 string = "pod-2"
 
 		// ----------------------------- range 1
 
@@ -1037,12 +1041,12 @@ var _ = Describe("Whereabouts operations", func() {
 			Netns:       nspath,
 			IfName:      ifname,
 			StdinData:   []byte(conf),
-			Args:        cniArgs(podNamespace, podName),
+			Args:        cniArgs(podNamespace, podName1),
 		}
 
 		confPath := filepath.Join(tmpDir, "whereabouts.conf")
 		Expect(os.WriteFile(confPath, []byte(conf), 0755)).To(Succeed())
-		ipamConf, cniVersion, err := config.LoadIPAMConfig([]byte(conf), cniArgs(podNamespace, podName), confPath)
+		ipamConf, cniVersion, err := config.LoadIPAMConfig([]byte(conf), cniArgs(podNamespace, podName1), confPath)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ipamConf.IPRanges).NotTo(BeEmpty())
 		wbClient := *kubernetes.NewKubernetesClient(
@@ -1090,12 +1094,12 @@ var _ = Describe("Whereabouts operations", func() {
 			Netns:       nspath,
 			IfName:      ifname,
 			StdinData:   []byte(confsecond),
-			Args:        cniArgs(podNamespace, podName),
+			Args:        cniArgs(podNamespace, podName2),
 		}
 
 		secondConfPath := filepath.Join(tmpDir, "whereabouts.conf")
 		Expect(os.WriteFile(confPath, []byte(confsecond), 0755)).To(Succeed())
-		secondIPAMConf, secondCNIVersion, err := config.LoadIPAMConfig([]byte(confsecond), cniArgs(podNamespace, podName), secondConfPath)
+		secondIPAMConf, secondCNIVersion, err := config.LoadIPAMConfig([]byte(confsecond), cniArgs(podNamespace, podName2), secondConfPath)
 		Expect(err).NotTo(HaveOccurred())
 
 		// Allocate the IP
@@ -1134,6 +1138,8 @@ var _ = Describe("Whereabouts operations", func() {
 	It("detects IPv6 addresses used in other ranges, to allow for overlapping IP address ranges", func() {
 		const ifname string = "eth0"
 		const nspath string = "/some/where"
+		const podName1 string = "pod-1"
+		const podName2 string = "pod-2"
 
 		// ----------------------------- range 1
 
@@ -1157,12 +1163,12 @@ var _ = Describe("Whereabouts operations", func() {
 			Netns:       nspath,
 			IfName:      ifname,
 			StdinData:   []byte(conf),
-			Args:        cniArgs(podNamespace, podName),
+			Args:        cniArgs(podNamespace, podName1),
 		}
 
 		confPath := filepath.Join(tmpDir, "whereabouts.conf")
 		Expect(os.WriteFile(confPath, []byte(conf), 0755)).To(Succeed())
-		ipamConf, cniVersion, err := config.LoadIPAMConfig([]byte(conf), cniArgs(podNamespace, podName), confPath)
+		ipamConf, cniVersion, err := config.LoadIPAMConfig([]byte(conf), cniArgs(podNamespace, podName1), confPath)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ipamConf.IPRanges).NotTo(BeEmpty())
 		wbClient := *kubernetes.NewKubernetesClient(
@@ -1210,12 +1216,12 @@ var _ = Describe("Whereabouts operations", func() {
 			Netns:       nspath,
 			IfName:      ifname,
 			StdinData:   []byte(confsecond),
-			Args:        cniArgs(podNamespace, podName),
+			Args:        cniArgs(podNamespace, podName2),
 		}
 
 		secondConfPath := filepath.Join(tmpDir, "whereabouts.conf")
 		Expect(os.WriteFile(confPath, []byte(confsecond), 0755)).To(Succeed())
-		secondIPAMConf, secondCNIVersion, err := config.LoadIPAMConfig([]byte(confsecond), cniArgs(podNamespace, podName), secondConfPath)
+		secondIPAMConf, secondCNIVersion, err := config.LoadIPAMConfig([]byte(confsecond), cniArgs(podNamespace, podName2), secondConfPath)
 		Expect(err).NotTo(HaveOccurred())
 
 		// Allocate the IP

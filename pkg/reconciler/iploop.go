@@ -187,7 +187,7 @@ func (rl ReconcileLooper) convertLegacyPodRef(podRef string) (string, error) {
 	}
 	pod, err := rl.k8sClient.GetPod(podInfo[0], podInfo[1])
 	if err != nil {
-		return "", logging.Errorf("failed to get pod %s", pod.Name)
+		return "", logging.Errorf("failed to get pod %s", podInfo)
 	}
 	newPodRef := ComposePodRef(*pod)
 	logging.Debugf("converted podRef %s to %s", podRef, newPodRef)

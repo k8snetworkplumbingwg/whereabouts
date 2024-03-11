@@ -200,13 +200,13 @@ func (i *KubernetesIPAM) GetOverlappingRangeStore() (storage.OverlappingRangeSto
 // IsAllocatedInOverlappingRange checks for IP addresses to see if they're allocated cluster wide, for overlapping
 // ranges.
 func (c *KubernetesOverlappingRangeStore) IsAllocatedInOverlappingRange(ctx context.Context, ip net.IP,
-	networkName string) (bool, error) {
+	networkName string, podRef string) (bool, error) {
 	normalizedIP := normalizeIP(ip, networkName)
 
 	logging.Debugf("OverlappingRangewide allocation check; normalized IP: %q, IP: %q, networkName: %q",
 		normalizedIP, ip, networkName)
 
-	_, err := c.client.WhereaboutsV1alpha1().OverlappingRangeIPReservations(c.namespace).Get(ctx, normalizedIP, metav1.GetOptions{})
+	reservedIP, err := c.client.WhereaboutsV1alpha1().OverlappingRangeIPReservations(c.namespace).Get(ctx, normalizedIP, metav1.GetOptions{})
 	if err != nil && errors.IsNotFound(err) {
 		// cluster ip reservation does not exist, this appears to be good news.
 		// logging.Debugf("IP %v is not reserved cluster wide, allowing.", ip)
@@ -214,6 +214,10 @@ func (c *KubernetesOverlappingRangeStore) IsAllocatedInOverlappingRange(ctx cont
 	} else if err != nil {
 		logging.Errorf("k8s get OverlappingRangeIPReservation error: %s", err)
 		return false, fmt.Errorf("k8s get OverlappingRangeIPReservation error: %s", err)
+	}
+	if reservedIP.Spec.PodRef == podRef {
+		logging.Debugf("IP %v is reserved for pod %s, allowing.", ip, podRef)
+		return false, nil
 	}
 
 	logging.Debugf("Normalized IP is reserved; normalized IP: %q, IP: %q, networkName: %q",
@@ -244,6 +248,20 @@ func (c *KubernetesOverlappingRangeStore) UpdateOverlappingRangeAllocation(ctx c
 
 		_, err = c.client.WhereaboutsV1alpha1().OverlappingRangeIPReservations(c.namespace).Create(
 			ctx, clusteripres, metav1.CreateOptions{})
+		if errors.IsAlreadyExists(err) {
+			var res *whereaboutsv1alpha1.OverlappingRangeIPReservation
+			res, err = c.client.WhereaboutsV1alpha1().OverlappingRangeIPReservations(c.namespace).Get(
+				ctx, normalizedIP, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+			res.Spec = clusteripres.Spec
+			_, err = c.client.WhereaboutsV1alpha1().OverlappingRangeIPReservations(c.namespace).Update(
+				ctx, res, metav1.UpdateOptions{})
+			if err != nil {
+				return err
+			}
+		}
 
 	case whereaboutstypes.Deallocate:
 		verb = "deallocate"
@@ -525,7 +543,7 @@ func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *Kubernete
 				// And we try again.
 				if ipamConf.OverlappingRanges {
 					isAllocated, err := overlappingrangestore.IsAllocatedInOverlappingRange(requestCtx, newip.IP,
-						ipamConf.NetworkName)
+						ipamConf.NetworkName, podRef)
 					if err != nil {
 						logging.Errorf("Error checking overlappingrange allocation: %v", err)
 						return newips, err
@@ -542,7 +560,7 @@ func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *Kubernete
 				}
 
 			case whereaboutstypes.Deallocate:
-				updatedreservelist, ipforoverlappingrangeupdate, err = allocate.DeallocateIP(reservelist, containerID)
+				updatedreservelist, ipforoverlappingrangeupdate, err = allocate.DeallocateIP(reservelist, podRef)
 				if err != nil {
 					logging.Errorf("Error deallocating IP: %v", err)
 					return newips, err

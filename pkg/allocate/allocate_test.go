@@ -27,7 +27,7 @@ var _ = Describe("Allocation operations", func() {
 
 		var ipres []types.IPReservation
 		var exrange []string
-		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
+		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "default/newPod:fakeUID")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(fmt.Sprint(newip)).To(Equal("192.168.1.1"))
 
@@ -43,7 +43,7 @@ var _ = Describe("Allocation operations", func() {
 
 		var ipres []types.IPReservation
 		var exrange []string
-		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
+		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "default/newPod:fakeUID")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(fmt.Sprint(newip)).To(Equal("caa5::1"))
 
@@ -59,7 +59,7 @@ var _ = Describe("Allocation operations", func() {
 
 		var ipres []types.IPReservation
 		var exrange []string
-		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
+		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "default/newPod:fakeUID")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(fmt.Sprint(newip)).To(Equal("::1"))
 
@@ -77,7 +77,7 @@ var _ = Describe("Allocation operations", func() {
 
 		var ipres []types.IPReservation
 		var exrange []string
-		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
+		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "default/newPod:fakeUID")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(fmt.Sprint(newip)).To(Equal("fd::1"))
 
@@ -93,7 +93,7 @@ var _ = Describe("Allocation operations", func() {
 
 		var ipres []types.IPReservation
 		var exrange []string
-		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
+		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "default/newPod:fakeUID")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(fmt.Sprint(newip)).To(Equal("100::2:1"))
 	})
@@ -108,7 +108,7 @@ var _ = Describe("Allocation operations", func() {
 
 		var ipres []types.IPReservation
 		exrange := []string{"192.168.0.0/30"}
-		newip, _, _ := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
+		newip, _, _ := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "default/newPod:fakeUID")
 		Expect(fmt.Sprint(newip)).To(Equal("192.168.0.4"))
 
 	})
@@ -122,7 +122,7 @@ var _ = Describe("Allocation operations", func() {
 
 		var ipres []types.IPReservation
 		exrange := []string{"192.168.0.1"}
-		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
+		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "default/newPod:fakeUID")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(fmt.Sprint(newip)).To(Equal("192.168.0.2"))
 	})
@@ -136,7 +136,7 @@ var _ = Describe("Allocation operations", func() {
 
 		var ipres []types.IPReservation
 		exrange := []string{"192.168.0.1/123"}
-		_, _, err = IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
+		_, _, err = IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "default/newPod:fakeUID")
 		Expect(err).To(MatchError(HavePrefix("could not parse exclude range")))
 	})
 
@@ -150,7 +150,7 @@ var _ = Describe("Allocation operations", func() {
 
 		var ipres []types.IPReservation
 		exrange := []string{"100::2:1/126"}
-		newip, _, _ := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
+		newip, _, _ := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "default/newPod:fakeUID")
 		Expect(fmt.Sprint(newip)).To(Equal("100::2:4"))
 
 	})
@@ -164,7 +164,7 @@ var _ = Describe("Allocation operations", func() {
 
 		var ipres []types.IPReservation
 		exrange := []string{"100::2:1"}
-		newip, _, _ := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
+		newip, _, _ := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "default/newPod:fakeUID")
 		Expect(fmt.Sprint(newip)).To(Equal("100::2:2"))
 	})
 
@@ -177,7 +177,7 @@ var _ = Describe("Allocation operations", func() {
 
 		var ipres []types.IPReservation
 		exrange := []string{"100::2::1"}
-		_, _, err = IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
+		_, _, err = IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "default/newPod:fakeUID")
 		Expect(err).To(MatchError(HavePrefix("could not parse exclude range")))
 	})
 
@@ -191,7 +191,7 @@ var _ = Describe("Allocation operations", func() {
 
 		var ipres []types.IPReservation
 		exrange := []string{"2001:db8::0/32"}
-		newip, _, _ := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
+		newip, _, _ := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "default/newPod:fakeUID")
 		Expect(fmt.Sprint(newip)).To(Equal("2001:db9::"))
 
 	})
@@ -206,11 +206,11 @@ var _ = Describe("Allocation operations", func() {
 
 		var ipres []types.IPReservation
 		exrange := []string{"192.168.0.0/30", "192.168.0.6/31", "192.168.0.8/31", "192.168.0.4/30"}
-		newip, _, _ := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
+		newip, _, _ := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "default/newPod:fakeUID")
 		Expect(fmt.Sprint(newip)).To(Equal("192.168.0.10"))
 
 		exrange = []string{"192.168.0.0/30", "192.168.0.14/31", "192.168.0.4/30", "192.168.0.6/31", "192.168.0.8/31"}
-		newip, _, _ = IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "")
+		newip, _, _ = IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", "default/newPod:fakeUID")
 		Expect(fmt.Sprint(newip)).To(Equal("192.168.0.10"))
 	})
 
@@ -222,19 +222,19 @@ var _ = Describe("Allocation operations", func() {
 		ipres := []types.IPReservation{
 			{
 				IP:     net.ParseIP("192.168.0.4"),
-				PodRef: "default/pod1",
+				PodRef: "default/pod1:fakeUID",
 			},
 			{
 				IP:     net.ParseIP("192.168.0.5"),
-				PodRef: "default/pod1",
+				PodRef: "default/pod1:fakeUID",
 			},
 			{
 				IP:     net.ParseIP("192.168.0.6"),
-				PodRef: "default/pod1",
+				PodRef: "default/pod1:fakeUID",
 			},
 		}
 		exrange := []string{"192.168.0.0/30"}
-		_, _, err = IterateForAssignment(*ipnet, firstip, nil, ipres, exrange, "0xdeadbeef", "")
+		_, _, err = IterateForAssignment(*ipnet, firstip, nil, ipres, exrange, "0xdeadbeef", "default/newPod:fakeUID")
 		Expect(err).To(MatchError(HavePrefix("Could not allocate IP in range")))
 
 	})
@@ -246,21 +246,45 @@ var _ = Describe("Allocation operations", func() {
 		ipres := []types.IPReservation{
 			{
 				IP:     net.ParseIP("192.168.0.1"),
-				PodRef: "default/pod1",
+				PodRef: "default/pod1:fakeUID",
 			},
 			{
 				IP:     net.ParseIP("192.168.0.2"),
-				PodRef: "default/pod1",
+				PodRef: "default/pod1:fakeUID",
 			},
 			{
 				IP:     net.ParseIP("192.168.0.3"),
-				PodRef: "default/pod1",
+				PodRef: "default/pod1:fakeUID",
 			},
 		}
 		exrange := []string{"192.168.0.4/30"}
-		_, _, err = IterateForAssignment(*ipnet, firstip, nil, ipres, exrange, "0xdeadbeef", "")
+		_, _, err = IterateForAssignment(*ipnet, firstip, nil, ipres, exrange, "0xdeadbeef", "default/newPod:fakeUID")
 		Expect(err).To(MatchError(HavePrefix("Could not allocate IP in range")))
 
+	})
+
+	It("can IterateForAssignment on an IPv4 address that has been allocated to the same pod", func() {
+
+		firstip, ipnet, err := net.ParseCIDR("192.168.0.0/29")
+		Expect(err).NotTo(HaveOccurred())
+		ip := net.ParseIP("192.168.0.2")
+
+		ipres := []types.IPReservation{
+			{
+				IP:     ip,
+				ContainerID: "0xdeadbeff",
+				PodRef: "default/pod2:fakeUID",
+			},
+			{
+				IP:     net.ParseIP("192.168.0.1"),
+				ContainerID: "0xdeadbfff",
+				PodRef: "default/pod1:fakeUID",
+			},
+		}
+		exrange := []string{"192.168.0.4/30"}
+		assignedIP, _, err := IterateForAssignment(*ipnet, firstip, nil, ipres, exrange, "0xdeadbeef", ipres[0].PodRef)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(assignedIP.String()).To(Equal(ip.String()))
 	})
 
 	It("can IterateForAssignment on an IPv6 address excluding a range and respect the requested range", func() {
@@ -271,20 +295,20 @@ var _ = Describe("Allocation operations", func() {
 		ipres := []types.IPReservation{
 			{
 				IP:     net.ParseIP("100::2:1"),
-				PodRef: "default/pod1",
+				PodRef: "default/pod1:fakeUID",
 			},
 			{
 				IP:     net.ParseIP("100::2:2"),
-				PodRef: "default/pod1",
+				PodRef: "default/pod1:fakeUID",
 			},
 			{
 				IP:     net.ParseIP("100::2:3"),
-				PodRef: "default/pod1",
+				PodRef: "default/pod1:fakeUID",
 			},
 		}
 
 		exrange := []string{"100::2:4/126"}
-		_, _, err = IterateForAssignment(*ipnet, firstip, nil, ipres, exrange, "0xdeadbeef", "")
+		_, _, err = IterateForAssignment(*ipnet, firstip, nil, ipres, exrange, "0xdeadbeef", "default/newPod:fakeUID")
 		Expect(err).To(MatchError(HavePrefix("Could not allocate IP in range")))
 
 	})
@@ -297,7 +321,7 @@ var _ = Describe("Allocation operations", func() {
 			_, ipnet, err := net.ParseCIDR("192.168.0.0/29")
 			Expect(err).NotTo(HaveOccurred())
 			rangeStart := net.ParseIP("192.168.0.0") // Network address, out of bounds.
-			newip, _, err := IterateForAssignment(*ipnet, rangeStart, nil, nil, nil, "0xdeadbeef", "")
+			newip, _, err := IterateForAssignment(*ipnet, rangeStart, nil, nil, nil, "0xdeadbeef", "default/newPod:fakeUID")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(fmt.Sprint(newip)).To(Equal("192.168.0.1"))
 		})
@@ -309,7 +333,7 @@ var _ = Describe("Allocation operations", func() {
 			Expect(err).NotTo(HaveOccurred())
 			rangeStart := net.ParseIP("192.168.0.0") // Network address, out of bounds.
 			rangeEnd := net.ParseIP("192.168.0.8")   // Broadcast address, out of bounds.
-			newip, _, err := IterateForAssignment(*ipnet, rangeStart, rangeEnd, nil, nil, "0xdeadbeef", "")
+			newip, _, err := IterateForAssignment(*ipnet, rangeStart, rangeEnd, nil, nil, "0xdeadbeef", "default/newPod:fakeUID")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(fmt.Sprint(newip)).To(Equal("192.168.0.1"))
 		})
@@ -325,19 +349,19 @@ var _ = Describe("Allocation operations", func() {
 		ipres := []types.IPReservation{
 			{
 				IP:     net.ParseIP("192.168.0.1"),
-				PodRef: "default/pod1",
+				PodRef: "default/pod1:fakeUID",
 			},
 			{
 				IP:     net.ParseIP("192.168.0.2"),
-				PodRef: "default/pod1",
+				PodRef: "default/pod1:fakeUID",
 			},
 			{
 				IP:     net.ParseIP("192.168.0.3"),
-				PodRef: "default/pod1",
+				PodRef: "default/pod1:fakeUID",
 			},
 		}
 		exrange := []string{"192.168.0.4/30"}
-		_, _, err = IterateForAssignment(*ipnet, startip, lastip, ipres, exrange, "0xdeadbeef", "")
+		_, _, err = IterateForAssignment(*ipnet, startip, lastip, ipres, exrange, "0xdeadbeef", "default/newPod:fakeUID")
 		Expect(err).To(MatchError(HavePrefix("Could not allocate IP in range")))
 	})
 
@@ -367,15 +391,15 @@ var _ = Describe("Allocation operations", func() {
 				ipres := []types.IPReservation{
 					{
 						IP:     net.ParseIP("192.168.0.1"),
-						PodRef: "default/pod1",
+						PodRef: "default/pod1:fakeUID",
 					},
 					{
 						IP:     net.ParseIP("192.168.0.2"),
-						PodRef: "default/pod1",
+						PodRef: "default/pod1:fakeUID",
 					},
 					{
 						IP:     net.ParseIP("192.168.0.3"),
-						PodRef: "default/pod1",
+						PodRef: "default/pod1:fakeUID",
 					},
 				}
 
@@ -396,15 +420,15 @@ var _ = Describe("Allocation operations", func() {
 				ipres := []types.IPReservation{
 					{
 						IP:     net.ParseIP("192.168.0.1"),
-						PodRef: "default/pod1",
+						PodRef: "default/pod1:fakeUID",
 					},
 					{
 						IP:     net.ParseIP("192.168.0.2"),
-						PodRef: "default/pod1",
+						PodRef: "default/pod1:fakeUID",
 					},
 					{
 						IP:     net.ParseIP("192.168.0.5"),
-						PodRef: "default/pod1",
+						PodRef: "default/pod1:fakeUID",
 					},
 				}
 
@@ -414,5 +438,28 @@ var _ = Describe("Allocation operations", func() {
 				Expect(fmt.Sprint(ipres[3].IP)).To(Equal("192.168.0.3"))
 			})
 		})
+	})
+})
+
+var _ = Describe("Deallocation operations", func() {
+	It("can IterateForDeallocation on an IPv4 address", func() {
+
+		ip := net.ParseIP("192.168.0.1")
+		podRef := "default/pod1:fakeUID"
+		reservelist := []types.IPReservation{
+			{
+				IP:     ip,
+				PodRef: podRef,
+			},
+			{
+				IP:     net.ParseIP("192.168.0.2"),
+				PodRef: "default/pod2:fakeUID",
+			},
+		}
+
+		_, deallocatedIP, err := IterateForDeallocation(reservelist, podRef, getMatchingIPReservationIndex)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(deallocatedIP.String()).To(Equal(ip.String()))
+
 	})
 })

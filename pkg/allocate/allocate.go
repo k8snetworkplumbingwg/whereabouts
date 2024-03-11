@@ -37,9 +37,9 @@ func AssignIP(ipamConf types.RangeConfiguration, reservelist []types.IPReservati
 }
 
 // DeallocateIP assigns an IP using a range and a reserve list.
-func DeallocateIP(reservelist []types.IPReservation, containerID string) ([]types.IPReservation, net.IP, error) {
+func DeallocateIP(reservelist []types.IPReservation, podRef string) ([]types.IPReservation, net.IP, error) {
 
-	updatedreservelist, hadip, err := IterateForDeallocation(reservelist, containerID, getMatchingIPReservationIndex)
+	updatedreservelist, hadip, err := IterateForDeallocation(reservelist, podRef, getMatchingIPReservationIndex)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -52,13 +52,13 @@ func DeallocateIP(reservelist []types.IPReservation, containerID string) ([]type
 // IterateForDeallocation iterates overs currently reserved IPs and the deallocates given the container id.
 func IterateForDeallocation(
 	reservelist []types.IPReservation,
-	containerID string,
+	podRef string,
 	matchingFunction func(reservation []types.IPReservation, id string) int) ([]types.IPReservation, net.IP, error) {
 
-	foundidx := matchingFunction(reservelist, containerID)
+	foundidx := matchingFunction(reservelist, podRef)
 	// Check if it's a valid index
 	if foundidx < 0 {
-		return reservelist, nil, fmt.Errorf("did not find reserved IP for container %v", containerID)
+		return reservelist, nil, fmt.Errorf("did not find reserved IP for container %v", podRef)
 	}
 
 	returnip := reservelist[foundidx].IP
@@ -70,7 +70,7 @@ func IterateForDeallocation(
 func getMatchingIPReservationIndex(reservelist []types.IPReservation, id string) int {
 	foundidx := -1
 	for idx, v := range reservelist {
-		if v.ContainerID == id {
+		if v.PodRef == id {
 			foundidx = idx
 			break
 		}
@@ -102,6 +102,15 @@ func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, r
 	// Build reserved map.
 	reserved := make(map[string]bool)
 	for _, r := range reserveList {
+		if r.PodRef == podRef {
+			// If this IP has been reserved for this pod, return it.
+			if r.ContainerID != containerID {
+				// update the containerID if it has changed
+				r.ContainerID = containerID
+			}
+			logging.Debugf("Returning reserved IP: |%v|", r.IP.String()+" "+podRef)
+			return r.IP, reserveList, nil
+		}
 		reserved[r.IP.String()] = true
 	}
 
@@ -118,7 +127,6 @@ func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, r
 	// Iterate over every IP address in the range, accounting for reserved IPs and exclude ranges. Make sure that ip is
 	// within ipnet, and make sure that ip is smaller than lastIP.
 	for ip := firstIP; ipnet.Contains(ip) && iphelpers.CompareIPs(ip, lastIP) <= 0; ip = iphelpers.IncIP(ip) {
-		// If already reserved, skip it.
 		if reserved[ip.String()] {
 			continue
 		}
@@ -129,7 +137,7 @@ func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, r
 			continue
 		}
 		// Assign and reserve the IP and return.
-		logging.Debugf("Reserving IP: |%v|", ip.String()+" "+containerID)
+		logging.Debugf("Reserving IP: |%v|", ip.String()+" "+podRef)
 		reserveList = append(reserveList, types.IPReservation{IP: ip, ContainerID: containerID, PodRef: podRef})
 		return ip, reserveList, nil
 	}
