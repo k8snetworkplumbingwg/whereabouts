@@ -80,7 +80,7 @@ github.com/google/gofuzz/bytesource
 # github.com/google/uuid v1.6.0
 ## explicit
 github.com/google/uuid
-# github.com/imdario/mergo v0.3.12
+# github.com/imdario/mergo v0.3.16
 ## explicit; go 1.13
 github.com/imdario/mergo
 # github.com/jonboulle/clockwork v0.4.0

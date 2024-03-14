@@ -6,7 +6,7 @@ require (
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/containernetworking/cni v1.1.2
 	github.com/containernetworking/plugins v1.4.0
-	github.com/imdario/mergo v0.3.12
+	github.com/imdario/mergo v0.3.16
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/k8snetworkplumbingwg/network-attachment-definition-client v1.1.1-0.20210510153419-66a699ae3b05
 	github.com/onsi/ginkgo v1.16.5
