@@ -120,12 +120,22 @@ func (i *Client) ListOverlappingIPs(ctx context.Context) ([]whereaboutsv1alpha1.
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, storage.RequestTimeout)
 	defer cancel()
 
-	overlappingIPsList, err := i.client.WhereaboutsV1alpha1().OverlappingRangeIPReservations("").List(ctxWithTimeout, metav1.ListOptions{})
-	if err != nil {
-		return nil, err
+	listOptions := metav1.ListOptions{
+		Limit: 50,
 	}
-
-	return overlappingIPsList.Items, nil
+	var overlappingIPsList []whereaboutsv1alpha1.OverlappingRangeIPReservation
+	for {
+		overlappingIPs, err := i.client.WhereaboutsV1alpha1().OverlappingRangeIPReservations("").List(ctxWithTimeout, listOptions)
+		if err != nil {
+			return nil, err
+		}
+		overlappingIPsList = append(overlappingIPsList, overlappingIPs.Items...)
+		if overlappingIPs.Continue == "" {
+			break
+		}
+		listOptions.Continue = overlappingIPs.Continue
+	}
+	return overlappingIPsList, nil
 }
 
 func (i *Client) DeleteOverlappingIP(ctx context.Context, clusterWideIP *whereaboutsv1alpha1.OverlappingRangeIPReservation) error {
