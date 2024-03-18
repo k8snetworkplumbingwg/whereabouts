@@ -14,18 +14,18 @@ import (
 )
 
 // WaitForStatefulSetGone ...
-func WaitForStatefulSetGone(cs *kubernetes.Clientset, namespace, serviceName string, labelSelector string, timeout time.Duration) error {
-	return wait.PollImmediate(time.Second, timeout, isStatefulSetGone(cs, serviceName, namespace, labelSelector))
+func WaitForStatefulSetGone(ctx context.Context, cs *kubernetes.Clientset, namespace, serviceName string, labelSelector string, timeout time.Duration) error {
+	return wait.PollUntilContextTimeout(ctx, time.Second, timeout, true, isStatefulSetGone(ctx, cs, serviceName, namespace, labelSelector))
 }
 
-func isStatefulSetGone(cs *kubernetes.Clientset, serviceName string, namespace string, labelSelector string) wait.ConditionFunc {
-	return func() (done bool, err error) {
-		statefulSet, err := cs.AppsV1().StatefulSets(namespace).Get(context.Background(), serviceName, metav1.GetOptions{})
+func isStatefulSetGone(ctx context.Context, cs *kubernetes.Clientset, serviceName string, namespace string, labelSelector string) wait.ConditionWithContextFunc {
+	return func(context.Context) (done bool, err error) {
+		statefulSet, err := cs.AppsV1().StatefulSets(namespace).Get(ctx, serviceName, metav1.GetOptions{})
 		if err != nil && !k8serrors.IsNotFound(err) {
 			return false, fmt.Errorf("something weird happened with the stateful set whose status is: [%s]. Errors: %w", statefulSet.Status.String(), err)
 		}
 
-		associatedPods, err := cs.CoreV1().Pods(namespace).List(context.TODO(), selectViaLabels(labelSelector))
+		associatedPods, err := cs.CoreV1().Pods(namespace).List(ctx, selectViaLabels(labelSelector))
 		if err != nil {
 			return false, err
 		}
@@ -46,13 +46,13 @@ func areAssociatedPodsGone(pods *corev1.PodList) bool {
 	return len(pods.Items) == 0
 }
 
-func WaitForStatefulSetCondition(cs *kubernetes.Clientset, namespace, serviceName string, expectedReplicas int, timeout time.Duration, predicate statefulSetPredicate) error {
-	return wait.PollImmediate(time.Second, timeout, doesStatefulsetComplyWithCondition(cs, serviceName, namespace, expectedReplicas, predicate))
+func WaitForStatefulSetCondition(ctx context.Context, cs *kubernetes.Clientset, namespace, serviceName string, expectedReplicas int, timeout time.Duration, predicate statefulSetPredicate) error {
+	return wait.PollUntilContextTimeout(ctx, time.Second, timeout, true, doesStatefulsetComplyWithCondition(ctx, cs, serviceName, namespace, expectedReplicas, predicate))
 }
 
-func doesStatefulsetComplyWithCondition(cs *kubernetes.Clientset, serviceName string, namespace string, expectedReplicas int, predicate statefulSetPredicate) wait.ConditionFunc {
-	return func() (bool, error) {
-		statefulSet, err := cs.AppsV1().StatefulSets(namespace).Get(context.Background(), serviceName, metav1.GetOptions{})
+func doesStatefulsetComplyWithCondition(ctx context.Context, cs *kubernetes.Clientset, serviceName string, namespace string, expectedReplicas int, predicate statefulSetPredicate) wait.ConditionWithContextFunc {
+	return func(context.Context) (bool, error) {
+		statefulSet, err := cs.AppsV1().StatefulSets(namespace).Get(ctx, serviceName, metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}

@@ -15,24 +15,24 @@ import (
 
 // WaitForReplicaSetSteadyState only plays nice with the replicaSet it's being used with.
 // Any pods that might be up still from a previous test may cause unexpected results.
-func WaitForReplicaSetSteadyState(cs *kubernetes.Clientset, namespace, label string, replicaSet *appsv1.ReplicaSet, timeout time.Duration) error {
-	return wait.PollImmediate(time.Second, timeout, isReplicaSetSteady(cs, replicaSet.Name, namespace, label))
+func WaitForReplicaSetSteadyState(ctx context.Context, cs *kubernetes.Clientset, namespace, label string, replicaSet *appsv1.ReplicaSet, timeout time.Duration) error {
+	return wait.PollUntilContextTimeout(ctx, time.Second, timeout, true, isReplicaSetSteady(ctx, cs, replicaSet.Name, namespace, label))
 }
 
 // WaitForReplicaSetToDisappear polls up to timeout seconds for replicaset to be gone from the Kubernetes cluster.
 // Returns an error if the replicaset is never deleted, or if GETing it returns an error other than `NotFound`.
-func WaitForReplicaSetToDisappear(cs *kubernetes.Clientset, namespace, rsName string, timeout time.Duration) error {
-	return wait.PollImmediate(time.Second, timeout, isReplicaSetGone(cs, rsName, namespace))
+func WaitForReplicaSetToDisappear(ctx context.Context, cs *kubernetes.Clientset, namespace, rsName string, timeout time.Duration) error {
+	return wait.PollUntilContextTimeout(ctx, time.Second, timeout, true, isReplicaSetGone(ctx, cs, rsName, namespace))
 }
 
-func isReplicaSetSteady(cs *kubernetes.Clientset, replicaSetName, namespace, label string) wait.ConditionFunc {
-	return func() (bool, error) {
-		podList, err := ListPods(cs, namespace, label)
+func isReplicaSetSteady(ctx context.Context, cs *kubernetes.Clientset, replicaSetName, namespace, label string) wait.ConditionWithContextFunc {
+	return func(context.Context) (bool, error) {
+		podList, err := ListPods(ctx, cs, namespace, label)
 		if err != nil {
 			return false, err
 		}
 
-		replicaSet, err := cs.AppsV1().ReplicaSets(namespace).Get(context.Background(), replicaSetName, metav1.GetOptions{})
+		replicaSet, err := cs.AppsV1().ReplicaSets(namespace).Get(ctx, replicaSetName, metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
@@ -53,9 +53,9 @@ func isReplicaSetSynchronized(replicaSet *appsv1.ReplicaSet, podList *corev1.Pod
 	return replicaSet.Status.ReadyReplicas == (*replicaSet.Spec.Replicas) && int32(len(podList.Items)) == (*replicaSet.Spec.Replicas)
 }
 
-func isReplicaSetGone(cs *kubernetes.Clientset, rsName, namespace string) wait.ConditionFunc {
-	return func() (bool, error) {
-		replicaSet, err := cs.AppsV1().ReplicaSets(namespace).Get(context.Background(), rsName, metav1.GetOptions{})
+func isReplicaSetGone(ctx context.Context, cs *kubernetes.Clientset, rsName, namespace string) wait.ConditionWithContextFunc {
+	return func(context.Context) (bool, error) {
+		replicaSet, err := cs.AppsV1().ReplicaSets(namespace).Get(ctx, rsName, metav1.GetOptions{})
 		if err != nil && k8serrors.IsNotFound(err) {
 			return true, nil
 		} else if err != nil {

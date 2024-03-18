@@ -62,18 +62,19 @@ func (c *ClientInfo) DelNetAttachDef(netattach *nettypes.NetworkAttachmentDefini
 }
 
 func (c *ClientInfo) ProvisionPod(podName string, namespace string, label, annotations map[string]string) (*corev1.Pod, error) {
+	ctx := context.Background()
 	pod := entities.PodObject(podName, namespace, label, annotations)
-	pod, err := c.Client.CoreV1().Pods(pod.Namespace).Create(context.Background(), pod, metav1.CreateOptions{})
+	pod, err := c.Client.CoreV1().Pods(pod.Namespace).Create(ctx, pod, metav1.CreateOptions{})
 	if err != nil {
 		return nil, err
 	}
 
 	const podCreateTimeout = 10 * time.Second
-	if err := WaitForPodReady(c.Client, pod.Namespace, pod.Name, podCreateTimeout); err != nil {
+	if err := WaitForPodReady(ctx, c.Client, pod.Namespace, pod.Name, podCreateTimeout); err != nil {
 		return nil, err
 	}
 
-	pod, err = c.Client.CoreV1().Pods(pod.Namespace).Get(context.Background(), pod.Name, metav1.GetOptions{})
+	pod, err = c.Client.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -82,20 +83,22 @@ func (c *ClientInfo) ProvisionPod(podName string, namespace string, label, annot
 }
 
 func (c *ClientInfo) DeletePod(pod *corev1.Pod) error {
-	if err := c.Client.CoreV1().Pods(pod.Namespace).Delete(context.TODO(), pod.Name, metav1.DeleteOptions{}); err != nil {
+	ctx := context.Background()
+	if err := c.Client.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{}); err != nil {
 		return err
 	}
 
 	const podDeleteTimeout = 20 * time.Second
-	if err := WaitForPodToDisappear(c.Client, pod.GetNamespace(), pod.GetName(), podDeleteTimeout); err != nil {
+	if err := WaitForPodToDisappear(ctx, c.Client, pod.GetNamespace(), pod.GetName(), podDeleteTimeout); err != nil {
 		return err
 	}
 	return nil
 }
 
 func (c *ClientInfo) ProvisionReplicaSet(rsName string, namespace string, replicaCount int32, labels, annotations map[string]string) (*appsv1.ReplicaSet, error) {
+	ctx := context.Background()
 	replicaSet, err := c.Client.AppsV1().ReplicaSets(namespace).Create(
-		context.Background(),
+		ctx,
 		entities.ReplicaSetObject(replicaCount, rsName, namespace, labels, annotations),
 		metav1.CreateOptions{})
 	if err != nil {
@@ -103,11 +106,11 @@ func (c *ClientInfo) ProvisionReplicaSet(rsName string, namespace string, replic
 	}
 
 	const rsCreateTimeout = 600 * time.Second
-	if err := WaitForPodBySelector(c.Client, namespace, entities.ReplicaSetQuery(rsName), rsCreateTimeout); err != nil {
+	if err := WaitForPodBySelector(ctx, c.Client, namespace, entities.ReplicaSetQuery(rsName), rsCreateTimeout); err != nil {
 		return nil, err
 	}
 
-	replicaSet, err = c.Client.AppsV1().ReplicaSets(namespace).Get(context.Background(), replicaSet.Name, metav1.GetOptions{})
+	replicaSet, err = c.Client.AppsV1().ReplicaSets(namespace).Get(ctx, replicaSet.Name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -124,12 +127,13 @@ func (c *ClientInfo) UpdateReplicaSet(replicaSet *appsv1.ReplicaSet) (*appsv1.Re
 }
 
 func (c *ClientInfo) DeleteReplicaSet(replicaSet *appsv1.ReplicaSet) error {
+	ctx := context.Background()
 	const rsDeleteTimeout = 2 * rsCreateTimeout
-	if err := c.Client.AppsV1().ReplicaSets(replicaSet.GetNamespace()).Delete(context.Background(), replicaSet.Name, metav1.DeleteOptions{}); err != nil {
+	if err := c.Client.AppsV1().ReplicaSets(replicaSet.GetNamespace()).Delete(ctx, replicaSet.Name, metav1.DeleteOptions{}); err != nil {
 		return err
 	}
 
-	if err := WaitForReplicaSetToDisappear(c.Client, replicaSet.GetNamespace(), replicaSet.GetName(), rsDeleteTimeout); err != nil {
+	if err := WaitForReplicaSetToDisappear(ctx, c.Client, replicaSet.GetNamespace(), replicaSet.GetName(), rsDeleteTimeout); err != nil {
 		return err
 	}
 	return nil
@@ -137,8 +141,9 @@ func (c *ClientInfo) DeleteReplicaSet(replicaSet *appsv1.ReplicaSet) error {
 
 func (c *ClientInfo) ProvisionStatefulSet(statefulSetName string, namespace string, serviceName string, replicas int, networkNames ...string) (*appsv1.StatefulSet, error) {
 	const statefulSetCreateTimeout = 60 * createTimeout
+	ctx := context.Background()
 	statefulSet, err := c.Client.AppsV1().StatefulSets(namespace).Create(
-		context.TODO(),
+		ctx,
 		entities.StatefulSetSpec(statefulSetName, namespace, serviceName, replicas, entities.PodNetworkSelectionElements(networkNames...)),
 		metav1.CreateOptions{})
 	if err != nil {
@@ -146,6 +151,7 @@ func (c *ClientInfo) ProvisionStatefulSet(statefulSetName string, namespace stri
 	}
 
 	if err := WaitForStatefulSetCondition(
+		ctx,
 		c.Client,
 		namespace,
 		serviceName,
@@ -159,13 +165,14 @@ func (c *ClientInfo) ProvisionStatefulSet(statefulSetName string, namespace stri
 
 func (c *ClientInfo) DeleteStatefulSet(namespace string, serviceName string, labelSelector string) error {
 	const statefulSetDeleteTimeout = 6 * deleteTimeout
+	ctx := context.Background()
 
 	if err := c.Client.AppsV1().StatefulSets(namespace).Delete(
-		context.TODO(), serviceName, deleteRightNowAndBlockUntilAssociatedPodsAreGone()); err != nil {
+		ctx, serviceName, deleteRightNowAndBlockUntilAssociatedPodsAreGone()); err != nil {
 		return err
 	}
 
-	return WaitForStatefulSetGone(c.Client, namespace, serviceName, labelSelector, statefulSetDeleteTimeout)
+	return WaitForStatefulSetGone(ctx, c.Client, namespace, serviceName, labelSelector, statefulSetDeleteTimeout)
 }
 
 func (c *ClientInfo) ScaleStatefulSet(statefulSetName string, namespace string, deltaInstance int) error {

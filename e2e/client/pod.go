@@ -15,20 +15,20 @@ import (
 
 // WaitForPodReady polls up to timeout seconds for pod to enter steady state (running or succeeded state).
 // Returns an error if the pod never enters a steady state.
-func WaitForPodReady(cs *kubernetes.Clientset, namespace, podName string, timeout time.Duration) error {
-	return wait.PollImmediate(time.Second, timeout, isPodRunning(cs, podName, namespace))
+func WaitForPodReady(ctx context.Context, cs *kubernetes.Clientset, namespace, podName string, timeout time.Duration) error {
+	return wait.PollUntilContextTimeout(ctx, time.Second, timeout, true, isPodRunning(ctx, cs, podName, namespace))
 }
 
 // WaitForPodToDisappear polls up to timeout seconds for pod to be gone from the Kubernetes cluster.
 // Returns an error if the pod is never deleted, or if GETing it returns an error other than `NotFound`.
-func WaitForPodToDisappear(cs *kubernetes.Clientset, namespace, podName string, timeout time.Duration) error {
-	return wait.PollImmediate(time.Second, timeout, isPodGone(cs, podName, namespace))
+func WaitForPodToDisappear(ctx context.Context, cs *kubernetes.Clientset, namespace, podName string, timeout time.Duration) error {
+	return wait.PollUntilContextTimeout(ctx, time.Second, timeout, true, isPodGone(ctx, cs, podName, namespace))
 }
 
 // WaitForPodBySelector waits up to timeout seconds for all pods in 'namespace' with given 'selector' to enter provided state
 // If no pods are found, return nil.
-func WaitForPodBySelector(cs *kubernetes.Clientset, namespace, selector string, timeout time.Duration) error {
-	podList, err := ListPods(cs, namespace, selector)
+func WaitForPodBySelector(ctx context.Context, cs *kubernetes.Clientset, namespace, selector string, timeout time.Duration) error {
+	podList, err := ListPods(ctx, cs, namespace, selector)
 	if err != nil {
 		return err
 	}
@@ -38,7 +38,7 @@ func WaitForPodBySelector(cs *kubernetes.Clientset, namespace, selector string, 
 	}
 
 	for _, pod := range podList.Items {
-		if err := WaitForPodReady(cs, namespace, pod.Name, timeout); err != nil {
+		if err := WaitForPodReady(ctx, cs, namespace, pod.Name, timeout); err != nil {
 			return err
 		}
 	}
@@ -46,9 +46,9 @@ func WaitForPodBySelector(cs *kubernetes.Clientset, namespace, selector string, 
 }
 
 // ListPods returns the list of currently scheduled or running pods in `namespace` with the given selector
-func ListPods(cs *kubernetes.Clientset, namespace, selector string) (*corev1.PodList, error) {
+func ListPods(ctx context.Context, cs *kubernetes.Clientset, namespace, selector string) (*corev1.PodList, error) {
 	listOptions := metav1.ListOptions{LabelSelector: selector}
-	podList, err := cs.CoreV1().Pods(namespace).List(context.Background(), listOptions)
+	podList, err := cs.CoreV1().Pods(namespace).List(ctx, listOptions)
 
 	if err != nil {
 		return nil, err
@@ -56,9 +56,9 @@ func ListPods(cs *kubernetes.Clientset, namespace, selector string) (*corev1.Pod
 	return podList, nil
 }
 
-func isPodRunning(cs *kubernetes.Clientset, podName, namespace string) wait.ConditionFunc {
-	return func() (bool, error) {
-		pod, err := cs.CoreV1().Pods(namespace).Get(context.Background(), podName, metav1.GetOptions{})
+func isPodRunning(ctx context.Context, cs *kubernetes.Clientset, podName, namespace string) wait.ConditionWithContextFunc {
+	return func(context.Context) (bool, error) {
+		pod, err := cs.CoreV1().Pods(namespace).Get(ctx, podName, metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
@@ -76,9 +76,9 @@ func isPodRunning(cs *kubernetes.Clientset, podName, namespace string) wait.Cond
 	}
 }
 
-func isPodGone(cs *kubernetes.Clientset, podName, namespace string) wait.ConditionFunc {
-	return func() (bool, error) {
-		pod, err := cs.CoreV1().Pods(namespace).Get(context.Background(), podName, metav1.GetOptions{})
+func isPodGone(ctx context.Context, cs *kubernetes.Clientset, podName, namespace string) wait.ConditionWithContextFunc {
+	return func(context.Context) (bool, error) {
+		pod, err := cs.CoreV1().Pods(namespace).Get(ctx, podName, metav1.GetOptions{})
 		if err != nil && k8serrors.IsNotFound(err) {
 			return true, nil
 		} else if err != nil {

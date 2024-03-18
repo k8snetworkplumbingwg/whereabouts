@@ -32,8 +32,7 @@ type Interface interface {
 	WhereaboutsV1alpha1() whereaboutsv1alpha1.WhereaboutsV1alpha1Interface
 }
 
-// Clientset contains the clients for groups. Each group has exactly one
-// version included in a Clientset.
+// Clientset contains the clients for groups.
 type Clientset struct {
 	*discovery.DiscoveryClient
 	whereaboutsV1alpha1 *whereaboutsv1alpha1.WhereaboutsV1alpha1Client

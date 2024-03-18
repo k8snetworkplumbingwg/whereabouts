@@ -219,6 +219,7 @@ var _ = Describe("Whereabouts functionality", func() {
 			)
 
 			var k8sIPAM *wbstorage.KubernetesIPAM
+			ctx := context.Background()
 
 			BeforeEach(func() {
 				By("creating a replicaset with whereabouts net-attach-def")
@@ -246,7 +247,7 @@ var _ = Describe("Whereabouts functionality", func() {
 				By("removing replicas and expecting 0 IP pool allocations")
 				Expect(
 					checkZeroIPPoolAllocationsAndReplicas(
-						clientInfo, k8sIPAM, rsName, testNamespace, ipPoolCIDR, testNetworkName)).To(Succeed())
+						ctx, clientInfo, k8sIPAM, rsName, testNamespace, ipPoolCIDR, testNetworkName)).To(Succeed())
 
 				By("deleting replicaset with whereabouts net-attach-def")
 				Expect(clientInfo.DeleteReplicaSet(replicaSet)).To(Succeed())
@@ -257,9 +258,9 @@ var _ = Describe("Whereabouts functionality", func() {
 				for i := 0; i < testConfig.NumberOfIterations; i++ {
 					Expect(
 						checkZeroIPPoolAllocationsAndReplicas(
-							clientInfo, k8sIPAM, rsName, testNamespace, ipPoolCIDR, testNetworkName)).To(Succeed())
+							ctx, clientInfo, k8sIPAM, rsName, testNamespace, ipPoolCIDR, testNetworkName)).To(Succeed())
 
-					allPods, err := clientInfo.Client.CoreV1().Pods(core.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
+					allPods, err := clientInfo.Client.CoreV1().Pods(core.NamespaceAll).List(ctx, metav1.ListOptions{})
 					Expect(err).NotTo(HaveOccurred())
 
 					replicaSet, err = clientInfo.UpdateReplicaSet(
@@ -273,17 +274,18 @@ var _ = Describe("Whereabouts functionality", func() {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(
 						wbtestclient.WaitForReplicaSetSteadyState(
+							ctx,
 							clientInfo.Client,
 							testNamespace,
 							entities.ReplicaSetQuery(rsName),
 							replicaSet,
 							rsSteadyTimeout)).To(Succeed())
 
-					podList, err := wbtestclient.ListPods(clientInfo.Client, testNamespace, entities.ReplicaSetQuery(rsName))
+					podList, err := wbtestclient.ListPods(ctx, clientInfo.Client, testNamespace, entities.ReplicaSetQuery(rsName))
 					Expect(err).NotTo(HaveOccurred())
 					Expect(podList.Items).NotTo(BeEmpty())
 
-					ipPool, err := k8sIPAM.GetIPPool(context.Background(), wbstorage.PoolIdentifier{IpRange: ipPoolCIDR, NetworkName: wbstorage.UnnamedNetwork})
+					ipPool, err := k8sIPAM.GetIPPool(ctx, wbstorage.PoolIdentifier{IpRange: ipPoolCIDR, NetworkName: wbstorage.UnnamedNetwork})
 					Expect(err).NotTo(HaveOccurred())
 					Expect(poolconsistency.NewPoolConsistencyCheck(ipPool, podList.Items).MissingIPs()).To(BeEmpty())
 					Expect(poolconsistency.NewPoolConsistencyCheck(ipPool, podList.Items).StaleIPs()).To(BeEmpty())
@@ -418,6 +420,7 @@ var _ = Describe("Whereabouts functionality", func() {
 					Expect(clientInfo.ScaleStatefulSet(serviceName, namespace, scaleUpReplicas)).To(Succeed())
 					Expect(
 						wbtestclient.WaitForStatefulSetCondition(
+							context.Background(),
 							clientInfo.Client,
 							namespace,
 							serviceName,
@@ -432,9 +435,11 @@ var _ = Describe("Whereabouts functionality", func() {
 						podRef      string
 					)
 
+					ctx := context.Background()
+
 					BeforeEach(func() {
 						ipPool, err := clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(
-							context.TODO(),
+							ctx,
 							wbstorage.IPPoolName(wbstorage.PoolIdentifier{IpRange: rangeWithTwoIPs, NetworkName: wbstorage.UnnamedNetwork}),
 							metav1.GetOptions{})
 						Expect(err).NotTo(HaveOccurred())
@@ -449,9 +454,10 @@ var _ = Describe("Whereabouts functionality", func() {
 
 						rightNow := int64(0)
 						Expect(clientInfo.Client.CoreV1().Pods(namespace).Delete(
-							context.TODO(), podName, metav1.DeleteOptions{GracePeriodSeconds: &rightNow})).To(Succeed())
+							ctx, podName, metav1.DeleteOptions{GracePeriodSeconds: &rightNow})).To(Succeed())
 
 						Expect(wbtestclient.WaitForStatefulSetCondition(
+							ctx,
 							clientInfo.Client,
 							namespace,
 							serviceName,
@@ -461,6 +467,7 @@ var _ = Describe("Whereabouts functionality", func() {
 
 						scaleUpTimeout := 2 * createPodTimeout
 						Expect(wbtestclient.WaitForStatefulSetCondition(
+							ctx,
 							clientInfo.Client,
 							namespace,
 							serviceName,
@@ -471,7 +478,7 @@ var _ = Describe("Whereabouts functionality", func() {
 
 					It("can recover from an exhausted IP pool", func() {
 						ipPool, err := clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(
-							context.TODO(),
+							ctx,
 							wbstorage.IPPoolName(wbstorage.PoolIdentifier{IpRange: rangeWithTwoIPs, NetworkName: wbstorage.UnnamedNetwork}),
 							metav1.GetOptions{})
 						Expect(err).NotTo(HaveOccurred())
@@ -699,7 +706,7 @@ func podTierLabel(podTier string) map[string]string {
 }
 
 // Waits for all replicas to be fully removed from replicaset, and checks that there are 0 ip pool allocations
-func checkZeroIPPoolAllocationsAndReplicas(clientInfo *wbtestclient.ClientInfo, k8sIPAM *wbstorage.KubernetesIPAM, rsName, namespace string, ipPoolCIDR string, networkNames ...string) error {
+func checkZeroIPPoolAllocationsAndReplicas(ctx context.Context, clientInfo *wbtestclient.ClientInfo, k8sIPAM *wbstorage.KubernetesIPAM, rsName, namespace string, ipPoolCIDR string, networkNames ...string) error {
 	const (
 		emptyReplicaSet   = 0
 		rsSteadyTimeout   = 1200 * time.Second
@@ -720,11 +727,11 @@ func checkZeroIPPoolAllocationsAndReplicas(clientInfo *wbtestclient.ClientInfo, 
 	}
 
 	matchingLabel := entities.ReplicaSetQuery(rsName)
-	if err = wbtestclient.WaitForReplicaSetSteadyState(clientInfo.Client, namespace, matchingLabel, replicaSet, rsSteadyTimeout); err != nil {
+	if err = wbtestclient.WaitForReplicaSetSteadyState(ctx, clientInfo.Client, namespace, matchingLabel, replicaSet, rsSteadyTimeout); err != nil {
 		return err
 	}
 
-	if err = wbtestclient.WaitForZeroIPPoolAllocations(k8sIPAM, ipPoolCIDR, zeroIPPoolTimeout); err != nil {
+	if err = wbtestclient.WaitForZeroIPPoolAllocations(ctx, k8sIPAM, ipPoolCIDR, zeroIPPoolTimeout); err != nil {
 		return err
 	}
 
