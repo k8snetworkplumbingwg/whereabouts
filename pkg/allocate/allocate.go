@@ -37,9 +37,9 @@ func AssignIP(ipamConf types.RangeConfiguration, reservelist []types.IPReservati
 }
 
 // DeallocateIP assigns an IP using a range and a reserve list.
-func DeallocateIP(reservelist []types.IPReservation, containerID string) ([]types.IPReservation, net.IP, error) {
+func DeallocateIP(reservelist []types.IPReservation, podRef string) ([]types.IPReservation, net.IP, error) {
 
-	updatedreservelist, hadip, err := IterateForDeallocation(reservelist, containerID, getMatchingIPReservationIndex)
+	updatedreservelist, hadip, err := IterateForDeallocation(reservelist, podRef, getMatchingIPReservationIndex)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -49,16 +49,16 @@ func DeallocateIP(reservelist []types.IPReservation, containerID string) ([]type
 	return updatedreservelist, hadip, nil
 }
 
-// IterateForDeallocation iterates overs currently reserved IPs and the deallocates given the container id.
+// IterateForDeallocation iterates overs currently reserved IPs and the deallocates given the podRef.
 func IterateForDeallocation(
 	reservelist []types.IPReservation,
-	containerID string,
+	podRef string,
 	matchingFunction func(reservation []types.IPReservation, id string) int) ([]types.IPReservation, net.IP, error) {
 
-	foundidx := matchingFunction(reservelist, containerID)
+	foundidx := matchingFunction(reservelist, podRef)
 	// Check if it's a valid index
 	if foundidx < 0 {
-		return reservelist, nil, fmt.Errorf("did not find reserved IP for container %v", containerID)
+		return reservelist, nil, fmt.Errorf("did not find reserved IP for pod %v", podRef)
 	}
 
 	returnip := reservelist[foundidx].IP
@@ -67,10 +67,10 @@ func IterateForDeallocation(
 	return updatedreservelist, returnip, nil
 }
 
-func getMatchingIPReservationIndex(reservelist []types.IPReservation, id string) int {
+func getMatchingIPReservationIndex(reservelist []types.IPReservation, podRef string) int {
 	foundidx := -1
 	for idx, v := range reservelist {
-		if v.ContainerID == id {
+		if v.PodRef == podRef {
 			foundidx = idx
 			break
 		}
@@ -101,7 +101,15 @@ func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, r
 
 	// Build reserved map.
 	reserved := make(map[string]bool)
-	for _, r := range reserveList {
+	for i, r := range reserveList {
+		if r.PodRef == podRef {
+			logging.Debugf("find PodRef: %v with IP: %v allocated", podRef, r.IP)
+			if r.ContainerID != containerID {
+				logging.Debugf("containerID: %v does not match %v, update reservation", reserveList[i].ContainerID, containerID)
+				reserveList[i].ContainerID = containerID
+			}
+			return r.IP, reserveList, nil
+		}
 		reserved[r.IP.String()] = true
 	}
 
