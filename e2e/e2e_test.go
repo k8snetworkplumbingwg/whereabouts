@@ -447,6 +447,7 @@ var _ = Describe("Whereabouts functionality", func() {
 						Expect(decomposedPodRef).To(HaveLen(2))
 						podName := decomposedPodRef[1]
 
+						// Delete the pod with a grace period of 0, which could cause the pod deletion to happen later than the pod creation.
 						rightNow := int64(0)
 						Expect(clientInfo.Client.CoreV1().Pods(namespace).Delete(
 							context.TODO(), podName, metav1.DeleteOptions{GracePeriodSeconds: &rightNow})).To(Succeed())

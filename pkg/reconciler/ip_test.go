@@ -441,7 +441,7 @@ var _ = Describe("IPReconciler", func() {
 
 			It("errors when attempting to clean up the IP address", func() {
 				reconciledIPs, err := ipReconciler.ReconcileIPPools(context.TODO())
-				Expect(err).To(MatchError(fmt.Sprintf("did not find reserved IP for container %s", reservationPodRef)))
+				Expect(err).To(MatchError(fmt.Sprintf("did not find reserved IP for %s", reservationPodRef)))
 				Expect(reconciledIPs).To(BeEmpty())
 			})
 		})

@@ -62,13 +62,15 @@ func AllocateAndReleaseAddressesTest(ipVersion string, ipamConf *whereaboutstype
 		fakek8sclient.NewSimpleClientset(),
 		0)
 	for i := 0; i < len(expectedAddresses); i++ {
+		name := fmt.Sprintf("%s-%d", podName, i)
 		args := &skel.CmdArgs{
 			ContainerID: fmt.Sprintf("dummy-%d", i),
 			Netns:       nspath,
 			IfName:      ifname,
 			StdinData:   cniConf,
-			Args:        cniArgs(podNamespace, podName),
+			Args:        cniArgs(podNamespace, name),
 		}
+		ipamConf.PodName = name
 		client := mutateK8sIPAM(args.ContainerID, ipamConf, wbClient)
 
 		// Allocate the IP
@@ -76,7 +78,7 @@ func AllocateAndReleaseAddressesTest(ipVersion string, ipamConf *whereaboutstype
 			return cmdAdd(args, client, cniVersion)
 		})
 		Expect(err).NotTo(HaveOccurred())
-		Expect(strings.Index(string(raw), "\"version\":")).Should(BeNumerically(">", 0))
+		Expect(strings.Index(string(raw), "\"cniVersion\":")).Should(BeNumerically(">", 0))
 
 		result, err := current.GetResult(r)
 		Expect(err).NotTo(HaveOccurred())
@@ -132,6 +134,7 @@ func AllocateAndReleaseAddressesTest(ipVersion string, ipamConf *whereaboutstype
 var _ = Describe("Whereabouts operations", func() {
 	const (
 		podName      = "dummyPOD"
+		podNameSec   = "dummyPODSec"
 		podNamespace = "dummyNS"
 	)
 
@@ -952,16 +955,17 @@ var _ = Describe("Whereabouts operations", func() {
 				ipPool(ipamConf.IPRanges[0].Range, podNamespace, ipamConf.NetworkName)),
 			fakek8sclient.NewSimpleClientset(),
 			0)
-
 		var ipArgs []*skel.CmdArgs
 		// allocate 8 IPs (192.168.1.5 - 192.168.1.12); the entirety of the pool defined above
 		for i := 0; i < 8; i++ {
+			name := fmt.Sprintf("%s-%d", podName, i)
+			ipamConf.PodName = name
 			args := &skel.CmdArgs{
 				ContainerID: fmt.Sprintf("dummy-%d", i),
 				Netns:       nspath,
 				IfName:      ifname,
 				StdinData:   []byte(conf),
-				Args:        cniArgs(podNamespace, podName),
+				Args:        cniArgs(podNamespace, name),
 			}
 
 			k8sClient = mutateK8sIPAM(args.ContainerID, ipamConf, wbClient)
@@ -982,7 +986,7 @@ var _ = Describe("Whereabouts operations", func() {
 				}))
 			ipArgs = append(ipArgs, args)
 		}
-
+		ipamConf.PodName = podName
 		// assigning more IPs should result in error due to the defined range_start - range_end
 		args := &skel.CmdArgs{
 			ContainerID: "dummy-failure",
@@ -992,7 +996,7 @@ var _ = Describe("Whereabouts operations", func() {
 			Args:        cniArgs(podNamespace, podName),
 		}
 		_, _, err = testutils.CmdAddWithArgs(args, func() error {
-			return cmdAdd(args, mutateK8sIPAM(args.ContainerID, ipamConf, wbClient), "0.3.1")
+			return cmdAdd(args, mutateK8sIPAM(args.ContainerID, ipamConf, wbClient), cniVersion)
 		})
 		Expect(err).To(HaveOccurred())
 		// ensure the error is of the correct type
@@ -1090,12 +1094,12 @@ var _ = Describe("Whereabouts operations", func() {
 			Netns:       nspath,
 			IfName:      ifname,
 			StdinData:   []byte(confsecond),
-			Args:        cniArgs(podNamespace, podName),
+			Args:        cniArgs(podNamespace, podNameSec),
 		}
 
 		secondConfPath := filepath.Join(tmpDir, "whereabouts.conf")
 		Expect(os.WriteFile(confPath, []byte(confsecond), 0755)).To(Succeed())
-		secondIPAMConf, secondCNIVersion, err := config.LoadIPAMConfig([]byte(confsecond), cniArgs(podNamespace, podName), secondConfPath)
+		secondIPAMConf, secondCNIVersion, err := config.LoadIPAMConfig([]byte(confsecond), cniArgs(podNamespace, podNameSec), secondConfPath)
 		Expect(err).NotTo(HaveOccurred())
 
 		// Allocate the IP
@@ -1210,12 +1214,12 @@ var _ = Describe("Whereabouts operations", func() {
 			Netns:       nspath,
 			IfName:      ifname,
 			StdinData:   []byte(confsecond),
-			Args:        cniArgs(podNamespace, podName),
+			Args:        cniArgs(podNamespace, podNameSec),
 		}
 
 		secondConfPath := filepath.Join(tmpDir, "whereabouts.conf")
 		Expect(os.WriteFile(confPath, []byte(confsecond), 0755)).To(Succeed())
-		secondIPAMConf, secondCNIVersion, err := config.LoadIPAMConfig([]byte(confsecond), cniArgs(podNamespace, podName), secondConfPath)
+		secondIPAMConf, secondCNIVersion, err := config.LoadIPAMConfig([]byte(confsecond), cniArgs(podNamespace, podNameSec), secondConfPath)
 		Expect(err).NotTo(HaveOccurred())
 
 		// Allocate the IP

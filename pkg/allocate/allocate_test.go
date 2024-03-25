@@ -113,6 +113,28 @@ var _ = Describe("Allocation operations", func() {
 
 	})
 
+	It("can IterateForAssignment on an IPv4 address that has been allocated to a pod with the same podRef", func() {
+		podRef := "default/test-pod-1"
+		newID := "0xdeadffff"
+		firstip, ipnet, err := net.ParseCIDR("192.168.0.0/29")
+		Expect(err).NotTo(HaveOccurred())
+
+		// figure out the range start.
+		calculatedrangestart := net.ParseIP(firstip.Mask(ipnet.Mask).String())
+
+		ipres := []types.IPReservation{
+			{
+				IP:          net.ParseIP("192.168.0.4"),
+				ContainerID: newID,
+				PodRef:      podRef,
+			},
+		}
+		exrange := []string{}
+		newip, _, _ := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, newID, podRef)
+		Expect(fmt.Sprint(newip)).To(Equal("192.168.0.4"))
+		Expect(ipres[0].ContainerID).To(Equal(newID))
+	})
+
 	It("can IterateForAssignment on an IPv4 address excluding a range which is a single IP", func() {
 		firstip, ipnet, err := net.ParseCIDR("192.168.0.0/29")
 		Expect(err).NotTo(HaveOccurred())

@@ -38,7 +38,6 @@ func AssignIP(ipamConf types.RangeConfiguration, reservelist []types.IPReservati
 
 // DeallocateIP assigns an IP using a range and a reserve list.
 func DeallocateIP(reservelist []types.IPReservation, containerID string) ([]types.IPReservation, net.IP, error) {
-
 	updatedreservelist, hadip, err := IterateForDeallocation(reservelist, containerID, getMatchingIPReservationIndex)
 	if err != nil {
 		return nil, nil, err
@@ -52,13 +51,13 @@ func DeallocateIP(reservelist []types.IPReservation, containerID string) ([]type
 // IterateForDeallocation iterates overs currently reserved IPs and the deallocates given the container id.
 func IterateForDeallocation(
 	reservelist []types.IPReservation,
-	containerID string,
+	id string,
 	matchingFunction func(reservation []types.IPReservation, id string) int) ([]types.IPReservation, net.IP, error) {
 
-	foundidx := matchingFunction(reservelist, containerID)
+	foundidx := matchingFunction(reservelist, id)
 	// Check if it's a valid index
 	if foundidx < 0 {
-		return reservelist, nil, fmt.Errorf("did not find reserved IP for container %v", containerID)
+		return reservelist, nil, fmt.Errorf("did not find reserved IP for %v", id)
 	}
 
 	returnip := reservelist[foundidx].IP
@@ -101,7 +100,15 @@ func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, r
 
 	// Build reserved map.
 	reserved := make(map[string]bool)
-	for _, r := range reserveList {
+	for i, r := range reserveList {
+		if r.PodRef == podRef {
+			logging.Debugf("found PodRef: %v with IP: %v allocated", podRef, r.IP)
+			if r.ContainerID != containerID {
+				logging.Debugf("containerID: %v does not match %v, update reservation", reserveList[i].ContainerID, containerID)
+				reserveList[i].ContainerID = containerID
+			}
+			return r.IP, reserveList, nil
+		}
 		reserved[r.IP.String()] = true
 	}
 
@@ -129,7 +136,7 @@ func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, r
 			continue
 		}
 		// Assign and reserve the IP and return.
-		logging.Debugf("Reserving IP: |%v|", ip.String()+" "+containerID)
+		logging.Debugf("Reserving IP: |%s %s %s|", ip.String(), podRef, containerID)
 		reserveList = append(reserveList, types.IPReservation{IP: ip, ContainerID: containerID, PodRef: podRef})
 		return ip, reserveList, nil
 	}

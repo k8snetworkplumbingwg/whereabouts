@@ -5,6 +5,7 @@ import (
 	"net"
 	"time"
 
+	whereaboutsv1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 )
 
@@ -33,7 +34,7 @@ type Store interface {
 
 // OverlappingRangeStore is an interface for wrapping overlappingrange storage options
 type OverlappingRangeStore interface {
-	IsAllocatedInOverlappingRange(ctx context.Context, ip net.IP, networkName string) (bool, error)
+	IsAllocatedInOverlappingRange(ctx context.Context, ip net.IP, networkName string) (*whereaboutsv1alpha1.OverlappingRangeIPReservation, error)
 	UpdateOverlappingRangeAllocation(ctx context.Context, mode int, ip net.IP, containerID string, podRef,
 		networkName string) error
 }

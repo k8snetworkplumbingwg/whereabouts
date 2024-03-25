@@ -46,9 +46,9 @@ func isReplicaSetSteady(cs *kubernetes.Clientset, replicaSetName, namespace, lab
 }
 
 // check two things:
-// 1. number of pods that are ready should equal that of spec
-// 2. number of pods matching replicaSet's selector should equal that of spec
-//    (in 0 replicas case, replicas should finish terminating before this comes true)
+//  1. number of pods that are ready should equal that of spec
+//  2. number of pods matching replicaSet's selector should equal that of spec
+//     (in 0 replicas case, replicas should finish terminating before this comes true)
 func isReplicaSetSynchronized(replicaSet *appsv1.ReplicaSet, podList *corev1.PodList) bool {
 	return replicaSet.Status.ReadyReplicas == (*replicaSet.Spec.Replicas) && int32(len(podList.Items)) == (*replicaSet.Spec.Replicas)
 }
