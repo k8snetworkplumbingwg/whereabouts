@@ -23,7 +23,6 @@ import (
 	v1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	labels "k8s.io/apimachinery/pkg/labels"
-	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	types "k8s.io/apimachinery/pkg/types"
 	watch "k8s.io/apimachinery/pkg/watch"
 	testing "k8s.io/client-go/testing"
@@ -35,9 +34,9 @@ type FakeIPPools struct {
 	ns   string
 }
 
-var ippoolsResource = schema.GroupVersionResource{Group: "whereabouts.cni.cncf.io", Version: "v1alpha1", Resource: "ippools"}
+var ippoolsResource = v1alpha1.SchemeGroupVersion.WithResource("ippools")
 
-var ippoolsKind = schema.GroupVersionKind{Group: "whereabouts.cni.cncf.io", Version: "v1alpha1", Kind: "IPPool"}
+var ippoolsKind = v1alpha1.SchemeGroupVersion.WithKind("IPPool")
 
 // Get takes name of the iPPool, and returns the corresponding iPPool object, and an error if there is any.
 func (c *FakeIPPools) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1alpha1.IPPool, err error) {
