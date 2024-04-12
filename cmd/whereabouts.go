@@ -17,40 +17,46 @@ import (
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/version"
 )
 
-func main() {
-	skel.PluginMain(func(args *skel.CmdArgs) error {
-		ipamConf, confVersion, err := config.LoadIPAMConfig(args.StdinData, args.Args)
-		if err != nil {
-			logging.Errorf("IPAM configuration load failed: %s", err)
-			return err
-		}
-		logging.Debugf("ADD - IPAM configuration successfully read: %+v", *ipamConf)
-		ipam, err := kubernetes.NewKubernetesIPAM(args.ContainerID, *ipamConf)
-		if err != nil {
+func cmdAddFunc(args *skel.CmdArgs) error {
+	ipamConf, confVersion, err := config.LoadIPAMConfig(args.StdinData, args.Args)
+    if err != nil {
+		logging.Errorf("IPAM configuration load failed: %s", err)
+		return err
+	}
+	logging.Debugf("ADD - IPAM configuration successfully read: %+v", *ipamConf)
+	ipam, err := kubernetes.NewKubernetesIPAM(args.ContainerID, *ipamConf)
+	if err != nil {
 			return logging.Errorf("failed to create Kubernetes IPAM manager: %v", err)
-		}
-		defer func() { safeCloseKubernetesBackendConnection(ipam) }()
-		return cmdAdd(args, ipam, confVersion)
-	},
-		cmdCheck,
-		func(args *skel.CmdArgs) error {
-			ipamConf, _, err := config.LoadIPAMConfig(args.StdinData, args.Args)
-			if err != nil {
-				logging.Errorf("IPAM configuration load failed: %s", err)
-				return err
-			}
-			logging.Debugf("DEL - IPAM configuration successfully read: %+v", *ipamConf)
+	}
+	defer func() { safeCloseKubernetesBackendConnection(ipam) }()
+	return cmdAdd(args, ipam, confVersion)
+}
 
-			ipam, err := kubernetes.NewKubernetesIPAM(args.ContainerID, *ipamConf)
-			if err != nil {
-				return logging.Errorf("IPAM client initialization error: %v", err)
-			}
-			defer func() { safeCloseKubernetesBackendConnection(ipam) }()
-			return cmdDel(args, ipam)
-		},
-		cniversion.All,
-		fmt.Sprintf("whereabouts %s", version.GetFullVersionWithRuntimeInfo()),
-	)
+func cmdDelFunc(args *skel.CmdArgs) error {
+	ipamConf, _, err := config.LoadIPAMConfig(args.StdinData, args.Args)
+	if err != nil {
+		logging.Errorf("IPAM configuration load failed: %s", err)
+		return err
+	}
+	logging.Debugf("DEL - IPAM configuration successfully read: %+v", *ipamConf)
+
+	ipam, err := kubernetes.NewKubernetesIPAM(args.ContainerID, *ipamConf)
+	if err != nil {
+		return logging.Errorf("IPAM client initialization error: %v", err)
+	}
+	defer func() { safeCloseKubernetesBackendConnection(ipam) }()
+	return cmdDel(args, ipam)
+}
+
+
+func main() {
+	skel.PluginMainFuncs(skel.CNIFuncs{
+		Add:    cmdAddFunc,
+		Check:  cmdCheck,
+		Del:    cmdDelFunc,
+	}, 
+	cniversion.All, 
+	fmt.Sprintf("whereabouts %s", version.GetFullVersionWithRuntimeInfo()))
 }
 
 func safeCloseKubernetesBackendConnection(ipam *kubernetes.KubernetesIPAM) {
