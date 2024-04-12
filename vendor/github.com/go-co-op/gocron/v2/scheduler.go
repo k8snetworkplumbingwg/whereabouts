@@ -109,10 +109,11 @@ func NewScheduler(options ...SchedulerOption) (Scheduler, error) {
 		singletonRunners: nil,
 		logger:           &noOpLogger{},
 
-		jobsIn:        make(chan jobIn),
-		jobIDsOut:     make(chan uuid.UUID),
-		jobOutRequest: make(chan jobOutRequest, 1000),
-		done:          make(chan error),
+		jobsIn:                 make(chan jobIn),
+		jobsOutForRescheduling: make(chan uuid.UUID),
+		jobsOutCompleted:       make(chan uuid.UUID),
+		jobOutRequest:          make(chan jobOutRequest, 1000),
+		done:                   make(chan error),
 	}
 
 	s := &scheduler{
@@ -147,8 +148,11 @@ func NewScheduler(options ...SchedulerOption) (Scheduler, error) {
 		s.logger.Info("gocron: new scheduler created")
 		for {
 			select {
-			case id := <-s.exec.jobIDsOut:
-				s.selectExecJobIDsOut(id)
+			case id := <-s.exec.jobsOutForRescheduling:
+				s.selectExecJobsOutForRescheduling(id)
+
+			case id := <-s.exec.jobsOutCompleted:
+				s.selectExecJobsOutCompleted(id)
 
 			case in := <-s.newJobCh:
 				s.selectNewJob(in)
@@ -287,9 +291,54 @@ func (s *scheduler) selectRemoveJob(id uuid.UUID) {
 
 // Jobs coming back from the executor to the scheduler that
 // need to evaluated for rescheduling.
-func (s *scheduler) selectExecJobIDsOut(id uuid.UUID) {
-	j := s.jobs[id]
-	j.lastRun = j.nextRun
+func (s *scheduler) selectExecJobsOutForRescheduling(id uuid.UUID) {
+	j, ok := s.jobs[id]
+	if !ok {
+		// the job was removed while it was running, and
+		// so we don't need to reschedule it.
+		return
+	}
+	j.lastScheduledRun = j.nextScheduled
+
+	next := j.next(j.lastScheduledRun)
+	if next.IsZero() {
+		// the job's next function will return zero for OneTime jobs.
+		// since they are one time only, they do not need rescheduling.
+		return
+	}
+	if next.Before(s.now()) {
+		// in some cases the next run time can be in the past, for example:
+		// - the time on the machine was incorrect and has been synced with ntp
+		// - the machine went to sleep, and woke up some time later
+		// in those cases, we want to increment to the next run in the future
+		// and schedule the job for that time.
+		for next.Before(s.now()) {
+			next = j.next(next)
+		}
+	}
+	j.nextScheduled = next
+	j.timer = s.clock.AfterFunc(next.Sub(s.now()), func() {
+		// set the actual timer on the job here and listen for
+		// shut down events so that the job doesn't attempt to
+		// run if the scheduler has been shutdown.
+		select {
+		case <-s.shutdownCtx.Done():
+			return
+		case s.exec.jobsIn <- jobIn{
+			id:            j.id,
+			shouldSendOut: true,
+		}:
+		}
+	})
+	// update the job with its new next and last run times and timer.
+	s.jobs[id] = j
+}
+
+func (s *scheduler) selectExecJobsOutCompleted(id uuid.UUID) {
+	j, ok := s.jobs[id]
+	if !ok {
+		return
+	}
 
 	// if the job has a limited number of runs set, we need to
 	// check how many runs have occurred and stop running this
@@ -308,37 +357,7 @@ func (s *scheduler) selectExecJobIDsOut(id uuid.UUID) {
 		}
 	}
 
-	next := j.next(j.lastRun)
-	if next.IsZero() {
-		// the job's next function will return zero for OneTime jobs.
-		// since they are one time only, they do not need rescheduling.
-		return
-	}
-	if next.Before(s.now()) {
-		// in some cases the next run time can be in the past, for example:
-		// - the time on the machine was incorrect and has been synced with ntp
-		// - the machine went to sleep, and woke up some time later
-		// in those cases, we want to increment to the next run in the future
-		// and schedule the job for that time.
-		for next.Before(s.now()) {
-			next = j.next(next)
-		}
-	}
-	j.nextRun = next
-	j.timer = s.clock.AfterFunc(next.Sub(s.now()), func() {
-		// set the actual timer on the job here and listen for
-		// shut down events so that the job doesn't attempt to
-		// run if the scheduler has been shutdown.
-		select {
-		case <-s.shutdownCtx.Done():
-			return
-		case s.exec.jobsIn <- jobIn{
-			id:            j.id,
-			shouldSendOut: true,
-		}:
-		}
-	})
-	// update the job with its new next and last run times and timer.
+	j.lastRun = s.now()
 	s.jobs[id] = j
 }
 
@@ -381,7 +400,7 @@ func (s *scheduler) selectNewJob(in newJobIn) {
 				}
 			})
 		}
-		j.nextRun = next
+		j.nextScheduled = next
 	}
 
 	s.jobs[j.id] = j
@@ -432,7 +451,7 @@ func (s *scheduler) selectStart() {
 				}
 			})
 		}
-		j.nextRun = next
+		j.nextScheduled = next
 		s.jobs[id] = j
 	}
 	select {
