@@ -4,11 +4,11 @@ go 1.21
 
 require (
 	github.com/blang/semver v3.5.1+incompatible
-	github.com/containernetworking/cni v1.1.2
+	github.com/containernetworking/cni v1.2.0-rc1
 	github.com/containernetworking/plugins v1.4.0
 	github.com/imdario/mergo v0.3.16
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/k8snetworkplumbingwg/network-attachment-definition-client v1.1.1-0.20210510153419-66a699ae3b05
+	github.com/k8snetworkplumbingwg/network-attachment-definition-client v1.7.0
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.32.0
 	github.com/pkg/errors v0.9.1
@@ -27,6 +27,7 @@ require (
 	github.com/google/gnostic-models v0.6.8 // indirect
 	github.com/jonboulle/clockwork v0.4.0 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
+	github.com/vishvananda/netns v0.0.4 // indirect
 	golang.org/x/exp v0.0.0-20231219180239-dc181d75b848 // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 )
