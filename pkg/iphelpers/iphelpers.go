@@ -1,9 +1,13 @@
 package iphelpers
 
 import (
+	"encoding/binary"
+	"errors"
 	"fmt"
 	"math"
 	"net"
+	"strconv"
+	"strings"
 )
 
 // CompareIPs reports whether out of 2 given IPs, ipX and ipY, ipY is smaller (-1), the same (0) or larger (1).
@@ -23,6 +27,60 @@ func CompareIPs(ipX net.IP, ipY net.IP) int {
 		}
 	}
 	return 0
+}
+
+// DivideRangeBySize takes an ipRange i.e. 11.0.0.0/8 and a sliceSize i.e. /24
+// and returns a list of IPNets that divide the input range into sizes
+func DivideRangeBySize(inputNetwork string, sliceSizeString string) ([]string, error) {
+	// Remove "/" from the start of the sliceSize
+	sliceSizeString = strings.TrimPrefix(sliceSizeString, "/")
+	
+	sliceSize, err := strconv.Atoi(sliceSizeString)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return nil, nil
+	}
+	ip, ipNet, err := net.ParseCIDR(inputNetwork)
+	if err != nil {
+		return nil, err
+	}
+	if !ip.Equal(ipNet.IP) {
+		return nil, errors.New("netCIDR is not a valid network address")
+	}
+	netMaskSize, _ := ipNet.Mask.Size()
+	if netMaskSize > int(sliceSize) {
+		return nil, errors.New("subnetMaskSize must be greater or equal than netMaskSize")
+	}
+
+	totalSubnetsInNetwork := math.Pow(2, float64(sliceSize)-float64(netMaskSize))
+	totalHostsInSubnet := math.Pow(2, 32-float64(sliceSize))
+	subnetIntAddresses := make([]uint32, int(totalSubnetsInNetwork))
+	// first subnet address is same as the network address
+	subnetIntAddresses[0] = ip2int(ip.To4())
+	for i := 1; i < int(totalSubnetsInNetwork); i++ {
+		subnetIntAddresses[i] = subnetIntAddresses[i-1] + uint32(totalHostsInSubnet)
+	}
+
+	subnetCIDRs := make([]string, 0)
+	for _, sia := range subnetIntAddresses {
+		subnetCIDRs = append(
+			subnetCIDRs,
+			int2ip(sia).String()+"/"+strconv.Itoa(int(sliceSize)),
+		)
+	}
+	return subnetCIDRs, nil
+}
+
+func ip2int(ip net.IP) uint32 {
+	if len(ip) == 16 {
+		panic("cannot convert IPv6 into uint32")
+	}
+	return binary.BigEndian.Uint32(ip)
+}
+func int2ip(nn uint32) net.IP {
+	ip := make(net.IP, 4)
+	binary.BigEndian.PutUint32(ip, nn)
+	return ip
 }
 
 // IsIPInRange returns true if a given IP is within the continuous range of start and end IP (inclusively).

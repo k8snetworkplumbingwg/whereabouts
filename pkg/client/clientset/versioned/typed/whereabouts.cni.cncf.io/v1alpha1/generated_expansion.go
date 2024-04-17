@@ -19,4 +19,6 @@ package v1alpha1
 
 type IPPoolExpansion interface{}
 
+type NodeSlicePoolExpansion interface{}
+
 type OverlappingRangeIPReservationExpansion interface{}

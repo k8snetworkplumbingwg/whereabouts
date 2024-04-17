@@ -98,7 +98,7 @@ trap "rm /tmp/whereabouts-img.tar || true" EXIT
 kind load image-archive --name "$KIND_CLUSTER_NAME" /tmp/whereabouts-img.tar
 
 echo "## install whereabouts"
-for file in "daemonset-install.yaml" "whereabouts.cni.cncf.io_ippools.yaml" "whereabouts.cni.cncf.io_overlappingrangeipreservations.yaml"; do
+for file in "daemonset-install.yaml" "whereabouts.cni.cncf.io_ippools.yaml" "whereabouts.cni.cncf.io_overlappingrangeipreservations.yaml" "node-slice-controller.yaml"; do
   # insert 'imagePullPolicy: Never' under the container 'image' so it is certain that the image used
   # by the daemonset is the one loaded into KinD and not one pulled from a repo
   sed '/        image:/a\        imagePullPolicy: Never' "$ROOT/doc/crds/$file" | retry kubectl apply -f -
