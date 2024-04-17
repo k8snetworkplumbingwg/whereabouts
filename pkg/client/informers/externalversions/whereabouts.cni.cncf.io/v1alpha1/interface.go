@@ -25,6 +25,8 @@ import (
 type Interface interface {
 	// IPPools returns a IPPoolInformer.
 	IPPools() IPPoolInformer
+	// NodeSlicePools returns a NodeSlicePoolInformer.
+	NodeSlicePools() NodeSlicePoolInformer
 	// OverlappingRangeIPReservations returns a OverlappingRangeIPReservationInformer.
 	OverlappingRangeIPReservations() OverlappingRangeIPReservationInformer
 }
@@ -43,6 +45,11 @@ func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakList
 // IPPools returns a IPPoolInformer.
 func (v *version) IPPools() IPPoolInformer {
 	return &iPPoolInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+}
+
+// NodeSlicePools returns a NodeSlicePoolInformer.
+func (v *version) NodeSlicePools() NodeSlicePoolInformer {
+	return &nodeSlicePoolInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
 // OverlappingRangeIPReservations returns a OverlappingRangeIPReservationInformer.

@@ -109,6 +109,7 @@ func LoadIPAMConfig(bytes []byte, envArgs string, extraConfigPaths ...string) (*
 		} else {
 			firstip, ipNet, err := netutils.ParseCIDRSloppy(n.IPAM.IPRanges[idx].Range)
 			if err != nil {
+				logging.Debugf("invalid cidr error on range %v, within ranges %v", n.IPAM.IPRanges[idx].Range, n.IPAM.IPRanges)
 				return nil, "", fmt.Errorf("invalid CIDR %s: %s", n.IPAM.IPRanges[idx].Range, err)
 			}
 			n.IPAM.IPRanges[idx].Range = ipNet.String()

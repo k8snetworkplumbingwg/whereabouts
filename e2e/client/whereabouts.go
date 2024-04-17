@@ -2,10 +2,12 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -14,13 +16,15 @@ import (
 	netclient "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/client/clientset/versioned/typed/k8s.cni.cncf.io/v1"
 
 	"github.com/k8snetworkplumbingwg/whereabouts/e2e/entities"
+	whereaboutscnicncfiov1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
 	wbclient "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/clientset/versioned"
 )
 
 const (
-	createTimeout   = 10 * time.Second
-	deleteTimeout   = 2 * createTimeout
-	rsCreateTimeout = 600 * time.Second
+	createTimeout          = 10 * time.Second
+	deleteTimeout          = 2 * createTimeout
+	rsCreateTimeout        = 600 * time.Second
+	nodeSliceCreateTimeout = 5 * time.Second
 )
 
 type statefulSetPredicate func(statefulSet *appsv1.StatefulSet, expectedReplicas int) bool
@@ -53,12 +57,32 @@ func NewClientInfo(config *rest.Config) (*ClientInfo, error) {
 	}, nil
 }
 
+func (c *ClientInfo) GetNodeSlicePool(name string, namespace string) (*whereaboutscnicncfiov1alpha1.NodeSlicePool, error) {
+	err := WaitForNodeSliceReady(context.TODO(), c, namespace, name, nodeSliceCreateTimeout)
+	if err != nil {
+		return nil, err
+	}
+	nodeslice, err := c.WbClient.WhereaboutsV1alpha1().NodeSlicePools(namespace).Get(context.TODO(), name, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return nodeslice, nil
+}
+
 func (c *ClientInfo) AddNetAttachDef(netattach *nettypes.NetworkAttachmentDefinition) (*nettypes.NetworkAttachmentDefinition, error) {
 	return c.NetClient.NetworkAttachmentDefinitions(netattach.ObjectMeta.Namespace).Create(context.TODO(), netattach, metav1.CreateOptions{})
 }
 
 func (c *ClientInfo) DelNetAttachDef(netattach *nettypes.NetworkAttachmentDefinition) error {
 	return c.NetClient.NetworkAttachmentDefinitions(netattach.ObjectMeta.Namespace).Delete(context.TODO(), netattach.Name, metav1.DeleteOptions{})
+}
+
+func (c *ClientInfo) NodeSliceDeleted(name, namespace string) error {
+	_, err := c.WbClient.WhereaboutsV1alpha1().NodeSlicePools(namespace).Get(context.TODO(), name, metav1.GetOptions{})
+	if err == nil || !errors.IsNotFound(err) {
+		return fmt.Errorf("expected not found nodeslice")
+	}
+	return nil
 }
 
 func (c *ClientInfo) ProvisionPod(podName string, namespace string, label, annotations map[string]string) (*corev1.Pod, error) {
