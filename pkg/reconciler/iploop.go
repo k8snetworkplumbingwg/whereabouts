@@ -9,7 +9,6 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 
-	"github.com/k8snetworkplumbingwg/whereabouts/pkg/allocate"
 	whereaboutsv1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage"
@@ -87,7 +86,7 @@ func (rl *ReconcileLooper) findOrphanedIPsPerPool(ipPools []storage.IPPool) erro
 				_ = logging.Errorf("pod ref missing for Allocations: %s", ipReservation)
 				continue
 			}
-			if !rl.isPodAlive(ipReservation.PodRef, ipReservation.IP.String()) {
+			if !rl.isOrphanedIP(ipReservation.PodRef, ipReservation.IP.String()) {
 				logging.Debugf("pod ref %s is not listed in the live pods list", ipReservation.PodRef)
 				orphanIP.Allocations = append(orphanIP.Allocations, ipReservation)
 			}
@@ -100,7 +99,7 @@ func (rl *ReconcileLooper) findOrphanedIPsPerPool(ipPools []storage.IPPool) erro
 	return nil
 }
 
-func (rl ReconcileLooper) isPodAlive(podRef string, ip string) bool {
+func (rl ReconcileLooper) isOrphanedIP(podRef string, ip string) bool {
 	for livePodRef, livePod := range rl.liveWhereaboutsPods {
 		if podRef == livePodRef {
 			isFound := isIpOnPod(&livePod, podRef, ip)
@@ -175,34 +174,43 @@ func composePodRef(pod v1.Pod) string {
 }
 
 func (rl ReconcileLooper) ReconcileIPPools(ctx context.Context) ([]net.IP, error) {
-	matchByPodRef := func(reservations []types.IPReservation, podRef string) int {
-		foundidx := -1
-		for idx, v := range reservations {
-			if v.PodRef == podRef {
+	findAllocationIndex := func(reservation types.IPReservation, reservations []types.IPReservation) int {
+		for idx, r := range reservations {
+			if r.PodRef == reservation.PodRef && r.IP.Equal(reservation.IP) {
 				return idx
 			}
 		}
-		return foundidx
+		return -1
 	}
 
-	var err error
 	var totalCleanedUpIps []net.IP
 	for _, orphanedIP := range rl.orphanedIPs {
 		currentIPReservations := orphanedIP.Pool.Allocations()
-		podRefsToDeallocate := findOutPodRefsToDeallocateIPsFrom(orphanedIP)
-		var deallocatedIP net.IP
-		for _, podRef := range podRefsToDeallocate {
-			currentIPReservations, deallocatedIP, err = allocate.IterateForDeallocation(currentIPReservations, podRef, matchByPodRef)
-			if err != nil {
-				return nil, err
+
+		// Process orphaned allocation peer pool
+		var cleanedUpIpsPerPool []net.IP
+		for _, allocation := range orphanedIP.Allocations {
+			idx := findAllocationIndex(allocation, currentIPReservations)
+			if idx < 0 {
+				// Should never happen
+				logging.Debugf("Failed to find allocation for pod ref: %s and IP: %s", allocation.PodRef, allocation.IP.String())
+				continue
 			}
+
+			// Delete entry
+			currentIPReservations[idx] = currentIPReservations[len(currentIPReservations)-1]
+			currentIPReservations = currentIPReservations[:len(currentIPReservations)-1]
+
+			cleanedUpIpsPerPool = append(cleanedUpIpsPerPool, allocation.IP)
 		}
 
-		logging.Debugf("Going to update the reserve list to: %+v", currentIPReservations)
-		if err := orphanedIP.Pool.Update(ctx, currentIPReservations); err != nil {
-			return nil, logging.Errorf("failed to update the reservation list: %v", err)
+		if len(cleanedUpIpsPerPool) != 0 {
+			logging.Debugf("Going to update the reserve list to: %+v", currentIPReservations)
+			if err := orphanedIP.Pool.Update(ctx, currentIPReservations); err != nil {
+				return nil, logging.Errorf("failed to update the reservation list: %v", err)
+			}
+			totalCleanedUpIps = append(totalCleanedUpIps, cleanedUpIpsPerPool...)
 		}
-		totalCleanedUpIps = append(totalCleanedUpIps, deallocatedIP)
 	}
 
 	return totalCleanedUpIps, nil
@@ -226,7 +234,7 @@ func (rl *ReconcileLooper) findClusterWideIPReservations(ctx context.Context) er
 
 		podRef := clusterWideIPReservation.Spec.PodRef
 
-		if !rl.isPodAlive(podRef, denormalizedip) {
+		if !rl.isOrphanedIP(podRef, denormalizedip) {
 			logging.Debugf("pod ref %s is not listed in the live pods list", podRef)
 			rl.orphanedClusterWideIPs = append(rl.orphanedClusterWideIPs, clusterWideIPReservation)
 		}
@@ -254,12 +262,4 @@ func (rl ReconcileLooper) ReconcileOverlappingIPAddresses(ctx context.Context) e
 		return logging.Errorf("could not reconcile cluster wide IPs: %v", failedReconciledClusterWideIPs)
 	}
 	return nil
-}
-
-func findOutPodRefsToDeallocateIPsFrom(orphanedIP OrphanedIPReservations) []string {
-	var podRefsToDeallocate []string
-	for _, orphanedAllocation := range orphanedIP.Allocations {
-		podRefsToDeallocate = append(podRefsToDeallocate, orphanedAllocation.PodRef)
-	}
-	return podRefsToDeallocate
 }

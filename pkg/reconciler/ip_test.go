@@ -168,6 +168,48 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 		})
 	})
 
+	Context("reconciling an IP pool with entries from the same pod reference", func() {
+		var wbClient wbclient.Interface
+		var pod *v1.Pod
+
+		It("verifies that the correct entry is cleaned up", func() {
+			pod = generatePod(namespace, podName, ipInNetwork{ip: firstIPInRange, networkName: networkName})
+			k8sClientSet = fakek8sclient.NewSimpleClientset(pod)
+
+			By("creating an IP pool with 2 entries from the same pod. Second entry was initially assigned to the pod")
+			pool := generateIPPoolSpec(ipRange, namespace, podName)
+			pool.Spec.Allocations = map[string]v1alpha1.IPAllocation{
+				"1": {
+					PodRef: fmt.Sprintf("%s/%s", namespace, podName),
+				},
+				"2": {
+					PodRef: fmt.Sprintf("%s/%s", namespace, podName),
+				},
+			}
+			wbClient = fakewbclient.NewSimpleClientset(pool)
+
+			By("initializing the reconciler")
+			var err error
+			reconcileLooper, err = NewReconcileLooperWithClient(context.TODO(), kubernetes.NewKubernetesClient(wbClient, k8sClientSet, timeout), timeout)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("reconciling and checking that the correct entry is deleted")
+			deletedIPAddrs, err := reconcileLooper.ReconcileIPPools(context.TODO())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deletedIPAddrs).To(Equal([]net.IP{net.ParseIP("10.10.10.2")}))
+
+			By("verifying the IP pool")
+			poolAfterCleanup, err := wbClient.WhereaboutsV1alpha1().IPPools(namespace).Get(context.TODO(), pool.GetName(), metav1.GetOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			remainingAllocation := map[string]v1alpha1.IPAllocation{
+				"1": {
+					PodRef: fmt.Sprintf("%s/%s", namespace, podName),
+				},
+			}
+			Expect(poolAfterCleanup.Spec.Allocations).To(Equal(remainingAllocation))
+		})
+	})
+
 	Context("reconciling cluster wide IPs - overlapping IPs", func() {
 		const (
 			numberOfPods       = 3
@@ -419,30 +461,6 @@ var _ = Describe("IPReconciler", func() {
 				reconciledIPs, err := ipReconciler.ReconcileIPPools(context.TODO())
 				Expect(err).NotTo(HaveOccurred())
 				Expect(reconciledIPs).To(ConsistOf([]net.IP{net.ParseIP("192.168.14.2")}))
-			})
-		})
-
-		Context("but the IP reservation owner does not match", func() {
-			var reservationPodRef string
-			BeforeEach(func() {
-				reservationPodRef = "default/pod2"
-				podRef := "default/pod1"
-				reservations := generateIPReservation(firstIPInRange, podRef)
-				erroredReservations := generateIPReservation(firstIPInRange, reservationPodRef)
-
-				pool := generateIPPool(ipCIDR, podRef)
-				orphanedIPAddr := OrphanedIPReservations{
-					Pool:        dummyPool{orphans: reservations, pool: pool},
-					Allocations: erroredReservations,
-				}
-
-				ipReconciler = newIPReconciler(orphanedIPAddr)
-			})
-
-			It("errors when attempting to clean up the IP address", func() {
-				reconciledIPs, err := ipReconciler.ReconcileIPPools(context.TODO())
-				Expect(err).To(MatchError(fmt.Sprintf("did not find reserved IP for container %s", reservationPodRef)))
-				Expect(reconciledIPs).To(BeEmpty())
 			})
 		})
 	})
