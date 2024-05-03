@@ -4,7 +4,7 @@ go 1.21
 
 require (
 	github.com/blang/semver v3.5.1+incompatible
-	github.com/containernetworking/cni v1.2.0-rc1
+	github.com/containernetworking/cni v1.2.0
 	github.com/containernetworking/plugins v1.4.1
 	github.com/imdario/mergo v0.3.16
 	github.com/json-iterator/go v1.1.12 // indirect
