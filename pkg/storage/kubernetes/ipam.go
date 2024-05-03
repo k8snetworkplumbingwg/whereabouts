@@ -542,10 +542,10 @@ func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *Kubernete
 				}
 
 			case whereaboutstypes.Deallocate:
-				updatedreservelist, ipforoverlappingrangeupdate, err = allocate.DeallocateIP(reservelist, containerID)
-				if err != nil {
-					logging.Errorf("Error deallocating IP: %v", err)
-					return newips, err
+				updatedreservelist, ipforoverlappingrangeupdate = allocate.DeallocateIP(reservelist, containerID)
+				if updatedreservelist == nil {
+					// Do not fail if allocation is not present.
+					return nil, nil
 				}
 			}
 

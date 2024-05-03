@@ -36,17 +36,20 @@ func AssignIP(ipamConf types.RangeConfiguration, reservelist []types.IPReservati
 	return net.IPNet{IP: newip, Mask: ipnet.Mask}, updatedreservelist, nil
 }
 
-// DeallocateIP assigns an IP using a range and a reserve list.
-func DeallocateIP(reservelist []types.IPReservation, containerID string) ([]types.IPReservation, net.IP, error) {
+// DeallocateIP removes allocation from reserve list.
+func DeallocateIP(reservelist []types.IPReservation, containerID string) ([]types.IPReservation, net.IP) {
+	index := getMatchingIPReservationIndex(reservelist, containerID)
 
-	updatedreservelist, hadip, err := IterateForDeallocation(reservelist, containerID, getMatchingIPReservationIndex)
-	if err != nil {
-		return nil, nil, err
+	// Allocation not found, return nil.
+	if index < 0 {
+		logging.Debugf("Failed to find allocation for container ID: %s", containerID)
+		return nil, nil
 	}
 
-	logging.Debugf("Deallocating given previously used IP: %v", hadip)
+	ip := reservelist[index].IP
+	logging.Debugf("Deallocating given previously used IP: %v", ip.String())
 
-	return updatedreservelist, hadip, nil
+	return removeIdxFromSlice(reservelist, index), ip
 }
 
 // IterateForDeallocation iterates overs currently reserved IPs and the deallocates given the container id.
@@ -68,14 +71,12 @@ func IterateForDeallocation(
 }
 
 func getMatchingIPReservationIndex(reservelist []types.IPReservation, id string) int {
-	foundidx := -1
 	for idx, v := range reservelist {
 		if v.ContainerID == id {
-			foundidx = idx
-			break
+			return idx
 		}
 	}
-	return foundidx
+	return -1
 }
 
 func removeIdxFromSlice(s []types.IPReservation, i int) []types.IPReservation {
