@@ -51,6 +51,8 @@ i.e. we have nad1 and nad2 both with network name `test-network`. When a node, `
 `NodeSlicePool`, `IPPool` and `Lease` objects named `test-network-trusted-otter`. If these are seperate network you would just not set the network name
 or set the network-name differently per `network-attachment-defintion`.
 
+![node-slice-diagram](images/fast_ipam_by_node.png)
+
 ### Changes in IPAM Config
 
 This will lead to change in IPAM config something as follows:
