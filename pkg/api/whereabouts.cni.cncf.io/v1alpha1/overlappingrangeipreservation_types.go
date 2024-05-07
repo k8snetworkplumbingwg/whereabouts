@@ -5,7 +5,7 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 // OverlappingRangeIPReservationSpec defines the desired state of OverlappingRangeIPReservation
 type OverlappingRangeIPReservationSpec struct {
 	ContainerID string `json:"containerid"`
-	PodRef      string `json:"podref,omitempty"`
+	PodRef      string `json:"podref"`
 }
 
 // +genclient
