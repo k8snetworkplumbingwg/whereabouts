@@ -226,7 +226,7 @@ var _ = Describe("Whereabouts functionality", func() {
 				var err error
 
 				const ipPoolNamespace = "kube-system"
-				k8sIPAM, err = wbstorage.NewKubernetesIPAMWithNamespace("", types.IPAMConfig{
+				k8sIPAM, err = wbstorage.NewKubernetesIPAMWithNamespace("", "", types.IPAMConfig{
 					Kubernetes: types.KubernetesConfig{
 						KubeConfigPath: testConfig.KubeconfigPath,
 					},
@@ -485,6 +485,7 @@ var _ = Describe("Whereabouts functionality", func() {
 						Expect(ipPool.Spec.Allocations).NotTo(BeEmpty())
 
 						Expect(allocationForPodRef(podRef, *ipPool).ContainerID).NotTo(Equal(containerID))
+						Expect(allocationForPodRef(podRef, *ipPool).PodRef).To(Equal(podRef))
 					})
 				})
 			})

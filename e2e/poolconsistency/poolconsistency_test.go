@@ -53,6 +53,7 @@ var _ = Describe("IP Pool consistency checker", func() {
 				pool = NewMockedPool(types.IPReservation{
 					IP:          net.ParseIP(ip),
 					ContainerID: "abc",
+					IfName:      "eth0",
 					PodRef:      "cba",
 					IsAllocated: true,
 				})
