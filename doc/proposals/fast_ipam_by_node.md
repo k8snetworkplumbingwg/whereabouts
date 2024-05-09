@@ -35,6 +35,23 @@ out before whereabouts can assign all 10 IPs per pod. This would only get worse 
 
 <hr>
 
+### Implementation Phases
+
+## Phases
+
+In order to make iterative improvements and work towards this feature in pieces we have laid out the implementation in phases.
+
+Initial phase:
+[] Fast ranges base functionality
+
+Feature parity phase:
+[ ] Range start, range-end function
+[ ] Live changes to range (from regular to fast)
+[ ] Multiple ranges
+
+Optimization phase:
+[ ] Dynamic range slice rebalancing
+
 ## Design
 
 The IPAM configuration format would be updated to include enablement of this feature and configurations for the feature.
