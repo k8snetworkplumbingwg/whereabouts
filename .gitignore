@@ -13,3 +13,5 @@
 
 bin/
 /github.com/
+
+.idea/
