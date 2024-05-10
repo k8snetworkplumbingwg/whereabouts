@@ -43,10 +43,11 @@ spec:
             properties:
               containerid:
                 type: string
+              ifname:
+                type: string
               podref:
                 type: string
             required:
-            - containerid
             - podref
             type: object
         required:

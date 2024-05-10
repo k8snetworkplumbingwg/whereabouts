@@ -24,6 +24,7 @@ func (i IPPool) ParseCIDR() (net.IP, *net.IPNet, error) {
 type IPAllocation struct {
 	ContainerID string `json:"id"`
 	PodRef      string `json:"podref"`
+	IfName      string `json:"ifname,omitempty"`
 }
 
 // +genclient
