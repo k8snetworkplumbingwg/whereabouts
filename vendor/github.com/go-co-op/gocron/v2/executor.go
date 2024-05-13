@@ -131,8 +131,8 @@ func (e *executor) start() {
 						// to work through the channel backlog. A hard limit of 1000 is in place
 						// at which point this call would block.
 						// TODO when metrics are added, this should increment a wait metric
-						e.limitMode.in <- jIn
 						e.sendOutForRescheduling(&jIn)
+						e.limitMode.in <- jIn
 					}
 				} else {
 					// no limit mode, so we're either running a regular job or
@@ -303,6 +303,10 @@ func (e *executor) singletonModeRunner(name string, in chan jobIn, wg *waitGroup
 			j := requestJobCtx(ctx, jIn.id, e.jobOutRequest)
 			cancel()
 			if j != nil {
+				// need to set shouldSendOut = false here, as there is a duplicative call to sendOutForRescheduling
+				// inside the runJob function that needs to be skipped. sendOutForRescheduling is previously called
+				// when the job is sent to the singleton mode runner.
+				jIn.shouldSendOut = false
 				e.runJob(*j, jIn)
 			}
 
@@ -333,12 +337,22 @@ func (e *executor) runJob(j internalJob, jIn jobIn) {
 	if e.elector != nil {
 		if err := e.elector.IsLeader(j.ctx); err != nil {
 			e.sendOutForRescheduling(&jIn)
+			e.incrementJobCounter(j, Skip)
 			return
 		}
+	} else if j.locker != nil {
+		lock, err := j.locker.Lock(j.ctx, j.name)
+		if err != nil {
+			e.sendOutForRescheduling(&jIn)
+			e.incrementJobCounter(j, Skip)
+			return
+		}
+		defer func() { _ = lock.Unlock(j.ctx) }()
 	} else if e.locker != nil {
 		lock, err := e.locker.Lock(j.ctx, j.name)
 		if err != nil {
 			e.sendOutForRescheduling(&jIn)
+			e.incrementJobCounter(j, Skip)
 			return
 		}
 		defer func() { _ = lock.Unlock(j.ctx) }()
@@ -358,14 +372,16 @@ func (e *executor) runJob(j internalJob, jIn jobIn) {
 	}
 	if err != nil {
 		_ = callJobFuncWithParams(j.afterJobRunsWithError, j.id, j.name, err)
-		if e.monitor != nil {
-			e.monitor.IncrementJob(j.id, j.name, j.tags, Fail)
-		}
+		e.incrementJobCounter(j, Fail)
 	} else {
 		_ = callJobFuncWithParams(j.afterJobRuns, j.id, j.name)
-		if e.monitor != nil {
-			e.monitor.IncrementJob(j.id, j.name, j.tags, Success)
-		}
+		e.incrementJobCounter(j, Success)
+	}
+}
+
+func (e *executor) incrementJobCounter(j internalJob, status JobStatus) {
+	if e.monitor != nil {
+		e.monitor.IncrementJob(j.id, j.name, j.tags, status)
 	}
 }
 

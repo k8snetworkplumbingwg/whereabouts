@@ -24,8 +24,11 @@ type internalJob struct {
 	name   string
 	tags   []string
 	jobSchedule
-	lastScheduledRun   time.Time
-	nextScheduled      time.Time
+
+	// as some jobs may queue up, it's possible to
+	// have multiple nextScheduled times
+	nextScheduled []time.Time
+
 	lastRun            time.Time
 	function           any
 	parameters         []any
@@ -39,6 +42,8 @@ type internalJob struct {
 	afterJobRuns          func(jobID uuid.UUID, jobName string)
 	beforeJobRuns         func(jobID uuid.UUID, jobName string)
 	afterJobRunsWithError func(jobID uuid.UUID, jobName string, err error)
+
+	locker Locker
 }
 
 // stop is used to stop the job's timer and cancel the context
@@ -286,7 +291,8 @@ type Weekdays func() []time.Weekday
 // NewWeekdays provide the days of the week the job should run.
 func NewWeekdays(weekday time.Weekday, weekdays ...time.Weekday) Weekdays {
 	return func() []time.Weekday {
-		return append(weekdays, weekday)
+		weekdays = append(weekdays, weekday)
+		return weekdays
 	}
 }
 
@@ -481,6 +487,19 @@ func OneTimeJob(startAt OneTimeJobStartAtOption) JobDefinition {
 
 // JobOption defines the constructor for job options.
 type JobOption func(*internalJob) error
+
+// WithDistributedJobLocker sets the locker to be used by multiple
+// Scheduler instances to ensure that only one instance of each
+// job is run.
+func WithDistributedJobLocker(locker Locker) JobOption {
+	return func(j *internalJob) error {
+		if locker == nil {
+			return ErrWithDistributedJobLockerNil
+		}
+		j.locker = locker
+		return nil
+	}
+}
 
 // WithEventListeners sets the event listeners that should be
 // run for the job.
@@ -849,6 +868,8 @@ type Job interface {
 	Name() string
 	// NextRun returns the time of the job's next scheduled run.
 	NextRun() (time.Time, error)
+	// NextRuns returns the requested number of calculated next run values.
+	NextRuns(int) ([]time.Time, error)
 	// RunNow runs the job once, now. This does not alter
 	// the existing run schedule, and will respect all job
 	// and scheduler limits. This means that running a job now may
@@ -894,7 +915,39 @@ func (j job) NextRun() (time.Time, error) {
 	if ij == nil || ij.id == uuid.Nil {
 		return time.Time{}, ErrJobNotFound
 	}
-	return ij.nextScheduled, nil
+	if len(ij.nextScheduled) == 0 {
+		return time.Time{}, nil
+	}
+	// the first element is the next scheduled run with subsequent
+	// runs following after in the slice
+	return ij.nextScheduled[0], nil
+}
+
+func (j job) NextRuns(count int) ([]time.Time, error) {
+	ij := requestJob(j.id, j.jobOutRequest)
+	if ij == nil || ij.id == uuid.Nil {
+		return nil, ErrJobNotFound
+	}
+
+	lengthNextScheduled := len(ij.nextScheduled)
+	if lengthNextScheduled == 0 {
+		return nil, nil
+	} else if count <= lengthNextScheduled {
+		return ij.nextScheduled[:count], nil
+	}
+
+	out := make([]time.Time, count)
+	for i := 0; i < count; i++ {
+		if i < lengthNextScheduled {
+			out[i] = ij.nextScheduled[i]
+			continue
+		}
+
+		from := out[i-1]
+		out[i] = ij.next(from)
+	}
+
+	return out, nil
 }
 
 func (j job) Tags() []string {
