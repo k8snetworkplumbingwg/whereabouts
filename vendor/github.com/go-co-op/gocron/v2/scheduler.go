@@ -44,6 +44,9 @@ type Scheduler interface {
 	// Update replaces the existing Job's JobDefinition with the provided
 	// JobDefinition. The Job's Job.ID() remains the same.
 	Update(uuid.UUID, JobDefinition, Task, ...JobOption) (Job, error)
+	// JobsWaitingInQueue number of jobs waiting in Queue in case of LimitModeWait
+	// In case of LimitModeReschedule or no limit it will be always zero
+	JobsWaitingInQueue() int
 }
 
 // -----------------------------------------------
@@ -292,15 +295,29 @@ func (s *scheduler) selectRemoveJob(id uuid.UUID) {
 // Jobs coming back from the executor to the scheduler that
 // need to evaluated for rescheduling.
 func (s *scheduler) selectExecJobsOutForRescheduling(id uuid.UUID) {
+	select {
+	case <-s.shutdownCtx.Done():
+		return
+	default:
+	}
 	j, ok := s.jobs[id]
 	if !ok {
 		// the job was removed while it was running, and
 		// so we don't need to reschedule it.
 		return
 	}
-	j.lastScheduledRun = j.nextScheduled
+	var scheduleFrom time.Time
+	if len(j.nextScheduled) > 0 {
+		// always grab the last element in the slice as that is the furthest
+		// out in the future and the time from which we want to calculate
+		// the subsequent next run time.
+		slices.SortStableFunc(j.nextScheduled, func(a, b time.Time) int {
+			return a.Compare(b)
+		})
+		scheduleFrom = j.nextScheduled[len(j.nextScheduled)-1]
+	}
 
-	next := j.next(j.lastScheduledRun)
+	next := j.next(scheduleFrom)
 	if next.IsZero() {
 		// the job's next function will return zero for OneTime jobs.
 		// since they are one time only, they do not need rescheduling.
@@ -316,7 +333,7 @@ func (s *scheduler) selectExecJobsOutForRescheduling(id uuid.UUID) {
 			next = j.next(next)
 		}
 	}
-	j.nextScheduled = next
+	j.nextScheduled = append(j.nextScheduled, next)
 	j.timer = s.clock.AfterFunc(next.Sub(s.now()), func() {
 		// set the actual timer on the job here and listen for
 		// shut down events so that the job doesn't attempt to
@@ -338,6 +355,19 @@ func (s *scheduler) selectExecJobsOutCompleted(id uuid.UUID) {
 	j, ok := s.jobs[id]
 	if !ok {
 		return
+	}
+
+	// if the job has more than one nextScheduled time,
+	// we need to remove any that are in the past.
+	if len(j.nextScheduled) > 1 {
+		var newNextScheduled []time.Time
+		for _, t := range j.nextScheduled {
+			if t.Before(s.now()) {
+				continue
+			}
+			newNextScheduled = append(newNextScheduled, t)
+		}
+		j.nextScheduled = newNextScheduled
 	}
 
 	// if the job has a limited number of runs set, we need to
@@ -400,7 +430,7 @@ func (s *scheduler) selectNewJob(in newJobIn) {
 				}
 			})
 		}
-		j.nextScheduled = next
+		j.nextScheduled = append(j.nextScheduled, next)
 	}
 
 	s.jobs[j.id] = j
@@ -451,7 +481,7 @@ func (s *scheduler) selectStart() {
 				}
 			})
 		}
-		j.nextScheduled = next
+		j.nextScheduled = append(j.nextScheduled, next)
 		s.jobs[id] = j
 	}
 	select {
@@ -656,6 +686,13 @@ func (s *scheduler) Update(id uuid.UUID, jobDefinition JobDefinition, task Task,
 	return s.addOrUpdateJob(id, jobDefinition, task, options)
 }
 
+func (s *scheduler) JobsWaitingInQueue() int {
+	if s.exec.limitMode != nil && s.exec.limitMode.mode == LimitModeWait {
+		return len(s.exec.limitMode.in)
+	}
+	return 0
+}
+
 // -----------------------------------------------
 // -----------------------------------------------
 // ------------- Scheduler Options ---------------
@@ -756,6 +793,14 @@ const (
 // WithLimitConcurrentJobs sets the limit and mode to be used by the
 // Scheduler for limiting the number of jobs that may be running at
 // a given time.
+//
+// Note: the limit mode selected for WithLimitConcurrentJobs takes initial
+// precedence in the event you are also running a limit mode at the job level
+// using WithSingletonMode.
+//
+// Warning: a single time consuming job can dominate your limit in the event
+// you are running both the scheduler limit WithLimitConcurrentJobs(1, LimitModeWait)
+// and a job limit WithSingletonMode(LimitModeReschedule).
 func WithLimitConcurrentJobs(limit uint, mode LimitMode) SchedulerOption {
 	return func(s *scheduler) error {
 		if limit == 0 {
