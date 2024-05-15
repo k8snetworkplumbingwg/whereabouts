@@ -381,14 +381,14 @@ func (c *Controller) syncHandler(ctx context.Context, key string) error {
 			},
 		}
 		allocations := []v1alpha1.NodeSliceAllocation{}
-		logger.Info(fmt.Sprintf("node slice: %v\n", nodeslice))
+		logger.Info(fmt.Sprintf("node slice: %v", nodeslice))
 
 		//TODO: handle case when full, we could fire an event
 		subnets, err := iphelpers.DivideRangeBySize(nodeslice.Spec.Range, ipamConf.NodeSliceSize)
 		if err != nil {
 			return err
 		}
-		logger.Info(fmt.Sprintf("subnets: %v\n", subnets))
+		logger.Info(fmt.Sprintf("subnets: %v", subnets))
 		for _, subnet := range subnets {
 			allocations = append(allocations, v1alpha1.NodeSliceAllocation{
 				SliceRange: subnet,
@@ -399,13 +399,13 @@ func (c *Controller) syncHandler(ctx context.Context, key string) error {
 			return err
 		}
 		for _, node := range nodes {
-			logger.Info(fmt.Sprintf("assigning node to slice: %v\n", node.Name))
+			logger.Info(fmt.Sprintf("assigning node to slice: %v", node.Name))
 			assignNodeToSlice(allocations, node.Name)
 		}
 		nodeslice.Status = v1alpha1.NodeSlicePoolStatus{
 			Allocations: allocations,
 		}
-		logger.Info(fmt.Sprintf("final allocations: %v\n", allocations))
+		logger.Info(fmt.Sprintf("final allocations: %v", allocations))
 		_, err = c.whereaboutsclientset.WhereaboutsV1alpha1().NodeSlicePools(namespace).Create(ctx, nodeslice, metav1.CreateOptions{})
 		if err != nil {
 			return err
@@ -422,7 +422,6 @@ func (c *Controller) syncHandler(ctx context.Context, key string) error {
 		if !nadIsOwner {
 			nodeslice.OwnerReferences = append(nodeslice.OwnerReferences, getAuxiliaryOwnerRef(nad))
 		}
-		logger.Info(fmt.Sprintf("owner references: %v\n", nodeslice.OwnerReferences))
 		// node slice currently exists
 		if currentNodeSlicePool.Spec.SliceSize != ipamConf.NodeSliceSize ||
 			currentNodeSlicePool.Spec.Range != ipamConf.IPRanges[0].Range {
@@ -476,8 +475,6 @@ func (c *Controller) syncHandler(ctx context.Context, key string) error {
 		}
 	}
 
-	//TODO: recorder events
-	//c.recorder.Event(foo, corev1.EventTypeNormal, SuccessSynced, MessageResourceSynced)
 	return nil
 }
 
@@ -495,7 +492,7 @@ func (c *Controller) getNodeList() ([]*corev1.Node, error) {
 	return nodes, nil
 }
 
-// since multiple NADs can be attached to the same BE Network, we need to make sure their settings match in this case
+// since multiple NADs can be attached to the same network, we need to make sure their settings match in this case
 func (c *Controller) checkForMultiNadMismatch(name, namespace string) error {
 	nad, err := c.nadLister.NetworkAttachmentDefinitions(namespace).Get(name)
 	if err != nil {
