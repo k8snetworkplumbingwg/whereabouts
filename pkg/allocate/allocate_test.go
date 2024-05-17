@@ -415,4 +415,24 @@ var _ = Describe("Allocation operations", func() {
 			})
 		})
 	})
+
+
+	It("can IterateForAssignment on an IPv4 address for existing pod Allocation and return same IP", func() {
+
+		firstip, ipnet, err := net.ParseCIDR("192.168.1.1/24")
+		Expect(err).NotTo(HaveOccurred())
+
+		// figure out the range start.
+		calculatedrangestart := net.ParseIP(firstip.Mask(ipnet.Mask).String())
+
+		var ipres []types.IPReservation
+		var exrange []string
+		podRef := "hello/world-0"
+		newip, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", podRef )
+		Expect(err).NotTo(HaveOccurred())
+		newipsec, _, err := IterateForAssignment(*ipnet, calculatedrangestart, nil, ipres, exrange, "0xdeadbeef", podRef )
+		Expect(err).NotTo(HaveOccurred())
+		Expect(fmt.Sprint(newip)).To(Equal(fmt.Sprint(newipsec)))
+
+	})
 })

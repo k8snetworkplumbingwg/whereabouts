@@ -67,8 +67,9 @@ func AllocateAndReleaseAddressesTest(ipVersion string, ipamConf *whereaboutstype
 			Netns:       nspath,
 			IfName:      ifname,
 			StdinData:   cniConf,
-			Args:        cniArgs(podNamespace, podName),
+			Args:        cniArgs(podNamespace, fmt.Sprintf("%v-%d", podName,i)),
 		}
+		ipamConf.PodName=fmt.Sprintf("%v-%d", podName,i)
 		client := mutateK8sIPAM(args.ContainerID, ipamConf, wbClient)
 
 		// Allocate the IP
@@ -961,9 +962,9 @@ var _ = Describe("Whereabouts operations", func() {
 				Netns:       nspath,
 				IfName:      ifname,
 				StdinData:   []byte(conf),
-				Args:        cniArgs(podNamespace, podName),
+				Args:        cniArgs(podNamespace, fmt.Sprintf("%v-%d", podName,i)),
 			}
-
+			ipamConf.PodName=fmt.Sprintf("%v-%d", podName,i)
 			k8sClient = mutateK8sIPAM(args.ContainerID, ipamConf, wbClient)
 			r, raw, err := testutils.CmdAddWithArgs(args, func() error {
 				return cmdAdd(args, k8sClient, cniVersion)
@@ -989,8 +990,9 @@ var _ = Describe("Whereabouts operations", func() {
 			Netns:       nspath,
 			IfName:      ifname,
 			StdinData:   []byte(conf),
-			Args:        cniArgs(podNamespace, podName),
+			Args:        cniArgs(podNamespace, fmt.Sprintf("%v-%d", podName,50)),
 		}
+		ipamConf.PodName=fmt.Sprintf("%v-%d", podName,50)
 		_, _, err = testutils.CmdAddWithArgs(args, func() error {
 			return cmdAdd(args, mutateK8sIPAM(args.ContainerID, ipamConf, wbClient), "0.3.1")
 		})
@@ -1037,12 +1039,12 @@ var _ = Describe("Whereabouts operations", func() {
 			Netns:       nspath,
 			IfName:      ifname,
 			StdinData:   []byte(conf),
-			Args:        cniArgs(podNamespace, podName),
+			Args:        cniArgs(podNamespace, fmt.Sprintf("%v-%d", podName,0)),
 		}
 
 		confPath := filepath.Join(tmpDir, "whereabouts.conf")
 		Expect(os.WriteFile(confPath, []byte(conf), 0755)).To(Succeed())
-		ipamConf, cniVersion, err := config.LoadIPAMConfig([]byte(conf), cniArgs(podNamespace, podName), confPath)
+		ipamConf, cniVersion, err := config.LoadIPAMConfig([]byte(conf), cniArgs(podNamespace, fmt.Sprintf("%v-%d", podName,0)), confPath)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ipamConf.IPRanges).NotTo(BeEmpty())
 		wbClient := *kubernetes.NewKubernetesClient(
@@ -1090,12 +1092,12 @@ var _ = Describe("Whereabouts operations", func() {
 			Netns:       nspath,
 			IfName:      ifname,
 			StdinData:   []byte(confsecond),
-			Args:        cniArgs(podNamespace, podName),
+			Args:        cniArgs(podNamespace, fmt.Sprintf("%v-%d", podName,1)),
 		}
 
 		secondConfPath := filepath.Join(tmpDir, "whereabouts.conf")
 		Expect(os.WriteFile(confPath, []byte(confsecond), 0755)).To(Succeed())
-		secondIPAMConf, secondCNIVersion, err := config.LoadIPAMConfig([]byte(confsecond), cniArgs(podNamespace, podName), secondConfPath)
+		secondIPAMConf, secondCNIVersion, err := config.LoadIPAMConfig([]byte(confsecond), cniArgs(podNamespace, fmt.Sprintf("%v-%d", podName,1)), secondConfPath)
 		Expect(err).NotTo(HaveOccurred())
 
 		// Allocate the IP
@@ -1157,12 +1159,12 @@ var _ = Describe("Whereabouts operations", func() {
 			Netns:       nspath,
 			IfName:      ifname,
 			StdinData:   []byte(conf),
-			Args:        cniArgs(podNamespace, podName),
+			Args:        cniArgs(podNamespace, fmt.Sprintf("%v-%d", podName,0)),
 		}
 
 		confPath := filepath.Join(tmpDir, "whereabouts.conf")
 		Expect(os.WriteFile(confPath, []byte(conf), 0755)).To(Succeed())
-		ipamConf, cniVersion, err := config.LoadIPAMConfig([]byte(conf), cniArgs(podNamespace, podName), confPath)
+		ipamConf, cniVersion, err := config.LoadIPAMConfig([]byte(conf), cniArgs(podNamespace, fmt.Sprintf("%v-%d", podName,0)), confPath)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ipamConf.IPRanges).NotTo(BeEmpty())
 		wbClient := *kubernetes.NewKubernetesClient(
@@ -1210,12 +1212,12 @@ var _ = Describe("Whereabouts operations", func() {
 			Netns:       nspath,
 			IfName:      ifname,
 			StdinData:   []byte(confsecond),
-			Args:        cniArgs(podNamespace, podName),
+			Args:        cniArgs(podNamespace, fmt.Sprintf("%v-%d", podName,1)),
 		}
 
 		secondConfPath := filepath.Join(tmpDir, "whereabouts.conf")
 		Expect(os.WriteFile(confPath, []byte(confsecond), 0755)).To(Succeed())
-		secondIPAMConf, secondCNIVersion, err := config.LoadIPAMConfig([]byte(confsecond), cniArgs(podNamespace, podName), secondConfPath)
+		secondIPAMConf, secondCNIVersion, err := config.LoadIPAMConfig([]byte(confsecond), cniArgs(podNamespace, fmt.Sprintf("%v-%d", podName,1)), secondConfPath)
 		Expect(err).NotTo(HaveOccurred())
 
 		// Allocate the IP
