@@ -28,6 +28,19 @@ func AssignIP(ipamConf types.RangeConfiguration, reservelist []types.IPReservati
 	// Setup the basics here.
 	_, ipnet, _ := net.ParseCIDR(ipamConf.Range)
 
+	// Verify if podRef and ifName have already an allocation.
+	for i, r := range reservelist {
+		if r.PodRef == podRef && r.IfName == ifName {
+			logging.Debugf("IP already allocated for podRef: %q - ifName:%q - IP: %s", podRef, ifName, r.IP.String())
+			if r.ContainerID != containerID {
+				logging.Debugf("updating container ID: %q", containerID)
+				reservelist[i].ContainerID = containerID
+			}
+
+			return net.IPNet{IP: r.IP, Mask: ipnet.Mask}, reservelist, nil
+		}
+	}
+
 	newip, updatedreservelist, err := IterateForAssignment(*ipnet, ipamConf.RangeStart, ipamConf.RangeEnd, reservelist, ipamConf.OmitRanges, containerID, podRef, ifName)
 	if err != nil {
 		return net.IPNet{}, nil, err

@@ -531,6 +531,132 @@ var _ = Describe("Whereabouts functionality", func() {
 					})
 				})
 			})
+
+			Context("reclaim previously allocated IP", func() {
+				const (
+					namespace       = "default"
+					networkName     = "recovernet"
+					rangeWithTwoIPs = "10.10.0.0/30"
+					replicaNumber   = 1
+				)
+
+				var podName string
+				var secondaryIPs []string
+				var ifNames = []string{"net1", "net2"}
+
+				var tinyNetwork *nettypes.NetworkAttachmentDefinition
+				var originalAllocations []v1alpha1.IPAllocation
+				var originalClusterWideAllocations []*v1alpha1.OverlappingRangeIPReservation
+
+				BeforeEach(func() {
+					var err error
+
+					podName = fmt.Sprintf("%s-0", serviceName)
+
+					tinyNetwork, err = clientInfo.AddNetAttachDef(
+						macvlanNetworkWithWhereaboutsIPAMNetwork(networkName, namespace, rangeWithTwoIPs, []string{}, wbstorage.UnnamedNetwork, true))
+					Expect(err).NotTo(HaveOccurred())
+
+					// Request 2 interfaces.
+					_, err = clientInfo.ProvisionStatefulSet(statefulSetName, namespace, serviceName, replicaNumber, networkName, networkName)
+					Expect(err).NotTo(HaveOccurred())
+
+					By("getting pod info")
+					pod, err := clientInfo.Client.CoreV1().Pods(namespace).Get(context.Background(), podName, metav1.GetOptions{})
+					Expect(err).NotTo(HaveOccurred())
+
+					By("verifying allocation")
+					for _, ifName := range ifNames {
+						secondaryIfaceIPs, err := retrievers.SecondaryIfaceIPValue(pod, ifName)
+						Expect(err).NotTo(HaveOccurred())
+
+						for _, ip := range secondaryIfaceIPs {
+							verifyAllocations(clientInfo, rangeWithTwoIPs, ip, namespace, podName, ifName)
+						}
+						secondaryIPs = append(secondaryIPs, secondaryIfaceIPs...)
+					}
+
+					By("saving initial allocations")
+					ipPool, err := clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(context.Background(), wbstorage.IPPoolName(wbstorage.PoolIdentifier{IpRange: rangeWithTwoIPs, NetworkName: wbstorage.UnnamedNetwork}), metav1.GetOptions{})
+					Expect(err).NotTo(HaveOccurred())
+
+					originalAllocations = allocationForPodRef(getPodRef(namespace, podName), *ipPool)
+					Expect(originalAllocations).To(HaveLen(2))
+
+					for _, ip := range secondaryIPs {
+						overlapping, err := clientInfo.WbClient.WhereaboutsV1alpha1().OverlappingRangeIPReservations(ipPoolNamespace).Get(context.Background(), wbstorage.NormalizeIP(net.ParseIP(ip), wbstorage.UnnamedNetwork), metav1.GetOptions{})
+						Expect(err).NotTo(HaveOccurred())
+						originalClusterWideAllocations = append(originalClusterWideAllocations, overlapping)
+					}
+				})
+
+				AfterEach(func() {
+					Expect(clientInfo.DelNetAttachDef(tinyNetwork)).To(Succeed())
+					Expect(clientInfo.DeleteStatefulSet(namespace, serviceName, selector)).To(Succeed())
+				})
+
+				It("can reclaim the previously allocated IPs", func() {
+					By("checking that the IP allocation is removed when the pod is deleted")
+					Expect(clientInfo.ScaleStatefulSet(serviceName, namespace, -1)).To(Succeed())
+					verifyNoAllocationsForPodRef(clientInfo, rangeWithTwoIPs, namespace, podName, secondaryIPs)
+
+					By("adding previous allocations")
+					ipPool, err := clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(context.Background(), wbstorage.IPPoolName(wbstorage.PoolIdentifier{IpRange: rangeWithTwoIPs, NetworkName: wbstorage.UnnamedNetwork}), metav1.GetOptions{})
+					Expect(err).NotTo(HaveOccurred())
+
+					updatedPool := ipPool.DeepCopy()
+					for i, ip := range secondaryIPs {
+						firstIP, _, err := net.ParseCIDR(ipv4TestRange)
+						Expect(err).NotTo(HaveOccurred())
+						offset, err := iphelpers.IPGetOffset(net.ParseIP(ip), firstIP)
+						Expect(err).NotTo(HaveOccurred())
+
+						updatedPool.Spec.Allocations[fmt.Sprintf("%d", offset)] = originalAllocations[i]
+					}
+
+					_, err = clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Update(context.Background(), updatedPool, metav1.UpdateOptions{})
+					Expect(err).NotTo(HaveOccurred())
+
+					for _, allocation := range originalClusterWideAllocations {
+						allocation.ResourceVersion = ""
+						_, err := clientInfo.WbClient.WhereaboutsV1alpha1().OverlappingRangeIPReservations(ipPoolNamespace).Create(context.Background(), allocation, metav1.CreateOptions{})
+						Expect(err).NotTo(HaveOccurred())
+					}
+
+					By("increasing replica count")
+					Expect(clientInfo.ScaleStatefulSet(serviceName, namespace, 1)).To(Succeed())
+					err = wbtestclient.WaitForStatefulSetCondition(context.Background(), clientInfo.Client, namespace, serviceName, replicaNumber, 1*time.Minute, wbtestclient.IsStatefulSetReadyPredicate)
+					Expect(err).NotTo(HaveOccurred())
+
+					By("getting pod info")
+					pod, err := clientInfo.Client.CoreV1().Pods(namespace).Get(context.Background(), podName, metav1.GetOptions{})
+					Expect(err).NotTo(HaveOccurred())
+
+					By("verifying allocation")
+					for _, ifName := range ifNames {
+						secondaryIfaceIPs, err := retrievers.SecondaryIfaceIPValue(pod, ifName)
+						Expect(err).NotTo(HaveOccurred())
+
+						for _, ip := range secondaryIfaceIPs {
+							verifyAllocations(clientInfo, rangeWithTwoIPs, ip, namespace, podName, ifName)
+						}
+						secondaryIPs = append(secondaryIPs, secondaryIfaceIPs...)
+					}
+
+					By("comparing with previous allocations")
+					ipPool, err = clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(context.Background(), wbstorage.IPPoolName(wbstorage.PoolIdentifier{IpRange: rangeWithTwoIPs, NetworkName: wbstorage.UnnamedNetwork}), metav1.GetOptions{})
+					Expect(err).NotTo(HaveOccurred())
+
+					currentAllocation := allocationForPodRef(getPodRef(namespace, podName), *ipPool)
+					Expect(currentAllocation).To(HaveLen(2))
+
+					for i, allocation := range currentAllocation {
+						Expect(allocation.ContainerID).ToNot(Equal(originalAllocations[i].ContainerID))
+						Expect(allocation.IfName).To(Equal(originalAllocations[i].IfName))
+						Expect(allocation.PodRef).To(Equal(originalAllocations[i].PodRef))
+					}
+				})
+			})
 		})
 
 		Context("OverlappingRangeIPReservation", func() {
