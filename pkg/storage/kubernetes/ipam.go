@@ -271,7 +271,7 @@ func (i *KubernetesIPAM) GetOverlappingRangeStore() (storage.OverlappingRangeSto
 // ranges.
 func (c *KubernetesOverlappingRangeStore) IsAllocatedInOverlappingRange(ctx context.Context, ip net.IP,
 	networkName string) (bool, error) {
-	normalizedIP := normalizeIP(ip, networkName)
+	normalizedIP := NormalizeIP(ip, networkName)
 
 	logging.Debugf("OverlappingRangewide allocation check; normalized IP: %q, IP: %q, networkName: %q",
 		normalizedIP, ip, networkName)
@@ -294,7 +294,7 @@ func (c *KubernetesOverlappingRangeStore) IsAllocatedInOverlappingRange(ctx cont
 // UpdateOverlappingRangeAllocation updates clusterwide allocation for overlapping ranges.
 func (c *KubernetesOverlappingRangeStore) UpdateOverlappingRangeAllocation(ctx context.Context, mode int, ip net.IP,
 	podRef, ifName, networkName string) error {
-	normalizedIP := normalizeIP(ip, networkName)
+	normalizedIP := NormalizeIP(ip, networkName)
 
 	clusteripres := &whereaboutsv1alpha1.OverlappingRangeIPReservation{
 		ObjectMeta: metav1.ObjectMeta{Name: normalizedIP, Namespace: c.namespace},
@@ -328,9 +328,9 @@ func (c *KubernetesOverlappingRangeStore) UpdateOverlappingRangeAllocation(ctx c
 	return nil
 }
 
-// normalizeIP normalizes the IP. This is important for IPv6 which doesn't make for valid CR names. It also allows us
+// NormalizeIP normalizes the IP. This is important for IPv6 which doesn't make for valid CR names. It also allows us
 // to add the network-name when it's different from the unnamed network.
-func normalizeIP(ip net.IP, networkName string) string {
+func NormalizeIP(ip net.IP, networkName string) string {
 	ipStr := fmt.Sprint(ip)
 	if ipStr[len(ipStr)-1] == ':' {
 		ipStr += "0"
