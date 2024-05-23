@@ -122,7 +122,7 @@ func CheckZeroIPPoolAllocationsAndReplicas(ctx context.Context, clientInfo *wbte
 			return err
 		}
 	} else {
-		if err = wbtestclient.WaitForZeroIPPoolAllocationsAcrossNodeSlices(k8sIPAM, ipPoolCIDR, zeroIPPoolTimeout, clientInfo); err != nil {
+		if err = wbtestclient.WaitForZeroIPPoolAllocationsAcrossNodeSlices(ctx, k8sIPAM, ipPoolCIDR, zeroIPPoolTimeout, clientInfo); err != nil {
 			return err
 		}
 	}
@@ -175,7 +175,6 @@ func MacvlanNetworkWithWhereaboutsIPAMNetwork(networkName string, namespaceName 
 }
 
 func MacvlanNetworkWithNodeSlice(networkName, namespaceName, ipRange, poolName, sliceSize string) *nettypes.NetworkAttachmentDefinition {
-	//TODO: fails without leader timeouts set
 	macvlanConfig := fmt.Sprintf(`{
         "cniVersion": "0.3.0",
         "disableCheck": true,
