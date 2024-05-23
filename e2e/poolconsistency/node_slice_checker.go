@@ -23,10 +23,10 @@ func (pc *NodeSliceChecker) MissingIPs() []string {
 	var mismatchedIPs []string
 	for _, pod := range pc.podList {
 		podIPs, err := retrievers.SecondaryIfaceIPValue(&pod)
-		podIP := podIPs[len(podIPs)-1]
 		if err != nil {
 			return []string{}
 		}
+		podIP := podIPs[len(podIPs)-1]
 
 		var found bool
 		for _, pool := range pc.ipPools {

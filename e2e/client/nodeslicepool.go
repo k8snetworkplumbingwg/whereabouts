@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -23,13 +24,16 @@ func GetNodeSubnet(cs *ClientInfo, nodeName, sliceName, namespace string) (strin
 }
 
 func WaitForNodeSliceReady(ctx context.Context, cs *ClientInfo, namespace, nodeSliceName string, timeout time.Duration) error {
-	return wait.PollUntilContextTimeout(ctx, time.Second, timeout, true, isNodeSliceReady(ctx, cs, nodeSliceName, namespace))
+	return wait.PollUntilContextTimeout(ctx, time.Second, timeout, true, isNodeSliceReady(ctx, cs, namespace, nodeSliceName))
 }
 
 func isNodeSliceReady(ctx context.Context, cs *ClientInfo, namespace, nodeSliceName string) wait.ConditionWithContextFunc {
 	return func(context.Context) (bool, error) {
 		_, err := cs.WbClient.WhereaboutsV1alpha1().NodeSlicePools(namespace).Get(ctx, nodeSliceName, metav1.GetOptions{})
 		if err != nil {
+			if errors.IsNotFound(err) {
+				return false, nil
+			}
 			return false, err
 		}
 

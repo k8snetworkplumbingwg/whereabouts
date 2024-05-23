@@ -200,7 +200,6 @@ func (f *fixture) newController(ctx context.Context) (*Controller, informers.Sha
 		f.nadClient,
 		kubeInformerFactory.Core().V1().Nodes(),
 		whereaboutsInformerFactory.Whereabouts().V1alpha1().NodeSlicePools(),
-		whereaboutsInformerFactory.Whereabouts().V1alpha1().IPPools(),
 		nadInformerFactory.K8sCniCncfIo().V1().NetworkAttachmentDefinitions(),
 		true)
 
