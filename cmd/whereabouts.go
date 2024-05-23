@@ -19,14 +19,14 @@ import (
 
 func cmdAddFunc(args *skel.CmdArgs) error {
 	ipamConf, confVersion, err := config.LoadIPAMConfig(args.StdinData, args.Args)
-    if err != nil {
+	if err != nil {
 		logging.Errorf("IPAM configuration load failed: %s", err)
 		return err
 	}
 	logging.Debugf("ADD - IPAM configuration successfully read: %+v", *ipamConf)
 	ipam, err := kubernetes.NewKubernetesIPAM(args.ContainerID, *ipamConf)
 	if err != nil {
-			return logging.Errorf("failed to create Kubernetes IPAM manager: %v", err)
+		return logging.Errorf("failed to create Kubernetes IPAM manager: %v", err)
 	}
 	defer func() { safeCloseKubernetesBackendConnection(ipam) }()
 	return cmdAdd(args, ipam, confVersion)
@@ -48,15 +48,14 @@ func cmdDelFunc(args *skel.CmdArgs) error {
 	return cmdDel(args, ipam)
 }
 
-
 func main() {
 	skel.PluginMainFuncs(skel.CNIFuncs{
-		Add:    cmdAddFunc,
-		Check:  cmdCheck,
-		Del:    cmdDelFunc,
-	}, 
-	cniversion.All, 
-	fmt.Sprintf("whereabouts %s", version.GetFullVersionWithRuntimeInfo()))
+		Add:   cmdAddFunc,
+		Check: cmdCheck,
+		Del:   cmdDelFunc,
+	},
+		cniversion.All,
+		fmt.Sprintf("whereabouts %s", version.GetFullVersionWithRuntimeInfo()))
 }
 
 func safeCloseKubernetesBackendConnection(ipam *kubernetes.KubernetesIPAM) {
@@ -110,10 +109,7 @@ func cmdDel(args *skel.CmdArgs, client *kubernetes.KubernetesIPAM) error {
 	ctx, cancel := context.WithTimeout(context.Background(), types.DelTimeLimit)
 	defer cancel()
 
-	_, err := kubernetes.IPManagement(ctx, types.Deallocate, client.Config, client)
-	if err != nil {
-		logging.Verbosef("WARNING: Problem deallocating IP: %s", err)
-	}
+	_, _ = kubernetes.IPManagement(ctx, types.Deallocate, client.Config, client)
 
 	return nil
 }
