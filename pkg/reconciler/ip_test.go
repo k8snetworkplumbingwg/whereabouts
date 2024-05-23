@@ -8,6 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"math/rand"
+	"strconv"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -146,9 +149,11 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 				It("should report the dead pod's IP address as deleted", func() {
 					deletedIPAddrs, err := reconcileLooper.ReconcileIPPools(context.TODO())
 					Expect(err).NotTo(HaveOccurred())
+					// !bang this looks like a problem area...
 					Expect(deletedIPAddrs).To(Equal([]net.IP{net.ParseIP("10.10.10.1")}))
 				})
 
+				// !bang this can also be a problem area...
 				It("the IPPool should have only the IP reservation of the live pod", func() {
 					deletedIPAddrs, err := reconcileLooper.ReconcileIPPools(context.TODO())
 					Expect(err).NotTo(HaveOccurred())
@@ -162,7 +167,10 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 							PodRef: fmt.Sprintf("%s/%s", namespace, pods[livePodIndex].Name),
 						},
 					}
-					Expect(poolAfterCleanup.Spec.Allocations).To(Equal(remainingAllocation))
+
+					for key, val := range poolAfterCleanup.Spec.Allocations {
+						Expect(val.PodRef).To(Equal(remainingAllocation[key].PodRef), "Mismatch at key: "+key)
+					}
 				})
 			})
 		})
@@ -384,7 +392,8 @@ var _ = Describe("IPReconciler", func() {
 
 		BeforeEach(func() {
 			podRef := "default/pod1"
-			reservations := generateIPReservation(firstIPInRange, podRef)
+			containerID := "1234567890"
+			reservations := generateIPReservation(firstIPInRange, podRef, containerID)
 
 			pool := generateIPPool(ipCIDR, podRef)
 			orphanedIPAddr := OrphanedIPReservations{
@@ -404,7 +413,8 @@ var _ = Describe("IPReconciler", func() {
 		Context("and they are actually multiple IPs", func() {
 			BeforeEach(func() {
 				podRef := "default/pod2"
-				reservations := generateIPReservation("192.168.14.2", podRef)
+				containerID := "1234567890"
+				reservations := generateIPReservation("192.168.14.2", podRef, containerID)
 
 				pool := generateIPPool(ipCIDR, podRef, "default/pod2", "default/pod3")
 				orphanedIPAddr := OrphanedIPReservations{
@@ -423,12 +433,14 @@ var _ = Describe("IPReconciler", func() {
 		})
 
 		Context("but the IP reservation owner does not match", func() {
-			var reservationPodRef string
+			var reservationPodRef, reservationContainerID string
 			BeforeEach(func() {
-				reservationPodRef = "default/pod2"
+				reservationPodRef = "default/pod1"
+				reservationContainerID = "1234567890"
 				podRef := "default/pod1"
-				reservations := generateIPReservation(firstIPInRange, podRef)
-				erroredReservations := generateIPReservation(firstIPInRange, reservationPodRef)
+				podContainerID := "0987654321"
+				reservations := generateIPReservation(firstIPInRange, podRef, podContainerID)
+				erroredReservations := generateIPReservation(firstIPInRange, reservationPodRef, reservationContainerID)
 
 				pool := generateIPPool(ipCIDR, podRef)
 				orphanedIPAddr := OrphanedIPReservations{
@@ -441,7 +453,7 @@ var _ = Describe("IPReconciler", func() {
 
 			It("errors when attempting to clean up the IP address", func() {
 				reconciledIPs, err := ipReconciler.ReconcileIPPools(context.TODO())
-				Expect(err).To(MatchError(fmt.Sprintf("did not find reserved IP for container %s", reservationPodRef)))
+				Expect(err).To(MatchError(fmt.Sprintf("did not find reserved IP for container %s", reservationContainerID)))
 				Expect(reconciledIPs).To(BeEmpty())
 			})
 		})
@@ -452,7 +464,8 @@ func generateIPPoolSpec(ipRange string, namespace string, poolName string, podNa
 	allocations := map[string]v1alpha1.IPAllocation{}
 	for i, podName := range podNames {
 		allocations[fmt.Sprintf("%d", i+1)] = v1alpha1.IPAllocation{
-			PodRef: fmt.Sprintf("%s/%s", namespace, podName),
+			PodRef:      fmt.Sprintf("%s/%s", namespace, podName),
+			ContainerID: strconv.Itoa(rand.Intn(1000)),
 		}
 	}
 	return &v1alpha1.IPPool{
@@ -547,11 +560,12 @@ func generateIPPool(cidr string, podRefs ...string) v1alpha1.IPPool {
 	}
 }
 
-func generateIPReservation(ip string, podRef string) []types.IPReservation {
+func generateIPReservation(ip string, podRef, containerID string) []types.IPReservation {
 	return []types.IPReservation{
 		{
-			IP:     net.ParseIP(ip),
-			PodRef: podRef,
+			IP:          net.ParseIP(ip),
+			PodRef:      podRef,
+			ContainerID: containerID,
 		},
 	}
 }
