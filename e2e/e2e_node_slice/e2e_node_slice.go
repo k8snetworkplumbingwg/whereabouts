@@ -1,4 +1,4 @@
-package whereabouts_e2e
+package e2e_node_slice
 
 import (
 	"context"
