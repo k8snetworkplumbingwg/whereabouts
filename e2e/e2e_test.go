@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/k8snetworkplumbingwg/whereabouts/e2e/util"
-	"k8s.io/client-go/tools/clientcmd"
 	"net"
-	"os"
 	"sort"
 	"strings"
 	"testing"
@@ -910,57 +908,9 @@ func allocationForPodRef(podRef string, ipPool v1alpha1.IPPool) []v1alpha1.IPAll
 	return allocations
 }
 
-func clusterConfig() (*rest.Config, error) {
-	const kubeconfig = "KUBECONFIG"
-
-	kubeconfigPath, found := os.LookupEnv(kubeconfig)
-	if !found {
-		return nil, fmt.Errorf("must provide the path to the kubeconfig via the `KUBECONFIG` env variable")
-	}
-
-	config, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
-	if err != nil {
-		return nil, err
-	}
-	return config, nil
-}
-
 func podTierLabel(podTier string) map[string]string {
 	const tier = "tier"
 	return map[string]string{tier: podTier}
-}
-
-// Waits for all replicas to be fully removed from replicaset, and checks that there are 0 ip pool allocations
-func checkZeroIPPoolAllocationsAndReplicas(ctx context.Context, clientInfo *wbtestclient.ClientInfo, k8sIPAM *wbstorage.KubernetesIPAM, rsName, namespace string, ipPoolCIDR string, networkNames ...string) error {
-	const (
-		emptyReplicaSet   = 0
-		rsSteadyTimeout   = 1200 * time.Second
-		zeroIPPoolTimeout = 2 * time.Minute
-	)
-	var err error
-
-	replicaSet, err := clientInfo.UpdateReplicaSet(
-		entities.ReplicaSetObject(
-			emptyReplicaSet,
-			rsName,
-			namespace,
-			podTierLabel(rsName),
-			entities.PodNetworkSelectionElements(networkNames...),
-		))
-	if err != nil {
-		return err
-	}
-
-	matchingLabel := entities.ReplicaSetQuery(rsName)
-	if err = wbtestclient.WaitForReplicaSetSteadyState(ctx, clientInfo.Client, namespace, matchingLabel, replicaSet, rsSteadyTimeout); err != nil {
-		return err
-	}
-
-	if err = wbtestclient.WaitForZeroIPPoolAllocations(ctx, k8sIPAM, ipPoolCIDR, zeroIPPoolTimeout); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 // Returns a network attachment definition object configured by provided parameters

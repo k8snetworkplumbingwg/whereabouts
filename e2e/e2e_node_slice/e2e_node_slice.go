@@ -1,9 +1,9 @@
+//lint:file-ignore ST1001 should not use dot imports, it's a common practice for ginkgo, this is essentially a test file
 package e2e_node_slice
 
 import (
 	"context"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
-	"testing"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -27,18 +27,13 @@ import (
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 )
 
-func TestWhereaboutsE2ENodeSlice(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "whereabouts-e2e-node-slice")
-}
-
 var _ = Describe("Whereabouts node slice functionality", func() {
 	Context("Test setup", func() {
 		const (
 			testNamespace   = "default"
 			ipv4TestRange   = "10.0.0.0/8"
 			sliceSize       = "/20" // tests will depend on subnets being > node count of test environment
-			testNetworkName = "wa-nad"
+			testNetworkName = "net1"
 			subnets         = 4096
 			rsName          = "whereabouts-scale-test"
 		)
