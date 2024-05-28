@@ -194,6 +194,34 @@ Similar to above, `ipRanges` can be used for configuring DualStack
 }
 ```
 
+## Fast IPAM by Using Preallocated Node Slices [Experimental]
+
+**Enhance IPAM performance in large-scale Kubernetes environments by reducing IP allocation contention through node-based IP slicing.**
+
+### Fast IPAM Configuration
+
+apiVersion: "k8s.cni.cncf.io/v1"
+kind: NetworkAttachmentDefinition
+metadata:
+  name: whereabouts-fast-ipam
+spec:
+  config: '{
+    "cniVersion": "0.3.0",
+    "name": "whereaboutsexample",
+    "type": "macvlan",
+    "master": "eth0",
+    "mode": "bridge",
+    "ipam": {
+      "type": "whereabouts",
+      "range": "192.168.2.0/24",
+      "fast_ipam": true,
+      "node_slice size": "/22",
+      "namespace": "namespace of network attachment definitions and whereabouts deployment"
+  }
+}'
+
+This setup enables the fast IPAM feature to optimize IP allocation for nodes, improving network performance in clusters with high pod density.
+
 ## Core Parameters
 
 **Required**
