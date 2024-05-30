@@ -10,7 +10,7 @@ import (
 
 var (
 	// RequestTimeout defines how long the context timesout in
-	RequestTimeout = 10 * time.Second
+	RequestTimeout = 100 * time.Second
 
 	// DatastoreRetries defines how many retries are attempted when updating the Pool
 	DatastoreRetries  = 100
