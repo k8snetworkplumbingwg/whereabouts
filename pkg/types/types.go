@@ -187,7 +187,8 @@ type Address struct {
 type IPReservation struct {
 	IP          net.IP `json:"ip"`
 	ContainerID string `json:"id"`
-	PodRef      string `json:"podref,omitempty"`
+	PodRef      string `json:"podref"`
+	IfName      string `json:"ifName"`
 	IsAllocated bool
 }
 

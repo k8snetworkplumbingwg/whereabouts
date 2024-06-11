@@ -15,6 +15,7 @@ import (
 
 	v1 "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -27,12 +28,14 @@ import (
 	"github.com/k8snetworkplumbingwg/whereabouts/e2e/retrievers"
 	testenv "github.com/k8snetworkplumbingwg/whereabouts/e2e/testenvironment"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/iphelpers"
 	wbstorage "github.com/k8snetworkplumbingwg/whereabouts/pkg/storage/kubernetes"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 )
 
 const (
 	createPodTimeout = 10 * time.Second
+	ipPoolNamespace  = "kube-system"
 )
 
 func TestWhereaboutsE2E(t *testing.T) {
@@ -86,10 +89,15 @@ var _ = Describe("Whereabouts functionality", func() {
 		})
 
 		Context("Single pod tests", func() {
-			BeforeEach(func() {
-				const singlePodName = "whereabouts-basic-test"
-				var err error
+			const singlePodName = "whereabouts-basic-test"
+			var err error
 
+			AfterEach(func() {
+				By("deleting pod with whereabouts net-attach-def")
+				_ = clientInfo.DeletePod(pod)
+			})
+
+			It("allocates a single pod with a single interface", func() {
 				By("creating a pod with whereabouts net-attach-def")
 				pod, err = clientInfo.ProvisionPod(
 					singlePodName,
@@ -98,19 +106,55 @@ var _ = Describe("Whereabouts functionality", func() {
 					entities.PodNetworkSelectionElements(testNetworkName),
 				)
 				Expect(err).NotTo(HaveOccurred())
-			})
 
-			AfterEach(func() {
-				By("deleting pod with whereabouts net-attach-def")
-				Expect(clientInfo.DeletePod(pod)).To(Succeed())
-			})
-
-			It("allocates a single pod within the correct IP range", func() {
 				By("checking pod IP is within whereabouts IPAM range")
-				secondaryIfaceIPs, err := retrievers.SecondaryIfaceIPValue(pod)
+				secondaryIfaceIPs, err := retrievers.SecondaryIfaceIPValue(pod, "net1")
 				Expect(err).NotTo(HaveOccurred())
 				Expect(secondaryIfaceIPs).NotTo(BeEmpty())
 				Expect(inRange(ipv4TestRange, secondaryIfaceIPs[0])).To(Succeed())
+
+				By("verifying allocation")
+				verifyAllocations(clientInfo, ipv4TestRange, secondaryIfaceIPs[0], testNamespace, pod.Name, "net1")
+
+				By("deleting pod")
+				err = clientInfo.DeletePod(pod)
+				Expect(err).NotTo(HaveOccurred())
+
+				By("checking that the IP allocation is removed")
+				verifyNoAllocationsForPodRef(clientInfo, ipv4TestRange, testNamespace, pod.Name, secondaryIfaceIPs)
+			})
+			It("allocates a single pod with multiple interfaces", func() {
+				By("creating a pod with whereabouts net-attach-def")
+				pod, err = clientInfo.ProvisionPod(
+					singlePodName,
+					testNamespace,
+					podTierLabel(singlePodName),
+					entities.PodNetworkSelectionElements(testNetworkName, testNetworkName, testNetworkName),
+				)
+				Expect(err).NotTo(HaveOccurred())
+
+				By("checking pod IP is within whereabouts IPAM range")
+				var secondaryIPs []string
+
+				for _, ifName := range []string{"net1", "net2", "net3"} {
+					secondaryIfaceIPs, err := retrievers.SecondaryIfaceIPValue(pod, ifName)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(secondaryIfaceIPs).NotTo(BeEmpty())
+					for _, ip := range secondaryIfaceIPs {
+						Expect(inRange(ipv4TestRange, ip)).To(Succeed())
+
+						By("verifying allocation")
+						verifyAllocations(clientInfo, ipv4TestRange, ip, testNamespace, pod.Name, ifName)
+					}
+					secondaryIPs = append(secondaryIPs, secondaryIfaceIPs...)
+				}
+
+				By("deleting pod")
+				err = clientInfo.DeletePod(pod)
+				Expect(err).NotTo(HaveOccurred())
+
+				By("checking that the IP allocation is removed")
+				verifyNoAllocationsForPodRef(clientInfo, ipv4TestRange, testNamespace, pod.Name, secondaryIPs)
 			})
 		})
 
@@ -160,7 +204,7 @@ var _ = Describe("Whereabouts functionality", func() {
 
 				It("allocates a single pod within the correct IP ranges", func() {
 					By("checking pod IP is within whereabouts IPAM ranges")
-					secondaryIfaceIPs, err := retrievers.SecondaryIfaceIPValue(pod)
+					secondaryIfaceIPs, err := retrievers.SecondaryIfaceIPValue(pod, "net1")
 					Expect(err).NotTo(HaveOccurred())
 					Expect(secondaryIfaceIPs).To(HaveLen(2))
 					Expect(inRange(dualStackIPv4Range, secondaryIfaceIPs[0])).To(Succeed())
@@ -202,7 +246,7 @@ var _ = Describe("Whereabouts functionality", func() {
 
 				It("allocates a single pod within the correct IP ranges", func() {
 					By("checking pod IP is within whereabouts IPAM ranges")
-					secondaryIfaceIPs, err := retrievers.SecondaryIfaceIPValue(pod)
+					secondaryIfaceIPs, err := retrievers.SecondaryIfaceIPValue(pod, "net1")
 					Expect(err).NotTo(HaveOccurred())
 					Expect(secondaryIfaceIPs).To(HaveLen(3))
 					Expect(inRange(ipv4TestRange, secondaryIfaceIPs[0])).To(Succeed())
@@ -225,8 +269,7 @@ var _ = Describe("Whereabouts functionality", func() {
 				By("creating a replicaset with whereabouts net-attach-def")
 				var err error
 
-				const ipPoolNamespace = "kube-system"
-				k8sIPAM, err = wbstorage.NewKubernetesIPAMWithNamespace("", types.IPAMConfig{
+				k8sIPAM, err = wbstorage.NewKubernetesIPAMWithNamespace("", "", types.IPAMConfig{
 					Kubernetes: types.KubernetesConfig{
 						KubeConfigPath: testConfig.KubeconfigPath,
 					},
@@ -296,7 +339,6 @@ var _ = Describe("Whereabouts functionality", func() {
 		Context("stateful set tests", func() {
 			const (
 				initialReplicaNumber = 20
-				ipPoolNamespace      = "kube-system"
 				namespace            = "default"
 				serviceName          = "web"
 				selector             = "app=" + serviceName
@@ -484,8 +526,135 @@ var _ = Describe("Whereabouts functionality", func() {
 						Expect(err).NotTo(HaveOccurred())
 						Expect(ipPool.Spec.Allocations).NotTo(BeEmpty())
 
-						Expect(allocationForPodRef(podRef, *ipPool).ContainerID).NotTo(Equal(containerID))
+						Expect(allocationForPodRef(podRef, *ipPool)[0].ContainerID).NotTo(Equal(containerID))
+						Expect(allocationForPodRef(podRef, *ipPool)[0].PodRef).To(Equal(podRef))
 					})
+				})
+			})
+
+			Context("reclaim previously allocated IP", func() {
+				const (
+					namespace       = "default"
+					networkName     = "recovernet"
+					rangeWithTwoIPs = "10.10.0.0/30"
+					replicaNumber   = 1
+				)
+
+				var podName string
+				var secondaryIPs []string
+				var ifNames = []string{"net1", "net2"}
+
+				var tinyNetwork *nettypes.NetworkAttachmentDefinition
+				var originalAllocations []v1alpha1.IPAllocation
+				var originalClusterWideAllocations []*v1alpha1.OverlappingRangeIPReservation
+
+				BeforeEach(func() {
+					var err error
+
+					podName = fmt.Sprintf("%s-0", serviceName)
+
+					tinyNetwork, err = clientInfo.AddNetAttachDef(
+						macvlanNetworkWithWhereaboutsIPAMNetwork(networkName, namespace, rangeWithTwoIPs, []string{}, wbstorage.UnnamedNetwork, true))
+					Expect(err).NotTo(HaveOccurred())
+
+					// Request 2 interfaces.
+					_, err = clientInfo.ProvisionStatefulSet(statefulSetName, namespace, serviceName, replicaNumber, networkName, networkName)
+					Expect(err).NotTo(HaveOccurred())
+
+					By("getting pod info")
+					pod, err := clientInfo.Client.CoreV1().Pods(namespace).Get(context.Background(), podName, metav1.GetOptions{})
+					Expect(err).NotTo(HaveOccurred())
+
+					By("verifying allocation")
+					for _, ifName := range ifNames {
+						secondaryIfaceIPs, err := retrievers.SecondaryIfaceIPValue(pod, ifName)
+						Expect(err).NotTo(HaveOccurred())
+
+						for _, ip := range secondaryIfaceIPs {
+							verifyAllocations(clientInfo, rangeWithTwoIPs, ip, namespace, podName, ifName)
+						}
+						secondaryIPs = append(secondaryIPs, secondaryIfaceIPs...)
+					}
+
+					By("saving initial allocations")
+					ipPool, err := clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(context.Background(), wbstorage.IPPoolName(wbstorage.PoolIdentifier{IpRange: rangeWithTwoIPs, NetworkName: wbstorage.UnnamedNetwork}), metav1.GetOptions{})
+					Expect(err).NotTo(HaveOccurred())
+
+					originalAllocations = allocationForPodRef(getPodRef(namespace, podName), *ipPool)
+					Expect(originalAllocations).To(HaveLen(2))
+
+					for _, ip := range secondaryIPs {
+						overlapping, err := clientInfo.WbClient.WhereaboutsV1alpha1().OverlappingRangeIPReservations(ipPoolNamespace).Get(context.Background(), wbstorage.NormalizeIP(net.ParseIP(ip), wbstorage.UnnamedNetwork), metav1.GetOptions{})
+						Expect(err).NotTo(HaveOccurred())
+						originalClusterWideAllocations = append(originalClusterWideAllocations, overlapping)
+					}
+				})
+
+				AfterEach(func() {
+					Expect(clientInfo.DelNetAttachDef(tinyNetwork)).To(Succeed())
+					Expect(clientInfo.DeleteStatefulSet(namespace, serviceName, selector)).To(Succeed())
+				})
+
+				It("can reclaim the previously allocated IPs", func() {
+					By("checking that the IP allocation is removed when the pod is deleted")
+					Expect(clientInfo.ScaleStatefulSet(serviceName, namespace, -1)).To(Succeed())
+					verifyNoAllocationsForPodRef(clientInfo, rangeWithTwoIPs, namespace, podName, secondaryIPs)
+
+					By("adding previous allocations")
+					ipPool, err := clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(context.Background(), wbstorage.IPPoolName(wbstorage.PoolIdentifier{IpRange: rangeWithTwoIPs, NetworkName: wbstorage.UnnamedNetwork}), metav1.GetOptions{})
+					Expect(err).NotTo(HaveOccurred())
+
+					updatedPool := ipPool.DeepCopy()
+					for i, ip := range secondaryIPs {
+						firstIP, _, err := net.ParseCIDR(ipv4TestRange)
+						Expect(err).NotTo(HaveOccurred())
+						offset, err := iphelpers.IPGetOffset(net.ParseIP(ip), firstIP)
+						Expect(err).NotTo(HaveOccurred())
+
+						updatedPool.Spec.Allocations[fmt.Sprintf("%d", offset)] = originalAllocations[i]
+					}
+
+					_, err = clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Update(context.Background(), updatedPool, metav1.UpdateOptions{})
+					Expect(err).NotTo(HaveOccurred())
+
+					for _, allocation := range originalClusterWideAllocations {
+						allocation.ResourceVersion = ""
+						_, err := clientInfo.WbClient.WhereaboutsV1alpha1().OverlappingRangeIPReservations(ipPoolNamespace).Create(context.Background(), allocation, metav1.CreateOptions{})
+						Expect(err).NotTo(HaveOccurred())
+					}
+
+					By("increasing replica count")
+					Expect(clientInfo.ScaleStatefulSet(serviceName, namespace, 1)).To(Succeed())
+					err = wbtestclient.WaitForStatefulSetCondition(context.Background(), clientInfo.Client, namespace, serviceName, replicaNumber, 1*time.Minute, wbtestclient.IsStatefulSetReadyPredicate)
+					Expect(err).NotTo(HaveOccurred())
+
+					By("getting pod info")
+					pod, err := clientInfo.Client.CoreV1().Pods(namespace).Get(context.Background(), podName, metav1.GetOptions{})
+					Expect(err).NotTo(HaveOccurred())
+
+					By("verifying allocation")
+					for _, ifName := range ifNames {
+						secondaryIfaceIPs, err := retrievers.SecondaryIfaceIPValue(pod, ifName)
+						Expect(err).NotTo(HaveOccurred())
+
+						for _, ip := range secondaryIfaceIPs {
+							verifyAllocations(clientInfo, rangeWithTwoIPs, ip, namespace, podName, ifName)
+						}
+						secondaryIPs = append(secondaryIPs, secondaryIfaceIPs...)
+					}
+
+					By("comparing with previous allocations")
+					ipPool, err = clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(context.Background(), wbstorage.IPPoolName(wbstorage.PoolIdentifier{IpRange: rangeWithTwoIPs, NetworkName: wbstorage.UnnamedNetwork}), metav1.GetOptions{})
+					Expect(err).NotTo(HaveOccurred())
+
+					currentAllocation := allocationForPodRef(getPodRef(namespace, podName), *ipPool)
+					Expect(currentAllocation).To(HaveLen(2))
+
+					for i, allocation := range currentAllocation {
+						Expect(allocation.ContainerID).ToNot(Equal(originalAllocations[i].ContainerID))
+						Expect(allocation.IfName).To(Equal(originalAllocations[i].IfName))
+						Expect(allocation.PodRef).To(Equal(originalAllocations[i].PodRef))
+					}
 				})
 			})
 		})
@@ -550,13 +719,14 @@ var _ = Describe("Whereabouts functionality", func() {
 					})
 
 					It("allocates the correct IP address to the second pod", func() {
+						ifName := "net1"
 						By("checking pod IP is within whereabouts IPAM range")
-						secondaryIfaceIPs, err := retrievers.SecondaryIfaceIPValue(pod)
+						secondaryIfaceIPs, err := retrievers.SecondaryIfaceIPValue(pod, ifName)
 						Expect(err).NotTo(HaveOccurred())
 						Expect(secondaryIfaceIPs).NotTo(BeEmpty())
 
 						By("checking pod 2 IP is within whereabouts IPAM range")
-						secondaryIfaceIPs2, err := retrievers.SecondaryIfaceIPValue(pod2)
+						secondaryIfaceIPs2, err := retrievers.SecondaryIfaceIPValue(pod2, ifName)
 						Expect(err).NotTo(HaveOccurred())
 						Expect(secondaryIfaceIPs2).NotTo(BeEmpty())
 
@@ -655,19 +825,20 @@ var _ = Describe("Whereabouts functionality", func() {
 			})
 
 			It("allocates the same IP to the Pods as they are in different address collision domains", func() {
+				ifName := "net1"
 				By("checking pod IP is within whereabouts IPAM range")
-				secondaryIfaceIPs, err := retrievers.SecondaryIfaceIPValue(pod)
+				secondaryIfaceIPs, err := retrievers.SecondaryIfaceIPValue(pod, ifName)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(secondaryIfaceIPs).NotTo(BeEmpty())
 
 				By("checking pod 2 IP is within whereabouts IPAM range and has the same IP as pod 1")
-				secondaryIfaceIPs2, err := retrievers.SecondaryIfaceIPValue(pod2)
+				secondaryIfaceIPs2, err := retrievers.SecondaryIfaceIPValue(pod2, ifName)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(secondaryIfaceIPs2).NotTo(BeEmpty())
 				Expect(secondaryIfaceIPs[0]).To(Equal(secondaryIfaceIPs2[0]))
 
 				By("checking pod 3 IP is within whereabouts IPAM range and has a different IP from pod 2")
-				secondaryIfaceIPs3, err := retrievers.SecondaryIfaceIPValue(pod3)
+				secondaryIfaceIPs3, err := retrievers.SecondaryIfaceIPValue(pod3, ifName)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(secondaryIfaceIPs3).NotTo(BeEmpty())
 				Expect(secondaryIfaceIPs2[0]).NotTo(Equal(secondaryIfaceIPs3[0]))
@@ -676,13 +847,55 @@ var _ = Describe("Whereabouts functionality", func() {
 	})
 })
 
-func allocationForPodRef(podRef string, ipPool v1alpha1.IPPool) *v1alpha1.IPAllocation {
+func verifyNoAllocationsForPodRef(clientInfo *wbtestclient.ClientInfo, ipv4TestRange, testNamespace, podName string, secondaryIfaceIPs []string) {
+	Eventually(func() bool {
+		ipPool, err := clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(context.Background(), wbstorage.IPPoolName(wbstorage.PoolIdentifier{IpRange: ipv4TestRange, NetworkName: wbstorage.UnnamedNetwork}), metav1.GetOptions{})
+		Expect(err).NotTo(HaveOccurred())
+
+		allocation := allocationForPodRef(getPodRef(testNamespace, podName), *ipPool)
+		return len(allocation) == 0
+	}, 3*time.Second, 500*time.Millisecond).Should(BeTrue())
+
+	for _, ip := range secondaryIfaceIPs {
+		Eventually(func() bool {
+			_, err := clientInfo.WbClient.WhereaboutsV1alpha1().OverlappingRangeIPReservations(ipPoolNamespace).Get(context.Background(), wbstorage.NormalizeIP(net.ParseIP(ip), wbstorage.UnnamedNetwork), metav1.GetOptions{})
+			if err != nil && errors.IsNotFound(err) {
+				return true
+			}
+			return false
+		}, 3*time.Second, 500*time.Millisecond).Should(BeTrue())
+	}
+}
+
+func verifyAllocations(clientInfo *wbtestclient.ClientInfo, ipv4TestRange, ip, testNamespace, podName, ifName string) {
+	ipPool, err := clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(context.Background(), wbstorage.IPPoolName(wbstorage.PoolIdentifier{IpRange: ipv4TestRange, NetworkName: wbstorage.UnnamedNetwork}), metav1.GetOptions{})
+	Expect(err).NotTo(HaveOccurred())
+
+	firstIP, _, err := net.ParseCIDR(ipv4TestRange)
+	Expect(err).NotTo(HaveOccurred())
+	offset, err := iphelpers.IPGetOffset(net.ParseIP(ip), firstIP)
+	Expect(err).NotTo(HaveOccurred())
+
+	allocation, ok := ipPool.Spec.Allocations[fmt.Sprintf("%d", offset)]
+	Expect(ok).To(BeTrue())
+	Expect(allocation.PodRef).To(Equal(getPodRef(testNamespace, podName)))
+	Expect(allocation.IfName).To(Equal(ifName))
+
+	overlapping, err := clientInfo.WbClient.WhereaboutsV1alpha1().OverlappingRangeIPReservations(ipPoolNamespace).Get(context.Background(), wbstorage.NormalizeIP(net.ParseIP(ip), wbstorage.UnnamedNetwork), metav1.GetOptions{})
+	Expect(err).NotTo(HaveOccurred())
+
+	Expect(overlapping.Spec.IfName).To(Equal(ifName))
+	Expect(overlapping.Spec.PodRef).To(Equal(getPodRef(testNamespace, podName)))
+}
+
+func allocationForPodRef(podRef string, ipPool v1alpha1.IPPool) []v1alpha1.IPAllocation {
+	var allocations []v1alpha1.IPAllocation
 	for _, allocation := range ipPool.Spec.Allocations {
 		if allocation.PodRef == podRef {
-			return &allocation
+			allocations = append(allocations, allocation)
 		}
 	}
-	return nil
+	return allocations
 }
 
 func clusterConfig() (*rest.Config, error) {
@@ -759,25 +972,21 @@ func macvlanNetworkWithWhereaboutsIPAMNetwork(networkName string, namespaceName 
 	macvlanConfig := fmt.Sprintf(`{
         "cniVersion": "0.3.0",
         "disableCheck": true,
-        "plugins": [
-            {
-                "type": "macvlan",
-                "master": "eth0",
-                "mode": "bridge",
-                "ipam": {
-                    "type": "whereabouts",
-                    "leader_lease_duration": 1500,
-                    "leader_renew_deadline": 1000,
-                    "leader_retry_period": 500,
-                    "range": "%s",
-                    "ipRanges": %s,
-                    "log_level": "debug",
-                    "log_file": "/tmp/wb",
-                    "network_name": "%s",
-                    "enable_overlapping_ranges": %v
-                }
-            }
-        ]
+        "type": "macvlan",
+        "master": "eth0",
+        "mode": "bridge",
+        "ipam": {
+            "type": "whereabouts",
+            "leader_lease_duration": 1500,
+            "leader_renew_deadline": 1000,
+            "leader_retry_period": 500,
+            "range": "%s",
+            "ipRanges": %s,
+            "log_level": "debug",
+            "log_file": "/tmp/wb",
+            "network_name": "%s",
+            "enable_overlapping_ranges": %v
+        }
     }`, ipRange, createIPRanges(ipRanges), poolName, enableOverlappingRanges)
 	return generateNetAttachDefSpec(networkName, namespaceName, macvlanConfig)
 }
@@ -803,4 +1012,8 @@ func createIPRanges(ranges []string) string {
 	}
 	ipRanges := "[" + strings.Join(formattedRanges[:], ",") + "]"
 	return ipRanges
+}
+
+func getPodRef(namespace, name string) string {
+	return fmt.Sprintf("%s/%s", namespace, name)
 }

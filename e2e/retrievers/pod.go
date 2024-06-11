@@ -19,7 +19,7 @@ func filterNetworkStatus(
 	return nil
 }
 
-func SecondaryIfaceIPValue(pod *core.Pod) ([]string, error) {
+func SecondaryIfaceIPValue(pod *core.Pod, ifName string) ([]string, error) {
 	podNetStatus, found := pod.Annotations[nettypes.NetworkStatusAnnot]
 	if !found {
 		return nil, fmt.Errorf("the pod must feature the `networks-status` annotation")
@@ -31,7 +31,7 @@ func SecondaryIfaceIPValue(pod *core.Pod) ([]string, error) {
 	}
 
 	secondaryInterfaceNetworkStatus := filterNetworkStatus(netStatus, func(status nettypes.NetworkStatus) bool {
-		return status.Interface == "net1"
+		return status.Interface == ifName
 	})
 
 	if secondaryInterfaceNetworkStatus == nil {
