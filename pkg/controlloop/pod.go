@@ -225,7 +225,7 @@ func (pc *PodController) garbageCollectPodIPs(pod *v1.Pod) error {
 				if allocation.PodRef == podID(podNamespace, podName) {
 					logging.Verbosef("stale allocation to cleanup: %+v", allocation)
 
-					client := *wbclient.NewKubernetesClient(nil, pc.k8sClient, 0)
+					client := *wbclient.NewKubernetesClient(nil, pc.k8sClient)
 					wbClient := &wbclient.KubernetesIPAM{
 						Client: client,
 						Config: *ipamConfig,

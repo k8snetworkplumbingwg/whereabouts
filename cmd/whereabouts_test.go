@@ -57,8 +57,7 @@ func AllocateAndReleaseAddressesTest(ipRange string, gw string, kubeconfigPath s
 	wbClient := *kubernetes.NewKubernetesClient(
 		fake.NewSimpleClientset(
 			ipPool(conf.IPRanges[0].Range, podNamespace, ipamNetworkName)),
-		fakek8sclient.NewSimpleClientset(),
-		0)
+		fakek8sclient.NewSimpleClientset())
 
 	for i := 0; i < len(expectedAddresses); i++ {
 		name := fmt.Sprintf("%s-%d", podName, i)
@@ -164,8 +163,7 @@ var _ = Describe("Whereabouts operations", func() {
 			fake.NewSimpleClientset(
 				ipPool(ipamConf.IPRanges[0].Range, podNamespace, ipamNetworkName, []whereaboutstypes.IPReservation{
 					{PodRef: ipamConf.GetPodRef(), IfName: ifname, IP: net.ParseIP(expectedAddress)}, {PodRef: "test"}}...)),
-			fakek8sclient.NewSimpleClientset(),
-			0)
+			fakek8sclient.NewSimpleClientset())
 
 		cniConf, err := newCNINetConf(cniVersion, ipamConf)
 		Expect(err).NotTo(HaveOccurred())
@@ -928,8 +926,7 @@ var _ = Describe("Whereabouts operations", func() {
 		wbClient := *kubernetes.NewKubernetesClient(
 			fake.NewSimpleClientset(
 				ipPool(ipamConf.IPRanges[0].Range, podNamespace, ipamConf.NetworkName)),
-			fakek8sclient.NewSimpleClientset(),
-			0)
+			fakek8sclient.NewSimpleClientset())
 
 		// allocate 8 IPs (192.168.1.5 - 192.168.1.12); the entirety of the pool defined above
 		for i := 0; i < 8; i++ {
@@ -1000,8 +997,7 @@ var _ = Describe("Whereabouts operations", func() {
 		wbClient := *kubernetes.NewKubernetesClient(
 			fake.NewSimpleClientset(
 				ipPool(firstRange, podNamespace, ""), ipPool(secondRange, podNamespace, "")),
-			fakek8sclient.NewSimpleClientset(),
-			0)
+			fakek8sclient.NewSimpleClientset())
 
 		// ----------------------------- range 1
 
@@ -1124,8 +1120,7 @@ var _ = Describe("Whereabouts operations", func() {
 		wbClient := *kubernetes.NewKubernetesClient(
 			fake.NewSimpleClientset(
 				ipPool(firstRange, podNamespace, ""), ipPool(secondRange, podNamespace, "")),
-			fakek8sclient.NewSimpleClientset(),
-			0)
+			fakek8sclient.NewSimpleClientset())
 
 		// ----------------------------- range 1
 
@@ -1248,8 +1243,7 @@ var _ = Describe("Whereabouts operations", func() {
 		wbClient := *kubernetes.NewKubernetesClient(
 			fake.NewSimpleClientset(
 				ipPool(firstRange, podNamespace, ""), ipPool(secondRange, podNamespace, "")),
-			fakek8sclient.NewSimpleClientset(),
-			0)
+			fakek8sclient.NewSimpleClientset())
 
 		// ----------------------------- range 1
 
@@ -1373,7 +1367,7 @@ func newK8sIPAM(containerID, ifName string, ipamConf *whereaboutstypes.IPAMConfi
 	if err != nil {
 		return nil
 	}
-	k8sIPAM.Client = *kubernetes.NewKubernetesClient(wbClient, k8sCoreClient, 0)
+	k8sIPAM.Client = *kubernetes.NewKubernetesClient(wbClient, k8sCoreClient)
 	return k8sIPAM
 }
 
