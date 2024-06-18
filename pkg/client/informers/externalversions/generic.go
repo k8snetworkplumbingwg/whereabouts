@@ -54,6 +54,8 @@ func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource
 	// Group=whereabouts.cni.cncf.io, Version=v1alpha1
 	case v1alpha1.SchemeGroupVersion.WithResource("ippools"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Whereabouts().V1alpha1().IPPools().Informer()}, nil
+	case v1alpha1.SchemeGroupVersion.WithResource("nodeslicepools"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Whereabouts().V1alpha1().NodeSlicePools().Informer()}, nil
 	case v1alpha1.SchemeGroupVersion.WithResource("overlappingrangeipreservations"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Whereabouts().V1alpha1().OverlappingRangeIPReservations().Informer()}, nil
 

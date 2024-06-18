@@ -25,6 +25,14 @@ type IPPoolListerExpansion interface{}
 // IPPoolNamespaceLister.
 type IPPoolNamespaceListerExpansion interface{}
 
+// NodeSlicePoolListerExpansion allows custom methods to be added to
+// NodeSlicePoolLister.
+type NodeSlicePoolListerExpansion interface{}
+
+// NodeSlicePoolNamespaceListerExpansion allows custom methods to be added to
+// NodeSlicePoolNamespaceLister.
+type NodeSlicePoolNamespaceListerExpansion interface{}
+
 // OverlappingRangeIPReservationListerExpansion allows custom methods to be added to
 // OverlappingRangeIPReservationLister.
 type OverlappingRangeIPReservationListerExpansion interface{}

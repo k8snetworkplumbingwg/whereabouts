@@ -28,6 +28,7 @@ rules:
   resources:
   - ippools
   - overlappingrangeipreservations
+  - nodeslicepools
   verbs:
   - get
   - list
@@ -48,11 +49,14 @@ rules:
   verbs:
   - list
   - watch
+  - get
 - apiGroups: [""]
   resources:
   - nodes
   verbs:
   - get
+  - list
+  - watch
 - apiGroups: ["k8s.cni.cncf.io"]
   resources:
     - network-attachment-definitions

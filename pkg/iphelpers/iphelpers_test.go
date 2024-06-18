@@ -923,3 +923,69 @@ var _ = Describe("IPAddOffset operations", func() {
 		Expect(fmt.Sprint(newIP)).To(Equal("2000::1:0"))
 	})
 })
+
+func TestDivideRangeBySize(t *testing.T) {
+	cases := []struct {
+		name           string
+		netRange       string
+		sliceSize      string
+		expectedResult []string
+		expectError    bool
+	}{
+		{
+			name:           "Network divided by same size slice",
+			netRange:       "10.0.0.0/8",
+			sliceSize:      "/8",
+			expectedResult: []string{"10.0.0.0/8"},
+		},
+		{
+			name:           "Network divided /8 by /10",
+			netRange:       "10.0.0.0/8",
+			sliceSize:      "/10",
+			expectedResult: []string{"10.0.0.0/10", "10.64.0.0/10", "10.128.0.0/10", "10.192.0.0/10"},
+		},
+		{
+			name:        "Network divided /10 by /8",
+			netRange:    "10.0.0.0/10",
+			sliceSize:   "/8",
+			expectError: true,
+		},
+		{
+			name:           "Network divided /8 by /11",
+			netRange:       "10.0.0.0/8",
+			sliceSize:      "/11",
+			expectedResult: []string{"10.0.0.0/11", "10.32.0.0/11", "10.64.0.0/11", "10.96.0.0/11", "10.128.0.0/11", "10.160.0.0/11", "10.192.0.0/11", "10.224.0.0/11"},
+		},
+		{
+			name:           "Network divided /10 by /12",
+			netRange:       "10.0.0.0/10",
+			sliceSize:      "/12",
+			expectedResult: []string{"10.0.0.0/12", "10.16.0.0/12", "10.32.0.0/12", "10.48.0.0/12"},
+		},
+		{
+			name:           "Network divided /8 by /10 without / in slice",
+			netRange:       "10.0.0.0/8",
+			sliceSize:      "10",
+			expectedResult: []string{"10.0.0.0/10", "10.64.0.0/10", "10.128.0.0/10", "10.192.0.0/10"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := DivideRangeBySize(tc.netRange, tc.sliceSize)
+			if err != nil && !tc.expectError {
+				t.Errorf("unexpected error: %v", err)
+			}
+			if err == nil && tc.expectError {
+				t.Fatalf("expected error but did not get it")
+			}
+			if len(result) != len(tc.expectedResult) {
+				t.Fatalf("Expected result: %s, got result: %s", tc.expectedResult, result)
+			}
+			for i := range result {
+				if result[i] != tc.expectedResult[i] {
+					t.Fatalf("Expected result: %s, got result: %s", tc.expectedResult, result)
+				}
+			}
+		})
+	}
+}
