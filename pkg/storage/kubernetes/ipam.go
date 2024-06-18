@@ -512,9 +512,9 @@ func IPManagement(ctx context.Context, mode int, ipamConf whereaboutstypes.IPAMC
 
 func GetNodeSlicePoolRange(ctx context.Context, ipam *KubernetesIPAM, nodeName string) (string, error) {
 	logging.Debugf("ipam namespace is %v", ipam.namespace)
-	nodeSlice, err := ipam.client.WhereaboutsV1alpha1().NodeSlicePools(ipam.Config.Namespace).Get(ctx, getNodeSliceName(ipam), metav1.GetOptions{})
+	nodeSlice, err := ipam.client.WhereaboutsV1alpha1().NodeSlicePools(ipam.namespace).Get(ctx, getNodeSliceName(ipam), metav1.GetOptions{})
 	if err != nil {
-		logging.Errorf("error getting node slice %s/%s %v", ipam.Config.Namespace, getNodeSliceName(ipam), err)
+		logging.Errorf("error getting node slice %s/%s %v", ipam.namespace, getNodeSliceName(ipam), err)
 		return "", err
 	}
 	for _, allocation := range nodeSlice.Status.Allocations {

@@ -188,7 +188,6 @@ func MacvlanNetworkWithNodeSlice(networkName, namespaceName, ipRange, poolName, 
                     "leader_lease_duration": 1500,
                     "leader_renew_deadline": 1000,
                     "leader_retry_period": 500,
-					"namespace": "%s",
                     "range": "%s",
                     "log_level": "debug",
                     "log_file": "/tmp/wb",
@@ -197,7 +196,7 @@ func MacvlanNetworkWithNodeSlice(networkName, namespaceName, ipRange, poolName, 
                 }
             }
         ]
-    }`, namespaceName, ipRange, poolName, sliceSize)
+    }`, ipRange, poolName, sliceSize)
 	return GenerateNetAttachDefSpec(networkName, namespaceName, macvlanConfig)
 }
 

@@ -77,6 +77,10 @@ type Controller struct {
 
 	//For testing, sort nodes before assigning to get consistent return values
 	sortResults bool
+
+	// whereabouts namespace set from WHEREABOUTS_NAMESPACE env var, should match what's in the daemonset
+	// this is where the IPPools and NodeSlicePools will be created
+	whereaboutsNamespace string
 }
 
 // NewController returns a new sample controller
@@ -89,6 +93,7 @@ func NewController(
 	nodeSlicePoolInformer whereaboutsInformers.NodeSlicePoolInformer,
 	nadInformer nadinformers.NetworkAttachmentDefinitionInformer,
 	sortResults bool,
+	whereaboutsNamespace string,
 ) *Controller {
 	logger := klog.FromContext(ctx)
 
@@ -119,6 +124,7 @@ func NewController(
 		workqueue:             workqueue.NewRateLimitingQueue(ratelimiter),
 		recorder:              recorder,
 		sortResults:           sortResults,
+		whereaboutsNamespace:  whereaboutsNamespace,
 	}
 
 	logger.Info("Setting up event handlers")
@@ -328,7 +334,7 @@ func (c *Controller) syncHandler(ctx context.Context, key string) error {
 			if hasOwnerRef(nodeSlice, name) {
 				if len(nodeSlice.OwnerReferences) == 1 {
 					//this is the last NAD owning this so delete
-					err = c.whereaboutsclientset.WhereaboutsV1alpha1().NodeSlicePools(namespace).Delete(ctx, name, metav1.DeleteOptions{})
+					err = c.whereaboutsclientset.WhereaboutsV1alpha1().NodeSlicePools(c.whereaboutsNamespace).Delete(ctx, name, metav1.DeleteOptions{})
 					if err != nil && !errors.IsNotFound(err) {
 						return err
 					}
@@ -355,7 +361,7 @@ func (c *Controller) syncHandler(ctx context.Context, key string) error {
 	logger.Info("About to update node slices for network-attachment-definition",
 		"network-attachment-definition", klog.KRef(namespace, name))
 
-	currentNodeSlicePool, err := c.nodeSlicePoolLister.NodeSlicePools(namespace).Get(getSliceName(ipamConf))
+	currentNodeSlicePool, err := c.nodeSlicePoolLister.NodeSlicePools(c.whereaboutsNamespace).Get(getSliceName(ipamConf))
 	if err != nil {
 		logger.Info("node slice pool does not exist, creating")
 		if !errors.IsNotFound(err) {
@@ -369,7 +375,7 @@ func (c *Controller) syncHandler(ctx context.Context, key string) error {
 			},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      getSliceName(ipamConf),
-				Namespace: namespace,
+				Namespace: c.whereaboutsNamespace,
 				OwnerReferences: []metav1.OwnerReference{
 					*metav1.NewControllerRef(nad, cncfV1.SchemeGroupVersion.WithKind("NetworkAttachmentDefinition")),
 				},
@@ -406,7 +412,7 @@ func (c *Controller) syncHandler(ctx context.Context, key string) error {
 			Allocations: allocations,
 		}
 		logger.Info(fmt.Sprintf("final allocations: %v", allocations))
-		_, err = c.whereaboutsclientset.WhereaboutsV1alpha1().NodeSlicePools(namespace).Create(ctx, nodeslice, metav1.CreateOptions{})
+		_, err = c.whereaboutsclientset.WhereaboutsV1alpha1().NodeSlicePools(c.whereaboutsNamespace).Create(ctx, nodeslice, metav1.CreateOptions{})
 		if err != nil {
 			return err
 		}
@@ -449,7 +455,7 @@ func (c *Controller) syncHandler(ctx context.Context, key string) error {
 			nodeslice.Status = v1alpha1.NodeSlicePoolStatus{
 				Allocations: allocations,
 			}
-			_, err = c.whereaboutsclientset.WhereaboutsV1alpha1().NodeSlicePools(namespace).Update(ctx, nodeslice, metav1.UpdateOptions{})
+			_, err = c.whereaboutsclientset.WhereaboutsV1alpha1().NodeSlicePools(c.whereaboutsNamespace).Update(ctx, nodeslice, metav1.UpdateOptions{})
 			if err != nil {
 				return err
 			}
@@ -467,7 +473,7 @@ func (c *Controller) syncHandler(ctx context.Context, key string) error {
 			removeUnusedNodes(allocations, nodes)
 			nodeslice.Status.Allocations = allocations
 
-			_, err = c.whereaboutsclientset.WhereaboutsV1alpha1().NodeSlicePools(namespace).Update(context.TODO(), nodeslice, metav1.UpdateOptions{})
+			_, err = c.whereaboutsclientset.WhereaboutsV1alpha1().NodeSlicePools(c.whereaboutsNamespace).Update(context.TODO(), nodeslice, metav1.UpdateOptions{})
 			if err != nil {
 				logger.Info(fmt.Sprintf("Error updating NSP with no changes: %v", err))
 				return err

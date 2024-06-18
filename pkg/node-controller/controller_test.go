@@ -201,7 +201,8 @@ func (f *fixture) newController(ctx context.Context) (*Controller, informers.Sha
 		kubeInformerFactory.Core().V1().Nodes(),
 		whereaboutsInformerFactory.Whereabouts().V1alpha1().NodeSlicePools(),
 		nadInformerFactory.K8sCniCncfIo().V1().NetworkAttachmentDefinitions(),
-		true)
+		true,
+		metav1.NamespaceDefault)
 
 	//TODO: add sync for IP Pool or remove IP pool if not used
 	c.nadSynced = alwaysReady

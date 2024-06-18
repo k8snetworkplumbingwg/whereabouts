@@ -30,7 +30,7 @@ import (
 var _ = Describe("Whereabouts node slice functionality", func() {
 	Context("Test setup", func() {
 		const (
-			testNamespace   = "default"
+			testNamespace   = "kube-system"
 			ipv4TestRange   = "10.0.0.0/8"
 			sliceSize       = "/20" // tests will depend on subnets being > node count of test environment
 			testNetworkName = "net1"
@@ -125,7 +125,6 @@ var _ = Describe("Whereabouts node slice functionality", func() {
 					},
 					NodeSliceSize: sliceSize,
 					NetworkName:   testNetworkName,
-					Namespace:     testNamespace,
 				}, ipPoolNamespace)
 				Expect(err).NotTo(HaveOccurred())
 
@@ -228,7 +227,6 @@ var _ = Describe("Whereabouts node slice functionality", func() {
 						},
 						NodeSliceSize: sliceSize,
 						NetworkName:   testNetworkName,
-						Namespace:     testNamespace,
 					}, ipPoolNamespace)
 					Expect(err).NotTo(HaveOccurred())
 				})
