@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"flag"
+	"os"
 	"time"
 
 	nadclient "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/client/clientset/versioned"
@@ -55,6 +57,12 @@ func main() {
 		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
 	}
 
+	whereaboutsNamespace := os.Getenv("WHEREABOUTS_NAMESPACE")
+	if whereaboutsNamespace == "" {
+		logger.Error(errors.New("env var for WHEREABOUTS_NAMESPACE not set"), "unable to discover namespace")
+		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
+	}
+
 	kubeInformerFactory := kubeinformers.NewSharedInformerFactory(kubeClient, time.Second*30)
 	whereaboutsInformerFactory := informers.NewSharedInformerFactory(whereaboutsClient, time.Second*30)
 	nadInformerFactory := nadinformers.NewSharedInformerFactory(nadClient, time.Second*30)
@@ -68,6 +76,7 @@ func main() {
 		whereaboutsInformerFactory.Whereabouts().V1alpha1().NodeSlicePools(),
 		nadInformerFactory.K8sCniCncfIo().V1().NetworkAttachmentDefinitions(),
 		false,
+		whereaboutsNamespace,
 	)
 
 	// notice that there is no need to run Start methods in a separate goroutine. (i.e. go kubeInformerFactory.Start(ctx.done())

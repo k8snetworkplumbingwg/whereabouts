@@ -55,7 +55,6 @@ type IPAMConfig struct {
 	DNS                      cnitypes.DNS         `json:"dns"`
 	Range                    string               `json:"range"`
 	NodeSliceSize            string               `json:"node_slice_size"`
-	Namespace                string               `json:"namespace"` //TODO: best way to get namespace of the NAD?
 	RangeStart               net.IP               `json:"range_start,omitempty"`
 	RangeEnd                 net.IP               `json:"range_end,omitempty"`
 	GatewayStr               string               `json:"gateway"`
@@ -130,7 +129,6 @@ func (ic *IPAMConfig) UnmarshalJSON(data []byte) error {
 		OmitRanges:               ipamConfigAlias.OmitRanges,
 		DNS:                      ipamConfigAlias.DNS,
 		Range:                    ipamConfigAlias.Range,
-		Namespace:                ipamConfigAlias.Namespace,
 		RangeStart:               backwardsCompatibleIPAddress(ipamConfigAlias.RangeStart),
 		RangeEnd:                 backwardsCompatibleIPAddress(ipamConfigAlias.RangeEnd),
 		NodeSliceSize:            ipamConfigAlias.NodeSliceSize,
