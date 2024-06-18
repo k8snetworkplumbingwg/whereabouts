@@ -220,7 +220,10 @@ spec:
   }
 }'
 
-This setup enables the fast IPAM feature to optimize IP allocation for nodes, improving network performance in clusters with high pod density.
+This setup enables the fast IPAM feature to optimize IP allocation for nodes, improving network performance in clusters with high pod density. 
+Please note, you must run a whereabouts controller for this to work. Manifest can be found in doc/crds/node-slice-controller.yaml. 
+You must run your whereabouts daemonset, whereabouts controller in the same namespaces as your network-attachment-definitions.
+
 
 ## Core Parameters
 

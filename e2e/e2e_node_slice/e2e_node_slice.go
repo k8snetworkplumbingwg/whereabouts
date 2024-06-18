@@ -201,7 +201,7 @@ var _ = Describe("Whereabouts node slice functionality", func() {
 			const (
 				initialReplicaNumber = 20
 				ipPoolNamespace      = "kube-system"
-				namespace            = "default"
+				namespace            = "kube-system"
 				serviceName          = "web"
 				selector             = "app=" + serviceName
 				statefulSetName      = "statefulthingy"
