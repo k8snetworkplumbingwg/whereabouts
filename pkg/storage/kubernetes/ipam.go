@@ -61,7 +61,7 @@ func NewKubernetesIPAM(containerID, ifName string, ipamConf whereaboutstypes.IPA
 		return nil, fmt.Errorf("k8s config: namespace not present in context")
 	}
 
-	kubernetesClient, err := NewClientViaKubeconfig(ipamConf.Kubernetes.KubeConfigPath, storage.RequestTimeout)
+	kubernetesClient, err := NewClientViaKubeconfig(ipamConf.Kubernetes.KubeConfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed instantiating kubernetes client: %v", err)
 	}
