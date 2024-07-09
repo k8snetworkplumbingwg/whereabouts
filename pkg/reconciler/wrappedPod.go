@@ -46,12 +46,27 @@ func indexPods(livePodList []v1.Pod, whereaboutsPodNames map[string]void) map[st
 		if _, isWhereaboutsPod := whereaboutsPodNames[podRef]; !isWhereaboutsPod {
 			continue
 		}
+
+		if isPodMarkedForDeletion(pod.Status.Conditions) {
+			logging.Debugf("Pod %s is marked for deletion; skipping", podRef)
+			continue
+		}
+
 		wrappedPod := wrapPod(pod)
 		if wrappedPod != nil {
 			podMap[podRef] = *wrappedPod
 		}
 	}
 	return podMap
+}
+
+func isPodMarkedForDeletion(conditions []v1.PodCondition) bool {
+	for _, c := range conditions {
+		if c.Type == v1.DisruptionTarget && c.Status == v1.ConditionTrue && c.Reason == "DeletionByTaintManager" {
+			return true
+		}
+	}
+	return false
 }
 
 func getFlatIPSet(pod v1.Pod) (map[string]void, error) {
