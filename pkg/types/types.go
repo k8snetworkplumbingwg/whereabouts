@@ -83,7 +83,6 @@ func (ic *IPAMConfig) UnmarshalJSON(data []byte) error {
 		Addresses                []Address            `json:"addresses,omitempty"`
 		IPRanges                 []RangeConfiguration `json:"ipRanges"`
 		NodeSliceSize            string               `json:"node_slice_size"`
-		Namespace                string               `json:"namespace"` //TODO: best way to get namespace of the NAD?
 		OmitRanges               []string             `json:"exclude,omitempty"`
 		DNS                      cnitypes.DNS         `json:"dns"`
 		Range                    string               `json:"range"`

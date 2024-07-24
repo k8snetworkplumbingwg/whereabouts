@@ -200,6 +200,7 @@ Similar to above, `ipRanges` can be used for configuring DualStack
 
 ### Fast IPAM Configuration
 
+```
 apiVersion: "k8s.cni.cncf.io/v1"
 kind: NetworkAttachmentDefinition
 metadata:
@@ -215,10 +216,10 @@ spec:
       "type": "whereabouts",
       "range": "192.168.2.0/24",
       "fast_ipam": true,
-      "node_slice size": "/22",
-      "namespace": "namespace of network attachment definitions and whereabouts deployment"
-  }
-}'
+      "node_slice size": "/22"
+    }
+  }'
+```
 
 This setup enables the fast IPAM feature to optimize IP allocation for nodes, improving network performance in clusters with high pod density. 
 Please note, you must run a whereabouts controller for this to work. Manifest can be found in doc/crds/node-slice-controller.yaml. 
