@@ -215,8 +215,7 @@ spec:
     "ipam": {
       "type": "whereabouts",
       "range": "192.168.2.0/24",
-      "fast_ipam": true,
-      "node_slice size": "/22"
+      "node_slice_size": "/22"
     }
   }'
 ```
