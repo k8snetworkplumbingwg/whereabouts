@@ -215,15 +215,16 @@ spec:
     "ipam": {
       "type": "whereabouts",
       "range": "192.168.2.0/24",
-      "fast_ipam": true,
-      "node_slice size": "/22"
+      "node_slice_size": "/22"
     }
   }'
 ```
 
 This setup enables the fast IPAM feature to optimize IP allocation for nodes, improving network performance in clusters with high pod density. 
 Please note, you must run a whereabouts controller for this to work. Manifest can be found in doc/crds/node-slice-controller.yaml. 
-You must run your whereabouts daemonset, whereabouts controller in the same namespaces as your network-attachment-definitions.
+You must run your whereabouts daemonset, whereabouts controller in the same namespaces as your network-attachment-definitions. 
+The field in the example `node_slice_size` determines how large of a CIDR to allocate per node and the existence of the field is what triggers
+`Fast IPAM` mode.
 
 
 ## Core Parameters
