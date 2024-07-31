@@ -3,7 +3,9 @@
 Run `go mod` with:
 
 ```
+go mod tidy
 go mod vendor
+go mod verify
 ```
 
 ## Running with CNI's `docker-run.sh`
@@ -65,4 +67,15 @@ spec:
     image: dougbtv/centos-network
 EOF
 ```
+
+## Using the scale script  `/scripts/scale-test.sh`
+
+1. This will not work unless you have a running cluster 
+   A simple way to spin a cluster to use this with is by using 
+  ```
+  ./hack/e2e-setup-kind-cluster -n 3
+  ```
+2. This script leverages the `whereaboutsScaleNAD` and `scaleTestDeployment` yamls in /yamls
+3. To modify the number of pods spun by the script, change the replicas value in the `scaleTestDeployment` yaml
+
 
