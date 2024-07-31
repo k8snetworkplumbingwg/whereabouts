@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scale-deployment
+  labels:
+    app: scale-deployment
+spec:
+  replicas: 10 #use this to modify the number of pods spun up by the scale-test script 
+  selector:
+    matchLabels:
+      app: scale-pod
+  template:
+    metadata:
+      annotations:
+        k8s.v1.cni.cncf.io/networks: whereabouts-scale
+      labels:
+        app: scale-pod
+    spec:
+      containers:
+      - name: scale
+        image: nicolaka/netshoot
+        command:
+          - sleep
+          - "3600"
+        imagePullPolicy: IfNotPresent
