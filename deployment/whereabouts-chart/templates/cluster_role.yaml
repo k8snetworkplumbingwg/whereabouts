@@ -8,6 +8,7 @@ rules:
   resources:
   - ippools
   - overlappingrangeipreservations
+  - nodeslicepools
   verbs:
   - get
   - list
@@ -26,6 +27,7 @@ rules:
   resources:
   - pods
   verbs:
+  - get
   - list
   - watch
 - apiGroups: ["k8s.cni.cncf.io"]
@@ -44,3 +46,4 @@ rules:
   - create
   - patch
   - update
+  - get
