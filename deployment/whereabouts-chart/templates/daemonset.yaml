@@ -64,10 +64,10 @@ spec:
       volumes:
         - name: cnibin
           hostPath:
-            path: /opt/cni/bin
+            path: {{ .Values.cniConf.binDir }}
         - name: cni-net-dir
           hostPath:
-            path: /etc/cni/net.d
+            path: {{ .Values.cniConf.confDir }}
         - name: cron-scheduler-configmap
           configMap:
             name: {{ include "whereabouts.fullname" . }}-config

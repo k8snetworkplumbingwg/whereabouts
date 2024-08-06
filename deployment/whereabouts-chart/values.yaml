@@ -41,10 +41,14 @@ resources:
     memory: "50Mi"
 
 nodeSelector:
-  beta.kubernetes.io/arch: amd64
+  kubernetes.io/os: linux
 
 tolerations:
   - operator: Exists
     effect: NoSchedule
 
 affinity: {}
+
+cniConf:
+  confDir: /etc/cni/net.d
+  binDir: /opt/cni/bin
