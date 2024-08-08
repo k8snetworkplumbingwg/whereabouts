@@ -51,13 +51,10 @@ kubectl apply \
 The daemonset installation requires Kubernetes Version 1.16 or later.
 
 ### Installing with helm 3
-You can also install multus and whereabouts with helm 3 (helm 2 is not supported)
+You can also install whereabouts with helm 3:
 
 ```
-git clone https://github.com/k8snetworkplumbingwg/helm-charts.git
-cd helm-charts
-helm upgrade --install multus ./multus  --namespace kube-system
-helm upgrade --install whereabouts ./whereabouts --namespace kube-system
+helm template whereabouts oci://ghcr.io/k8snetworkplumbingwg/whereabouts-chart --version <WHEREABOUTS_VERSION>
 
 ```
 

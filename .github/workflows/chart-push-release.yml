@@ -1,0 +1,34 @@
+name: "Push helm chart on release"
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository }}
+
+on:
+  push:
+    tags:
+      - v*
+jobs:
+  package-and-push-helm-chart:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: install helm
+        uses: azure/setup-helm@v4.2.0
+        with:
+          version: latest
+
+      - name: Check out the repo
+        uses: actions/checkout@v4
+      
+      - name: update chart
+        env:
+          GITHUB_TAG: ${{ github.ref_name }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPO_OWNER: ${{ github.repository_owner }}
+        run: make chart-prepare-release
+    
+      - name: push chart
+        env:
+          GITHUB_TAG: ${{ github.ref_name }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPO_OWNER: ${{ github.repository_owner }}
+        run: make chart-push-release
