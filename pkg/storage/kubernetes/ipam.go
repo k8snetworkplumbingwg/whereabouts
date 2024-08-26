@@ -658,7 +658,7 @@ func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *Kubernete
 				}
 
 			case whereaboutstypes.Deallocate:
-				updatedreservelist, ipforoverlappingrangeupdate = allocate.DeallocateIP(reservelist, ipam.containerID)
+				updatedreservelist, ipforoverlappingrangeupdate = allocate.DeallocateIP(reservelist, ipam.containerID, ipam.IfName)
 				if ipforoverlappingrangeupdate == nil {
 					// Do not fail if allocation was not found.
 					logging.Debugf("Failed to find allocation for container ID: %s", ipam.containerID)

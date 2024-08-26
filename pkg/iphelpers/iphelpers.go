@@ -34,7 +34,7 @@ func CompareIPs(ipX net.IP, ipY net.IP) int {
 func DivideRangeBySize(inputNetwork string, sliceSizeString string) ([]string, error) {
 	// Remove "/" from the start of the sliceSize
 	sliceSizeString = strings.TrimPrefix(sliceSizeString, "/")
-	
+
 	sliceSize, err := strconv.Atoi(sliceSizeString)
 	if err != nil {
 		fmt.Println("Error:", err)
@@ -42,7 +42,7 @@ func DivideRangeBySize(inputNetwork string, sliceSizeString string) ([]string, e
 	}
 	ip, ipNet, err := net.ParseCIDR(inputNetwork)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error parsing CIDR %s: %v", inputNetwork, err)
 	}
 	if !ip.Equal(ipNet.IP) {
 		return nil, errors.New("netCIDR is not a valid network address")
