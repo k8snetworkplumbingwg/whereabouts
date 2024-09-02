@@ -52,3 +52,6 @@ affinity: {}
 cniConf:
   confDir: /etc/cni/net.d
   binDir: /opt/cni/bin
+
+nodeSliceController:
+  enabled: true
