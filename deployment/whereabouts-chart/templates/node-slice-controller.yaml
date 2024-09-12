@@ -1,3 +1,4 @@
+{{- if .Values.nodeSliceController.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -85,3 +86,4 @@ spec:
                         apiVersion: v1
                         fieldPath: metadata.namespace
                       path: namespace
+{{- end}}
