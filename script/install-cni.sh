@@ -19,14 +19,18 @@ WHEREABOUTS_RECONCILER_CRON=${WHEREABOUTS_RECONCILER_CRON:-30 4 * * *}
 
 mkdir -p $CNI_CONF_DIR/whereabouts.d
 WHEREABOUTS_KUBECONFIG=$CNI_CONF_DIR/whereabouts.d/whereabouts.kubeconfig
-WHEREABOUTS_FLATFILE=$CNI_CONF_DIR/whereabouts.d/whereabouts.conf # Yuki~ Nikhil's note: imo we should remove "flatfile" from whereabouts vocabulary and call this "WHEREABOUTS_CONF_FILE" instead. Flatfile may be the format but it's confusing naming.
+WHEREABOUTS_CONF_FILE=$CNI_CONF_DIR/whereabouts.d/whereabouts.conf 
 WHEREABOUTS_KUBECONFIG_LITERAL=$(echo "$WHEREABOUTS_KUBECONFIG" | sed -e s'|/host||')
 
 # ------------------------------- Generate a "kube-config"
 SERVICE_ACCOUNT_PATH=/var/run/secrets/kubernetes.io/serviceaccount
 KUBE_CA_FILE=${KUBE_CA_FILE:-$SERVICE_ACCOUNT_PATH/ca.crt}
-SERVICEACCOUNT_TOKEN=$(cat $SERVICE_ACCOUNT_PATH/token)
+SERVICE_ACCOUNT_TOKEN=$(cat $SERVICE_ACCOUNT_PATH/token)
+SERVICE_ACCOUNT_TOKEN_PATH=$SERVICE_ACCOUNT_PATH/token
 SKIP_TLS_VERIFY=${SKIP_TLS_VERIFY:-false}
+
+LAST_SERVICEACCOUNT_MD5SUM=""
+LAST_KUBE_CA_FILE_MD5SUM=""
 
 # Setup our logging routines
 
@@ -46,7 +50,8 @@ function warn()
 }
 
 
-# Check if we're running as a k8s pod.
+function generateKubeConfig {
+  # Check if we're running as a k8s pod.
 if [ -f "$SERVICE_ACCOUNT_PATH/token" ]; then
   # We're running as a k8d pod - expect some variables.
   if [ -z ${KUBERNETES_SERVICE_HOST} ]; then
@@ -86,7 +91,7 @@ clusters:
 users:
 - name: whereabouts
   user:
-    token: "${SERVICEACCOUNT_TOKEN}"
+    token: "${SERVICE_ACCOUNT_TOKEN}"
 contexts:
 - name: whereabouts-context
   context:
@@ -96,9 +101,23 @@ contexts:
 current-context: whereabouts-context
 EOF
 
-  touch $WHEREABOUTS_FLATFILE
-  chmod ${KUBECONFIG_MODE:-600} $WHEREABOUTS_FLATFILE
-  cat > $WHEREABOUTS_FLATFILE <<EOF
+else
+  warn "Doesn't look like we're running in a kubernetes environment (no serviceaccount token)"
+fi
+
+}
+
+generateKubeConfig
+
+# ------------------ end Generate a "kube-config"
+
+# ----------------- Generate a whereabouts conf
+
+function generateWhereaboutsConf {
+
+  touch $WHEREABOUTS_CONF_FILE
+  chmod ${KUBECONFIG_MODE:-600} $WHEREABOUTS_CONF_FILE
+  cat > $WHEREABOUTS_CONF_FILE <<EOF
 {
   "datastore": "kubernetes",
   "kubernetes": {
@@ -108,14 +127,32 @@ EOF
 }
 EOF
 
-else
-  warn "Doesn't look like we're running in a kubernetes environment (no serviceaccount token)"
-fi
+}
+
+generateWhereaboutsConf
+
+# ---------------- End generate a whereabouts conf
+
+
 
 # copy whereabouts to the cni bin dir
 cp -f /whereabouts $CNI_BIN_DIR
 
-# ---------------------- end Generate a "kube-config".
+# ---------------------- end generate a "kube-config".
+
+# enter sleep/watch loop
+
+while true; do
+  # Check the md5sum of the service account token and ca.
+    svcaccountsum=$(md5sum $SERVICE_ACCOUNT_TOKEN_PATH | awk '{print $1}')
+    casum=$(md5sum $KUBE_CA_FILE | awk '{print $1}')
+    if [ "$svcaccountsum" != "$LAST_SERVICEACCOUNT_MD5SUM" ] || [ "$casum" != "$LAST_KUBE_CA_FILE_MD5SUM" ]; then
+      # log "Detected service account or CA file change, regenerating kubeconfig..."
+      generateKubeConfig
+    fi
+
+    sleep 1
+  done
 
 # Unless told otherwise, sleep forever.
 # This prevents Kubernetes from restarting the pod repeatedly.
