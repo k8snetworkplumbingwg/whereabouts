@@ -118,7 +118,7 @@ func (rl ReconcileLooper) isOrphanedIP(podRef string, ip string) bool {
 							logging.Debugf("Pod now has IP annotation while in Pending")
 							return true
 						}
-						time.Sleep(time.Duration(500) * time.Millisecond)
+						time.Sleep(time.Duration(250) * time.Millisecond)
 					}
 				}
 				isFound = isIpOnPod(podToMatch, podRef, ip)
