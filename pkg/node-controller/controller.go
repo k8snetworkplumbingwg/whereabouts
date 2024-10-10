@@ -132,24 +132,19 @@ func NewController(
 	nadInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: c.onNadEvent,
 		UpdateFunc: func(old, cur interface{}) {
+			oldNad := old.(*cncfV1.NetworkAttachmentDefinition)
+			newNad := cur.(*cncfV1.NetworkAttachmentDefinition)
+			if newNad.ResourceVersion == oldNad.ResourceVersion {
+				logger.Info("update for NAD with same resource version")
+				return
+			}
 			c.onNadEvent(cur)
 		},
 		DeleteFunc: c.onNadEvent,
 	})
 
 	nodeInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: c.requeueNADs,
-		UpdateFunc: func(old, cur interface{}) {
-			c.requeueNADs(cur)
-		},
-		DeleteFunc: c.requeueNADs,
-	})
-
-	nodeSlicePoolInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: c.requeueNADs,
-		UpdateFunc: func(old, cur interface{}) {
-			c.requeueNADs(cur)
-		},
+		AddFunc:    c.requeueNADs,
 		DeleteFunc: c.requeueNADs,
 	})
 
@@ -185,6 +180,7 @@ func (c *Controller) onNadEvent(obj interface{}) {
 // in this case we get all applicable NADs for the node rather than requeuing all
 // same applies to other node event handlers
 func (c *Controller) requeueNADs(obj interface{}) {
+	klog.Infof("handling requeueNADs")
 	nadlist, err := c.nadLister.List(labels.Everything())
 	if err != nil {
 		utilruntime.HandleError(fmt.Errorf("couldn't get network-attachment-definition list from informer: %v", err))
@@ -414,6 +410,7 @@ func (c *Controller) syncHandler(ctx context.Context, key string) error {
 		logger.Info(fmt.Sprintf("final allocations: %v", allocations))
 		_, err = c.whereaboutsclientset.WhereaboutsV1alpha1().NodeSlicePools(c.whereaboutsNamespace).Create(ctx, nodeslice, metav1.CreateOptions{})
 		if err != nil {
+			logger.Error(err, "failed to create nodeslicepool")
 			return err
 		}
 	} else {
@@ -431,9 +428,10 @@ func (c *Controller) syncHandler(ctx context.Context, key string) error {
 		// node slice currently exists
 		if currentNodeSlicePool.Spec.SliceSize != ipamConf.NodeSliceSize ||
 			currentNodeSlicePool.Spec.Range != ipamConf.IPRanges[0].Range {
-			logger.Info("network-attachment-definition range or slice size changed, re-allocating node slices")
+			logger.Info("network-attachment-definition range or slice size changed, re-allocating node slices",
+				"new range", ipamConf.IPRanges[0].Range, "new slice size", ipamConf.NodeSliceSize)
 			// slices have changed so redo the slicing and reassign nodes
-			subnets, err := iphelpers.DivideRangeBySize(ipamConf.Range, ipamConf.NodeSliceSize)
+			subnets, err := iphelpers.DivideRangeBySize(ipamConf.IPRanges[0].Range, ipamConf.NodeSliceSize)
 			if err != nil {
 				return err
 			}
@@ -452,6 +450,10 @@ func (c *Controller) syncHandler(ctx context.Context, key string) error {
 				assignNodeToSlice(allocations, node.Name)
 			}
 
+			nodeslice.Spec = v1alpha1.NodeSlicePoolSpec{
+				Range:     ipamConf.IPRanges[0].Range,
+				SliceSize: ipamConf.NodeSliceSize,
+			}
 			nodeslice.Status = v1alpha1.NodeSlicePoolStatus{
 				Allocations: allocations,
 			}
