@@ -91,7 +91,7 @@ func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, r
 		return net.IP{}, reserveList, err
 	}
 	logging.Debugf("IterateForAssignment input >> range_start: %v | range_end: %v | ipnet: %v | first IP: %v | last IP: %v",
-		rangeStart, rangeEnd, ipnet, firstIP, lastIP)
+		rangeStart, rangeEnd, ipnet.String(), firstIP, lastIP)
 
 	// Build reserved map.
 	reserved := make(map[string]bool)
