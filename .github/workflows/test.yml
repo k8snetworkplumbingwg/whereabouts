@@ -4,17 +4,16 @@ jobs:
   test:
     strategy:
       matrix:
-        go-version: [1.21.x]
         os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
     - name: Install Go
       uses: actions/setup-go@v5
       with:
-        go-version: ${{ matrix.go-version }}
-
-    - name: Checkout code
-      uses: actions/checkout@v4
+        go-version-file: go.mod
 
     - name: Get all changed files excluding docs and README
       id: changed-files
@@ -71,13 +70,13 @@ jobs:
     env:
       NUMBER_OF_COMPUTE_NODES: 5
     steps:
+      - name: Checkout code into the Go module directory
+        uses: actions/checkout@v4
+
       - name: Set up Go version
         uses: actions/setup-go@v5
         with:
-          go-version: 1.21.x
-
-      - name: Checkout code into the Go module directory
-        uses: actions/checkout@v4
+          go-version-file: go.mod
 
       - name: Get all changed files excluding docs and README
         id: changed-files
