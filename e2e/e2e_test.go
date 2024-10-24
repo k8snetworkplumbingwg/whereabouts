@@ -678,7 +678,7 @@ var _ = Describe("Whereabouts functionality", func() {
 					enableOverlappingRanges), func() {
 					BeforeEach(func() {
 						netAttachDef2 = util.MacvlanNetworkWithWhereaboutsIPAMNetwork(testNetwork2Name, testNamespace,
-							ipv4TestRangeOverlapping, []string{}, "", false)
+							ipv4TestRangeOverlapping, []string{}, "", enableOverlappingRanges)
 
 						By("creating a second NetworkAttachmentDefinition for whereabouts")
 						_, err := clientInfo.AddNetAttachDef(netAttachDef2)
