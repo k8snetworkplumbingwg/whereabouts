@@ -9,6 +9,7 @@ COMPUTE_NODES ?= 2
 
 OCI_BIN ?= docker
 
+
 build:
 	hack/build-go.sh
 
@@ -23,7 +24,10 @@ install-tools:
 	hack/install-kubebuilder-tools.sh
 
 test: build install-tools
-	hack/test-go.sh
+	hack/test-go.sh 
+
+test-skip-static: build
+	hack/test-go.sh --skip-static-check 
 
 kind:
 	hack/e2e-setup-kind-cluster.sh -n $(COMPUTE_NODES)
