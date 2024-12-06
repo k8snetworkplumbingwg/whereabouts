@@ -8,7 +8,6 @@ import (
 	"reflect"
 
 	"github.com/onsi/gomega/format"
-	"github.com/onsi/gomega/matchers/internal/miter"
 )
 
 type ContainElementMatcher struct {
@@ -17,18 +16,16 @@ type ContainElementMatcher struct {
 }
 
 func (matcher *ContainElementMatcher) Match(actual interface{}) (success bool, err error) {
-	if !isArrayOrSlice(actual) && !isMap(actual) && !miter.IsIter(actual) {
-		return false, fmt.Errorf("ContainElement matcher expects an array/slice/map/iterator.  Got:\n%s", format.Object(actual, 1))
+	if !isArrayOrSlice(actual) && !isMap(actual) {
+		return false, fmt.Errorf("ContainElement matcher expects an array/slice/map.  Got:\n%s", format.Object(actual, 1))
 	}
 
 	var actualT reflect.Type
 	var result reflect.Value
-	switch numResultArgs := len(matcher.Result); {
-	case numResultArgs > 1:
+	switch l := len(matcher.Result); {
+	case l > 1:
 		return false, errors.New("ContainElement matcher expects at most a single optional pointer to store its findings at")
-	case numResultArgs == 1:
-		// Check the optional result arg to point to a single value/array/slice/map
-		// of a type compatible with the actual value.
+	case l == 1:
 		if reflect.ValueOf(matcher.Result[0]).Kind() != reflect.Ptr {
 			return false, fmt.Errorf("ContainElement matcher expects a non-nil pointer to store its findings at.  Got\n%s",
 				format.Object(matcher.Result[0], 1))
@@ -37,209 +34,93 @@ func (matcher *ContainElementMatcher) Match(actual interface{}) (success bool, e
 		resultReference := matcher.Result[0]
 		result = reflect.ValueOf(resultReference).Elem() // what ResultReference points to, to stash away our findings
 		switch result.Kind() {
-		case reflect.Array: // result arrays are not supported, as they cannot be dynamically sized.
-			if miter.IsIter(actual) {
-				_, actualvT := miter.IterKVTypes(actual)
-				return false, fmt.Errorf("ContainElement cannot return findings.  Need *%s, got *%s",
-					reflect.SliceOf(actualvT), result.Type().String())
-			}
+		case reflect.Array:
 			return false, fmt.Errorf("ContainElement cannot return findings.  Need *%s, got *%s",
 				reflect.SliceOf(actualT.Elem()).String(), result.Type().String())
-
-		case reflect.Slice: // result slice
-			// can we assign elements in actual to elements in what the result
-			// arg points to?
-			//   - ✔ actual is an array or slice
-			//   - ✔ actual is an iter.Seq producing "v" elements
-			//   - ✔ actual is an iter.Seq2 producing "v" elements, ignoring
-			//     the "k" elements.
-			switch {
-			case isArrayOrSlice(actual):
-				if !actualT.Elem().AssignableTo(result.Type().Elem()) {
-					return false, fmt.Errorf("ContainElement cannot return findings.  Need *%s, got *%s",
-						actualT.String(), result.Type().String())
-				}
-
-			case miter.IsIter(actual):
-				_, actualvT := miter.IterKVTypes(actual)
-				if !actualvT.AssignableTo(result.Type().Elem()) {
-					return false, fmt.Errorf("ContainElement cannot return findings.  Need *%s, got *%s",
-						actualvT.String(), result.Type().String())
-				}
-
-			default: // incompatible result reference
+		case reflect.Slice:
+			if !isArrayOrSlice(actual) {
 				return false, fmt.Errorf("ContainElement cannot return findings.  Need *%s, got *%s",
 					reflect.MapOf(actualT.Key(), actualT.Elem()).String(), result.Type().String())
 			}
-
-		case reflect.Map: // result map
-			// can we assign elements in actual to elements in what the result
-			// arg points to?
-			//   - ✔ actual is a map
-			//   - ✔ actual is an iter.Seq2 (iter.Seq doesn't fit though)
-			switch {
-			case isMap(actual):
-				if !actualT.AssignableTo(result.Type()) {
-					return false, fmt.Errorf("ContainElement cannot return findings.  Need *%s, got *%s",
-						actualT.String(), result.Type().String())
-				}
-
-			case miter.IsIter(actual):
-				actualkT, actualvT := miter.IterKVTypes(actual)
-				if actualkT == nil {
-					return false, fmt.Errorf("ContainElement cannot return findings.  Need *%s, got *%s",
-						reflect.SliceOf(actualvT).String(), result.Type().String())
-				}
-				if !reflect.MapOf(actualkT, actualvT).AssignableTo(result.Type()) {
-					return false, fmt.Errorf("ContainElement cannot return findings.  Need *%s, got *%s",
-						reflect.MapOf(actualkT, actualvT), result.Type().String())
-				}
-
-			default: // incompatible result reference
+			if !actualT.Elem().AssignableTo(result.Type().Elem()) {
 				return false, fmt.Errorf("ContainElement cannot return findings.  Need *%s, got *%s",
 					actualT.String(), result.Type().String())
 			}
-
+		case reflect.Map:
+			if !isMap(actual) {
+				return false, fmt.Errorf("ContainElement cannot return findings.  Need *%s, got *%s",
+					actualT.String(), result.Type().String())
+			}
+			if !actualT.AssignableTo(result.Type()) {
+				return false, fmt.Errorf("ContainElement cannot return findings.  Need *%s, got *%s",
+					actualT.String(), result.Type().String())
+			}
 		default:
-			// can we assign a (single) element in actual to what the result arg
-			// points to?
-			switch {
-			case miter.IsIter(actual):
-				_, actualvT := miter.IterKVTypes(actual)
-				if !actualvT.AssignableTo(result.Type()) {
-					return false, fmt.Errorf("ContainElement cannot return findings.  Need *%s, got *%s",
-						actualvT.String(), result.Type().String())
-				}
-			default:
-				if !actualT.Elem().AssignableTo(result.Type()) {
-					return false, fmt.Errorf("ContainElement cannot return findings.  Need *%s, got *%s",
-						actualT.Elem().String(), result.Type().String())
-				}
+			if !actualT.Elem().AssignableTo(result.Type()) {
+				return false, fmt.Errorf("ContainElement cannot return findings.  Need *%s, got *%s",
+					actualT.Elem().String(), result.Type().String())
 			}
 		}
 	}
 
-	// If the supplied matcher isn't an Omega matcher, default to the Equal
-	// matcher.
 	elemMatcher, elementIsMatcher := matcher.Element.(omegaMatcher)
 	if !elementIsMatcher {
 		elemMatcher = &EqualMatcher{Expected: matcher.Element}
 	}
 
 	value := reflect.ValueOf(actual)
+	var valueAt func(int) interface{}
 
-	var getFindings func() reflect.Value // abstracts how the findings are collected and stored
-	var lastError error
+	var getFindings func() reflect.Value
+	var foundAt func(int)
 
-	if !miter.IsIter(actual) {
-		var valueAt func(int) interface{}
-		var foundAt func(int)
-		// We're dealing with an array/slice/map, so in all cases we can iterate
-		// over the elements in actual using indices (that can be considered
-		// keys in case of maps).
-		if isMap(actual) {
-			keys := value.MapKeys()
-			valueAt = func(i int) interface{} {
-				return value.MapIndex(keys[i]).Interface()
-			}
-			if result.Kind() != reflect.Invalid {
-				fm := reflect.MakeMap(actualT)
-				getFindings = func() reflect.Value { return fm }
-				foundAt = func(i int) {
-					fm.SetMapIndex(keys[i], value.MapIndex(keys[i]))
-				}
-			}
-		} else {
-			valueAt = func(i int) interface{} {
-				return value.Index(i).Interface()
-			}
-			if result.Kind() != reflect.Invalid {
-				var fsl reflect.Value
-				if result.Kind() == reflect.Slice {
-					fsl = reflect.MakeSlice(result.Type(), 0, 0)
-				} else {
-					fsl = reflect.MakeSlice(reflect.SliceOf(result.Type()), 0, 0)
-				}
-				getFindings = func() reflect.Value { return fsl }
-				foundAt = func(i int) {
-					fsl = reflect.Append(fsl, value.Index(i))
-				}
-			}
+	if isMap(actual) {
+		keys := value.MapKeys()
+		valueAt = func(i int) interface{} {
+			return value.MapIndex(keys[i]).Interface()
 		}
-
-		for i := 0; i < value.Len(); i++ {
-			elem := valueAt(i)
-			success, err := elemMatcher.Match(elem)
-			if err != nil {
-				lastError = err
-				continue
+		if result.Kind() != reflect.Invalid {
+			fm := reflect.MakeMap(actualT)
+			getFindings = func() reflect.Value {
+				return fm
 			}
-			if success {
-				if result.Kind() == reflect.Invalid {
-					return true, nil
-				}
-				foundAt(i)
+			foundAt = func(i int) {
+				fm.SetMapIndex(keys[i], value.MapIndex(keys[i]))
 			}
 		}
 	} else {
-		// We're dealing with an iterator as a first-class construct, so things
-		// are slightly different: there is no index defined as in case of
-		// arrays/slices/maps, just "ooooorder"
-		var found func(k, v reflect.Value)
+		valueAt = func(i int) interface{} {
+			return value.Index(i).Interface()
+		}
 		if result.Kind() != reflect.Invalid {
-			if result.Kind() == reflect.Map {
-				fm := reflect.MakeMap(result.Type())
-				getFindings = func() reflect.Value { return fm }
-				found = func(k, v reflect.Value) { fm.SetMapIndex(k, v) }
+			var f reflect.Value
+			if result.Kind() == reflect.Slice {
+				f = reflect.MakeSlice(result.Type(), 0, 0)
 			} else {
-				var fsl reflect.Value
-				if result.Kind() == reflect.Slice {
-					fsl = reflect.MakeSlice(result.Type(), 0, 0)
-				} else {
-					fsl = reflect.MakeSlice(reflect.SliceOf(result.Type()), 0, 0)
-				}
-				getFindings = func() reflect.Value { return fsl }
-				found = func(_, v reflect.Value) { fsl = reflect.Append(fsl, v) }
+				f = reflect.MakeSlice(reflect.SliceOf(result.Type()), 0, 0)
+			}
+			getFindings = func() reflect.Value {
+				return f
+			}
+			foundAt = func(i int) {
+				f = reflect.Append(f, value.Index(i))
 			}
 		}
+	}
 
-		success := false
-		actualkT, _ := miter.IterKVTypes(actual)
-		if actualkT == nil {
-			miter.IterateV(actual, func(v reflect.Value) bool {
-				var err error
-				success, err = elemMatcher.Match(v.Interface())
-				if err != nil {
-					lastError = err
-					return true // iterate on...
-				}
-				if success {
-					if result.Kind() == reflect.Invalid {
-						return false // a match and no result needed, so we're done
-					}
-					found(reflect.Value{}, v)
-				}
-				return true // iterate on...
-			})
-		} else {
-			miter.IterateKV(actual, func(k, v reflect.Value) bool {
-				var err error
-				success, err = elemMatcher.Match(v.Interface())
-				if err != nil {
-					lastError = err
-					return true // iterate on...
-				}
-				if success {
-					if result.Kind() == reflect.Invalid {
-						return false // a match and no result needed, so we're done
-					}
-					found(k, v)
-				}
-				return true // iterate on...
-			})
+	var lastError error
+	for i := 0; i < value.Len(); i++ {
+		elem := valueAt(i)
+		success, err := elemMatcher.Match(elem)
+		if err != nil {
+			lastError = err
+			continue
 		}
-		if success && result.Kind() == reflect.Invalid {
-			return true, nil
+		if success {
+			if result.Kind() == reflect.Invalid {
+				return true, nil
+			}
+			foundAt(i)
 		}
 	}
 

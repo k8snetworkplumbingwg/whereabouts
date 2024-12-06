@@ -21,9 +21,9 @@ import (
 	"reflect"
 	"strings"
 
-	"k8s.io/gengo/v2/generator"
-	"k8s.io/gengo/v2/namer"
-	"k8s.io/gengo/v2/types"
+	"k8s.io/gengo/generator"
+	"k8s.io/gengo/namer"
+	"k8s.io/gengo/types"
 )
 
 type localNamer struct {
@@ -37,17 +37,11 @@ func (n localNamer) Name(t *types.Type) string {
 	if len(n.localPackage.Package) != 0 && n.localPackage.Package == t.Name.Package {
 		return t.Name.Name
 	}
-	// For non-local and non-fundamental types, use an absolute reference
-	// see https://protobuf.com/docs/language-spec#type-references
-	if strings.Contains(t.Name.Package, ".") {
-		return fmt.Sprintf(".%s", t.Name)
-	}
 	return t.Name.String()
 }
 
 type protobufNamer struct {
-	packages []*protobufPackage
-	// The key here is a Go import-path.
+	packages       []*protobufPackage
 	packagesByPath map[string]*protobufPackage
 }
 
@@ -64,9 +58,17 @@ func (n *protobufNamer) Name(t *types.Type) string {
 	return t.Name.String()
 }
 
+func (n *protobufNamer) List() []generator.Package {
+	packages := make([]generator.Package, 0, len(n.packages))
+	for i := range n.packages {
+		packages = append(packages, n.packages[i])
+	}
+	return packages
+}
+
 func (n *protobufNamer) Add(p *protobufPackage) {
-	if _, ok := n.packagesByPath[p.Path()]; !ok {
-		n.packagesByPath[p.Path()] = p
+	if _, ok := n.packagesByPath[p.PackagePath]; !ok {
+		n.packagesByPath[p.PackagePath] = p
 		n.packages = append(n.packages, p)
 	}
 }
@@ -75,7 +77,7 @@ func (n *protobufNamer) GoNameToProtoName(name types.Name) types.Name {
 	if p, ok := n.packagesByPath[name.Package]; ok {
 		return types.Name{
 			Name:    name.Name,
-			Package: p.Name(),
+			Package: p.PackageName,
 			Path:    p.ImportPath(),
 		}
 	}
@@ -83,7 +85,7 @@ func (n *protobufNamer) GoNameToProtoName(name types.Name) types.Name {
 		if _, ok := p.FilterTypes[name]; ok {
 			return types.Name{
 				Name:    name.Name,
-				Package: p.Name(),
+				Package: p.PackageName,
 				Path:    p.ImportPath(),
 			}
 		}
@@ -92,8 +94,8 @@ func (n *protobufNamer) GoNameToProtoName(name types.Name) types.Name {
 }
 
 func protoSafePackage(name string) string {
-	pkg := strings.ReplaceAll(name, "/", ".")
-	return strings.ReplaceAll(pkg, "-", "_")
+	pkg := strings.Replace(name, "/", ".", -1)
+	return strings.Replace(pkg, "-", "_", -1)
 }
 
 type typeNameSet map[types.Name]*protobufPackage
@@ -114,7 +116,7 @@ func assignGoTypeToProtoPackage(p *protobufPackage, t *types.Type, local, global
 		}
 		return
 	}
-	if t.Name.Package == p.Path() {
+	if t.Name.Package == p.PackagePath {
 		// Associate types only to their own package
 		global[t.Name] = p
 	}
@@ -180,7 +182,7 @@ func (n *protobufNamer) AssignTypesToPackages(c *generator.Context) error {
 		optional := make(map[types.Name]struct{})
 		p.Imports = NewImportTracker(p.ProtoTypeName())
 		for _, t := range c.Order {
-			if t.Name.Package != p.Path() {
+			if t.Name.Package != p.PackagePath {
 				continue
 			}
 			if !isTypeApplicableToProtobuf(t) {

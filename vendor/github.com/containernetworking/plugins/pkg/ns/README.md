@@ -13,10 +13,10 @@ The `ns.Do()` method provides **partial** control over network namespaces for yo
 
 ```go
 err = targetNs.Do(func(hostNs ns.NetNS) error {
-	linkAttrs := netlink.NewLinkAttrs()
-	linkAttrs.Name = "dummy0"
 	dummy := &netlink.Dummy{
-		LinkAttrs: linkAttrs,
+		LinkAttrs: netlink.LinkAttrs{
+			Name: "dummy0",
+		},
 	}
 	return netlink.LinkAdd(dummy)
 })
