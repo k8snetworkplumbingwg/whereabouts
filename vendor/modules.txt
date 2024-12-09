@@ -1,7 +1,7 @@
 # github.com/blang/semver v3.5.1+incompatible
 ## explicit
 github.com/blang/semver
-# github.com/containernetworking/cni v1.2.0
+# github.com/containernetworking/cni v1.2.3
 ## explicit; go 1.21
 github.com/containernetworking/cni/pkg/ns
 github.com/containernetworking/cni/pkg/skel
