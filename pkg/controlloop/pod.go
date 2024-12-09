@@ -28,10 +28,10 @@ import (
 	"github.com/pkg/errors"
 
 	whereaboutsv1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
-	wbclientset "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/clientset/versioned"
-	wbinformers "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/informers/externalversions"
-	wblister "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/listers/whereabouts.cni.cncf.io/v1alpha1"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/config"
+	wbclientset "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/clientset/versioned"
+	wbinformers "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/informers/externalversions"
+	wblister "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/listers/whereabouts.cni.cncf.io/v1alpha1"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/iphelpers"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
 	wbclient "github.com/k8snetworkplumbingwg/whereabouts/pkg/storage/kubernetes"
