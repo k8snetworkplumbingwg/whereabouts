@@ -38,10 +38,13 @@ type internalJob struct {
 	limitRunsTo        *limitRunsTo
 	startTime          time.Time
 	startImmediately   bool
+	stopTime           time.Time
 	// event listeners
 	afterJobRuns          func(jobID uuid.UUID, jobName string)
 	beforeJobRuns         func(jobID uuid.UUID, jobName string)
 	afterJobRunsWithError func(jobID uuid.UUID, jobName string, err error)
+	afterJobRunsWithPanic func(jobID uuid.UUID, jobName string, recoverData any)
+	afterLockError        func(jobID uuid.UUID, jobName string, err error)
 
 	locker Locker
 }
@@ -56,6 +59,13 @@ func (j *internalJob) stop() {
 		j.timer.Stop()
 	}
 	j.cancel()
+}
+
+func (j *internalJob) stopTimeReached(now time.Time) bool {
+	if j.stopTime.IsZero() {
+		return false
+	}
+	return j.stopTime.Before(now)
 }
 
 // task stores the function and parameters
@@ -96,7 +106,7 @@ type limitRunsTo struct {
 // JobDefinition defines the interface that must be
 // implemented to create a job from the definition.
 type JobDefinition interface {
-	setup(*internalJob, *time.Location) error
+	setup(j *internalJob, l *time.Location, now time.Time) error
 }
 
 var _ JobDefinition = (*cronJobDefinition)(nil)
@@ -106,7 +116,7 @@ type cronJobDefinition struct {
 	withSeconds bool
 }
 
-func (c cronJobDefinition) setup(j *internalJob, location *time.Location) error {
+func (c cronJobDefinition) setup(j *internalJob, location *time.Location, now time.Time) error {
 	var withLocation string
 	if strings.HasPrefix(c.crontab, "TZ=") || strings.HasPrefix(c.crontab, "CRON_TZ=") {
 		withLocation = c.crontab
@@ -122,13 +132,16 @@ func (c cronJobDefinition) setup(j *internalJob, location *time.Location) error 
 	)
 
 	if c.withSeconds {
-		p := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+		p := cron.NewParser(cron.SecondOptional | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
 		cronSchedule, err = p.Parse(withLocation)
 	} else {
 		cronSchedule, err = cron.ParseStandard(withLocation)
 	}
 	if err != nil {
 		return errors.Join(ErrCronJobParse, err)
+	}
+	if cronSchedule.Next(now).IsZero() {
+		return ErrCronJobInvalid
 	}
 
 	j.jobSchedule = &cronJob{cronSchedule: cronSchedule}
@@ -154,7 +167,7 @@ type durationJobDefinition struct {
 	duration time.Duration
 }
 
-func (d durationJobDefinition) setup(j *internalJob, _ *time.Location) error {
+func (d durationJobDefinition) setup(j *internalJob, _ *time.Location, _ time.Time) error {
 	if d.duration == 0 {
 		return ErrDurationJobIntervalZero
 	}
@@ -176,7 +189,7 @@ type durationRandomJobDefinition struct {
 	min, max time.Duration
 }
 
-func (d durationRandomJobDefinition) setup(j *internalJob, _ *time.Location) error {
+func (d durationRandomJobDefinition) setup(j *internalJob, _ *time.Location, _ time.Time) error {
 	if d.min >= d.max {
 		return ErrDurationRandomJobMinMax
 	}
@@ -226,7 +239,7 @@ type dailyJobDefinition struct {
 	atTimes  AtTimes
 }
 
-func (d dailyJobDefinition) setup(j *internalJob, location *time.Location) error {
+func (d dailyJobDefinition) setup(j *internalJob, location *time.Location, _ time.Time) error {
 	atTimesDate, err := convertAtTimesToDateTime(d.atTimes, location)
 	switch {
 	case errors.Is(err, errAtTimesNil):
@@ -237,6 +250,10 @@ func (d dailyJobDefinition) setup(j *internalJob, location *time.Location) error
 		return ErrDailyJobHours
 	case errors.Is(err, errAtTimeMinSec):
 		return ErrDailyJobMinutesSeconds
+	}
+
+	if d.interval == 0 {
+		return ErrDailyJobZeroInterval
 	}
 
 	ds := dailyJob{
@@ -255,8 +272,11 @@ type weeklyJobDefinition struct {
 	atTimes       AtTimes
 }
 
-func (w weeklyJobDefinition) setup(j *internalJob, location *time.Location) error {
+func (w weeklyJobDefinition) setup(j *internalJob, location *time.Location, _ time.Time) error {
 	var ws weeklyJob
+	if w.interval == 0 {
+		return ErrWeeklyJobZeroInterval
+	}
 	ws.interval = w.interval
 
 	if w.daysOfTheWeek == nil {
@@ -320,8 +340,11 @@ type monthlyJobDefinition struct {
 	atTimes        AtTimes
 }
 
-func (m monthlyJobDefinition) setup(j *internalJob, location *time.Location) error {
+func (m monthlyJobDefinition) setup(j *internalJob, location *time.Location, _ time.Time) error {
 	var ms monthlyJob
+	if m.interval == 0 {
+		return ErrMonthlyJobZeroInterval
+	}
 	ms.interval = m.interval
 
 	if m.daysOfTheMonth == nil {
@@ -443,31 +466,58 @@ type oneTimeJobDefinition struct {
 	startAt OneTimeJobStartAtOption
 }
 
-func (o oneTimeJobDefinition) setup(j *internalJob, _ *time.Location) error {
-	j.jobSchedule = oneTimeJob{}
-	return o.startAt(j)
+func (o oneTimeJobDefinition) setup(j *internalJob, _ *time.Location, now time.Time) error {
+	sortedTimes := o.startAt(j)
+	slices.SortStableFunc(sortedTimes, ascendingTime)
+	// deduplicate the times
+	sortedTimes = removeSliceDuplicatesTimeOnSortedSlice(sortedTimes)
+	// keep only schedules that are in the future
+	idx, found := slices.BinarySearchFunc(sortedTimes, now, ascendingTime)
+	if found {
+		idx++
+	}
+	sortedTimes = sortedTimes[idx:]
+	if !j.startImmediately && len(sortedTimes) == 0 {
+		return ErrOneTimeJobStartDateTimePast
+	}
+	j.jobSchedule = oneTimeJob{sortedTimes: sortedTimes}
+	return nil
+}
+
+func removeSliceDuplicatesTimeOnSortedSlice(times []time.Time) []time.Time {
+	ret := make([]time.Time, 0, len(times))
+	for i, t := range times {
+		if i == 0 || t != times[i-1] {
+			ret = append(ret, t)
+		}
+	}
+	return ret
 }
 
 // OneTimeJobStartAtOption defines when the one time job is run
-type OneTimeJobStartAtOption func(*internalJob) error
+type OneTimeJobStartAtOption func(*internalJob) []time.Time
 
 // OneTimeJobStartImmediately tells the scheduler to run the one time job immediately.
 func OneTimeJobStartImmediately() OneTimeJobStartAtOption {
-	return func(j *internalJob) error {
+	return func(j *internalJob) []time.Time {
 		j.startImmediately = true
-		return nil
+		return []time.Time{}
 	}
 }
 
 // OneTimeJobStartDateTime sets the date & time at which the job should run.
-// This datetime must be in the future.
+// This datetime must be in the future (according to the scheduler clock).
 func OneTimeJobStartDateTime(start time.Time) OneTimeJobStartAtOption {
-	return func(j *internalJob) error {
-		if start.IsZero() || start.Before(time.Now()) {
-			return ErrOneTimeJobStartDateTimePast
-		}
-		j.startTime = start
-		return nil
+	return func(_ *internalJob) []time.Time {
+		return []time.Time{start}
+	}
+}
+
+// OneTimeJobStartDateTimes sets the date & times at which the job should run.
+// At least one of the date/times must be in the future (according to the scheduler clock).
+func OneTimeJobStartDateTimes(times ...time.Time) OneTimeJobStartAtOption {
+	return func(_ *internalJob) []time.Time {
+		return times
 	}
 }
 
@@ -486,13 +536,13 @@ func OneTimeJob(startAt OneTimeJobStartAtOption) JobDefinition {
 // -----------------------------------------------
 
 // JobOption defines the constructor for job options.
-type JobOption func(*internalJob) error
+type JobOption func(*internalJob, time.Time) error
 
 // WithDistributedJobLocker sets the locker to be used by multiple
 // Scheduler instances to ensure that only one instance of each
 // job is run.
 func WithDistributedJobLocker(locker Locker) JobOption {
-	return func(j *internalJob) error {
+	return func(j *internalJob, _ time.Time) error {
 		if locker == nil {
 			return ErrWithDistributedJobLockerNil
 		}
@@ -504,7 +554,7 @@ func WithDistributedJobLocker(locker Locker) JobOption {
 // WithEventListeners sets the event listeners that should be
 // run for the job.
 func WithEventListeners(eventListeners ...EventListener) JobOption {
-	return func(j *internalJob) error {
+	return func(j *internalJob, _ time.Time) error {
 		for _, eventListener := range eventListeners {
 			if err := eventListener(j); err != nil {
 				return err
@@ -517,7 +567,7 @@ func WithEventListeners(eventListeners ...EventListener) JobOption {
 // WithLimitedRuns limits the number of executions of this job to n.
 // Upon reaching the limit, the job is removed from the scheduler.
 func WithLimitedRuns(limit uint) JobOption {
-	return func(j *internalJob) error {
+	return func(j *internalJob, _ time.Time) error {
 		j.limitRunsTo = &limitRunsTo{
 			limit:    limit,
 			runCount: 0,
@@ -529,8 +579,7 @@ func WithLimitedRuns(limit uint) JobOption {
 // WithName sets the name of the job. Name provides
 // a human-readable identifier for the job.
 func WithName(name string) JobOption {
-	// TODO use the name for metrics and future logging option
-	return func(j *internalJob) error {
+	return func(j *internalJob, _ time.Time) error {
 		if name == "" {
 			return ErrWithNameEmpty
 		}
@@ -543,7 +592,7 @@ func WithName(name string) JobOption {
 // This is useful for jobs that should not overlap, and that occasionally
 // (but not consistently) run longer than the interval between job runs.
 func WithSingletonMode(mode LimitMode) JobOption {
-	return func(j *internalJob) error {
+	return func(j *internalJob, _ time.Time) error {
 		j.singletonMode = true
 		j.singletonLimitMode = mode
 		return nil
@@ -553,19 +602,19 @@ func WithSingletonMode(mode LimitMode) JobOption {
 // WithStartAt sets the option for starting the job at
 // a specific datetime.
 func WithStartAt(option StartAtOption) JobOption {
-	return func(j *internalJob) error {
-		return option(j)
+	return func(j *internalJob, now time.Time) error {
+		return option(j, now)
 	}
 }
 
 // StartAtOption defines options for starting the job
-type StartAtOption func(*internalJob) error
+type StartAtOption func(*internalJob, time.Time) error
 
 // WithStartImmediately tells the scheduler to run the job immediately
 // regardless of the type or schedule of job. After this immediate run
 // the job is scheduled from this time based on the job definition.
 func WithStartImmediately() StartAtOption {
-	return func(j *internalJob) error {
+	return func(j *internalJob, _ time.Time) error {
 		j.startImmediately = true
 		return nil
 	}
@@ -574,11 +623,41 @@ func WithStartImmediately() StartAtOption {
 // WithStartDateTime sets the first date & time at which the job should run.
 // This datetime must be in the future.
 func WithStartDateTime(start time.Time) StartAtOption {
-	return func(j *internalJob) error {
-		if start.IsZero() || start.Before(time.Now()) {
+	return func(j *internalJob, now time.Time) error {
+		if start.IsZero() || start.Before(now) {
 			return ErrWithStartDateTimePast
 		}
+		if !j.stopTime.IsZero() && j.stopTime.Before(start) {
+			return ErrStartTimeLaterThanEndTime
+		}
 		j.startTime = start
+		return nil
+	}
+}
+
+// WithStopAt sets the option for stopping the job from running
+// after the specified time.
+func WithStopAt(option StopAtOption) JobOption {
+	return func(j *internalJob, now time.Time) error {
+		return option(j, now)
+	}
+}
+
+// StopAtOption defines options for stopping the job
+type StopAtOption func(*internalJob, time.Time) error
+
+// WithStopDateTime sets the final date & time after which the job should stop.
+// This must be in the future and should be after the startTime (if specified).
+// The job's final run may be at the stop time, but not after.
+func WithStopDateTime(end time.Time) StopAtOption {
+	return func(j *internalJob, now time.Time) error {
+		if end.IsZero() || end.Before(now) {
+			return ErrWithStopDateTimePast
+		}
+		if end.Before(j.startTime) {
+			return ErrStopTimeEarlierThanStartTime
+		}
+		j.stopTime = end
 		return nil
 	}
 }
@@ -587,8 +666,22 @@ func WithStartDateTime(start time.Time) StartAtOption {
 // a way to identify jobs by a set of tags and remove
 // multiple jobs by tag.
 func WithTags(tags ...string) JobOption {
-	return func(j *internalJob) error {
+	return func(j *internalJob, _ time.Time) error {
 		j.tags = tags
+		return nil
+	}
+}
+
+// WithIdentifier sets the identifier for the job. The identifier
+// is used to uniquely identify the job and is used for logging
+// and metrics.
+func WithIdentifier(id uuid.UUID) JobOption {
+	return func(j *internalJob, _ time.Time) error {
+		if id == uuid.Nil {
+			return ErrWithIdentifierNil
+		}
+
+		j.id = id
 		return nil
 	}
 }
@@ -602,6 +695,18 @@ func WithTags(tags ...string) JobOption {
 // EventListener defines the constructor for event
 // listeners that can be used to listen for job events.
 type EventListener func(*internalJob) error
+
+// BeforeJobRuns is used to listen for when a job is about to run and
+// then run the provided function.
+func BeforeJobRuns(eventListenerFunc func(jobID uuid.UUID, jobName string)) EventListener {
+	return func(j *internalJob) error {
+		if eventListenerFunc == nil {
+			return ErrEventListenerFuncNil
+		}
+		j.beforeJobRuns = eventListenerFunc
+		return nil
+	}
+}
 
 // AfterJobRuns is used to listen for when a job has run
 // without an error, and then run the provided function.
@@ -627,14 +732,26 @@ func AfterJobRunsWithError(eventListenerFunc func(jobID uuid.UUID, jobName strin
 	}
 }
 
-// BeforeJobRuns is used to listen for when a job is about to run and
-// then run the provided function.
-func BeforeJobRuns(eventListenerFunc func(jobID uuid.UUID, jobName string)) EventListener {
+// AfterJobRunsWithPanic is used to listen for when a job has run and
+// returned panicked recover data, and then run the provided function.
+func AfterJobRunsWithPanic(eventListenerFunc func(jobID uuid.UUID, jobName string, recoverData any)) EventListener {
 	return func(j *internalJob) error {
 		if eventListenerFunc == nil {
 			return ErrEventListenerFuncNil
 		}
-		j.beforeJobRuns = eventListenerFunc
+		j.afterJobRunsWithPanic = eventListenerFunc
+		return nil
+	}
+}
+
+// AfterLockError is used to when the distributed locker returns an error and
+// then run the provided function.
+func AfterLockError(eventListenerFunc func(jobID uuid.UUID, jobName string, err error)) EventListener {
+	return func(j *internalJob) error {
+		if eventListenerFunc == nil {
+			return ErrEventListenerFuncNil
+		}
+		j.afterLockError = eventListenerFunc
 		return nil
 	}
 }
@@ -845,10 +962,33 @@ func (m monthlyJob) nextMonthDayAtTime(lastRun time.Time, days []int, firstPass 
 
 var _ jobSchedule = (*oneTimeJob)(nil)
 
-type oneTimeJob struct{}
+type oneTimeJob struct {
+	sortedTimes []time.Time
+}
 
-func (o oneTimeJob) next(_ time.Time) time.Time {
-	return time.Time{}
+// next finds the next item in a sorted list of times using binary-search.
+//
+// example: sortedTimes: [2, 4, 6, 8]
+//
+// lastRun: 1 => [idx=0,found=false] => next is 2 - sorted[idx] idx=0
+// lastRun: 2 => [idx=0,found=true] => next is 4 - sorted[idx+1] idx=1
+// lastRun: 3 => [idx=1,found=false] => next is 4 - sorted[idx] idx=1
+// lastRun: 4 => [idx=1,found=true] => next is 6 - sorted[idx+1] idx=2
+// lastRun: 7 => [idx=3,found=false] => next is 8 - sorted[idx] idx=3
+// lastRun: 8 => [idx=3,found=found] => next is none
+// lastRun: 9 => [idx=3,found=found] => next is none
+func (o oneTimeJob) next(lastRun time.Time) time.Time {
+	idx, found := slices.BinarySearchFunc(o.sortedTimes, lastRun, ascendingTime)
+	// if found, the next run is the following index
+	if found {
+		idx++
+	}
+	// exhausted runs
+	if idx >= len(o.sortedTimes) {
+		return time.Time{}
+	}
+
+	return o.sortedTimes[idx]
 }
 
 // -----------------------------------------------
