@@ -88,10 +88,12 @@ func convertAtTimesToDateTime(atTimes AtTimes, location *time.Location) ([]time.
 		}
 		atTimesDate = append(atTimesDate, at.time(location))
 	}
-	slices.SortStableFunc(atTimesDate, func(a, b time.Time) int {
-		return a.Compare(b)
-	})
+	slices.SortStableFunc(atTimesDate, ascendingTime)
 	return atTimesDate, nil
+}
+
+func ascendingTime(a, b time.Time) int {
+	return a.Compare(b)
 }
 
 type waitGroupWithMutex struct {

@@ -31,7 +31,7 @@ github.com/evanphx/json-patch
 ## explicit; go 1.17
 github.com/fsnotify/fsnotify
 github.com/fsnotify/fsnotify/internal
-# github.com/go-co-op/gocron/v2 v2.5.0
+# github.com/go-co-op/gocron/v2 v2.12.4
 ## explicit; go 1.20
 github.com/go-co-op/gocron/v2
 # github.com/go-logr/logr v1.4.2
@@ -178,7 +178,7 @@ github.com/spf13/pflag
 # github.com/vishvananda/netns v0.0.4
 ## explicit; go 1.17
 github.com/vishvananda/netns
-# golang.org/x/exp v0.0.0-20240416160154-fe59bbe5cc7f
+# golang.org/x/exp v0.0.0-20240613232115-7f521ea00fb8
 ## explicit; go 1.20
 golang.org/x/exp/constraints
 golang.org/x/exp/maps
