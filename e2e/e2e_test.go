@@ -3,12 +3,13 @@ package whereabouts_e2e
 import (
 	"context"
 	"fmt"
-	"github.com/k8snetworkplumbingwg/whereabouts/e2e/util"
 	"net"
 	"sort"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/k8snetworkplumbingwg/whereabouts/e2e/util"
 
 	. "github.com/onsi/ginkgo"
 	"github.com/onsi/ginkgo/extensions/table"
@@ -506,7 +507,7 @@ var _ = Describe("Whereabouts functionality", func() {
 							namespace,
 							serviceName,
 							replicaNumber,
-							time.Second,
+							5*time.Second,
 							wbtestclient.IsStatefulSetDegradedPredicate)).Should(Succeed())
 
 						scaleUpTimeout := 2 * util.CreatePodTimeout
