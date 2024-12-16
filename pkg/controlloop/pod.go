@@ -73,7 +73,7 @@ type PodController struct {
 	netAttachDefLister      nadlister.NetworkAttachmentDefinitionLister
 	broadcaster             record.EventBroadcaster
 	recorder                record.EventRecorder
-	workqueue               workqueue.RateLimitingInterface
+	workqueue               workqueue.TypedRateLimitingInterface[*v1.Pod]
 	mountPath               string
 	cleanupFunc             garbageCollector
 }
@@ -108,9 +108,8 @@ func newPodController(k8sCoreClient kubernetes.Interface, wbClient wbclientset.I
 	networksInformer := netAttachDefInformer.Informer()
 	podsInformer := k8sPodFilteredInformer.Informer()
 
-	queue := workqueue.NewNamedRateLimitingQueue(
-		workqueue.DefaultControllerRateLimiter(),
-		ipReconcilerQueueName)
+	queue := workqueue.NewTypedRateLimitingQueue[*v1.Pod](
+		workqueue.DefaultTypedControllerRateLimiter[*v1.Pod]())
 
 	podsInformer.AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
@@ -166,7 +165,7 @@ func (pc *PodController) processNextWorkItem() bool {
 	}
 	defer pc.workqueue.Done(queueItem)
 
-	pod := queueItem.(*v1.Pod)
+	pod := queueItem
 	err := pc.garbageCollectPodIPs(pod)
 	logging.Verbosef("result of garbage collecting pods: %+v", err)
 	pc.handleResult(pod, err)
@@ -344,7 +343,7 @@ func (pc *PodController) addressGarbageCollectionFailed(pod *v1.Pod, err error) 
 	}
 }
 
-func onPodDelete(queue workqueue.RateLimitingInterface, obj interface{}) {
+func onPodDelete(queue workqueue.TypedRateLimitingInterface[*v1.Pod], obj interface{}) {
 	pod, err := podFromTombstone(obj)
 	if err != nil {
 		logging.Errorf("cannot create pod object from %v on pod delete: %v", obj, err)
