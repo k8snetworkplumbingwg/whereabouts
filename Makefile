@@ -32,6 +32,11 @@ test-skip-static: build
 kind:
 	hack/e2e-setup-kind-cluster.sh -n $(COMPUTE_NODES)
 
+update-deps:
+	go mod tidy
+	go mod vendor
+	go mod verify
+
 $(BIN_DIR):
 	@mkdir -p $(BIN_DIR)
 
