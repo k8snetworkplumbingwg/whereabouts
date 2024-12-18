@@ -19,16 +19,17 @@ package node_controller
 import (
 	"context"
 	"fmt"
+	"os"
+	"reflect"
+	"testing"
+	"time"
+
 	k8snetplumbersv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/tools/cache"
-	"os"
-	"reflect"
-	"testing"
-	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/diff"
@@ -39,8 +40,8 @@ import (
 
 	k8snetplumbersv1fake "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/client/clientset/versioned/fake"
 	nadinformers "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/client/informers/externalversions"
-	"github.com/k8snetworkplumbingwg/whereabouts/pkg/client/clientset/versioned/fake"
-	informers "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/informers/externalversions"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/clientset/versioned/fake"
+	informers "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/informers/externalversions"
 )
 
 var (

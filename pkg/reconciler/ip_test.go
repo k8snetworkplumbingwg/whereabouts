@@ -21,8 +21,8 @@ import (
 	k8sclient "k8s.io/client-go/kubernetes"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
 
-	wbclient "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/clientset/versioned"
-	fakewbclient "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/clientset/versioned/fake"
+	wbclient "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/clientset/versioned"
+	fakewbclient "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/clientset/versioned/fake"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage/kubernetes"
 )
 
