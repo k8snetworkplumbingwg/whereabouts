@@ -25,9 +25,9 @@ import (
 
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/allocate"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
-	wbclientset "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/clientset/versioned"
-	"github.com/k8snetworkplumbingwg/whereabouts/pkg/client/clientset/versioned/fake"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/config"
+	wbclientset "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/clientset/versioned"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/clientset/versioned/fake"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage/kubernetes"
 	whereaboutstypes "github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 )

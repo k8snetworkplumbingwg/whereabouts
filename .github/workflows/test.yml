@@ -36,7 +36,7 @@ jobs:
 
     - name: Generate code
       if: steps.changed-files.outputs.any_changed == 'true'
-      run: chmod +x vendor/k8s.io/code-generator/generate-internal-groups.sh && ./hack/generate-code.sh && hack/verify-codegen.sh
+      run: ./hack/generate-code.sh && hack/verify-codegen.sh
 
     - name: Run go fmt
       if: steps.changed-files.outputs.any_changed == 'true'

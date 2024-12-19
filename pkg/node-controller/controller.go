@@ -29,10 +29,10 @@ import (
 	nadlisters "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/client/listers/k8s.cni.cncf.io/v1"
 
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
-	clientset "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/clientset/versioned"
-	whereaboutsInformers "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/informers/externalversions/whereabouts.cni.cncf.io/v1alpha1"
-	whereaboutsListers "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/listers/whereabouts.cni.cncf.io/v1alpha1"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/config"
+	clientset "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/clientset/versioned"
+	whereaboutsInformers "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/informers/externalversions/whereabouts.cni.cncf.io/v1alpha1"
+	whereaboutsListers "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/listers/whereabouts.cni.cncf.io/v1alpha1"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/iphelpers"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 )
@@ -69,7 +69,7 @@ type Controller struct {
 	// means we can ensure we only process a fixed amount of resources at a
 	// time, and makes it easy to ensure we are never processing the same item
 	// simultaneously in two different workers.
-	workqueue workqueue.RateLimitingInterface
+	workqueue workqueue.TypedRateLimitingInterface[string]
 
 	// recorder is an event recorder for recording Event resources to the
 	// Kubernetes API.
@@ -103,9 +103,9 @@ func NewController(
 	eventBroadcaster.StartStructuredLogging(0)
 	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: kubeclientset.CoreV1().Events("")})
 	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: controllerAgentName})
-	ratelimiter := workqueue.NewMaxOfRateLimiter(
-		workqueue.NewItemExponentialFailureRateLimiter(5*time.Millisecond, 1000*time.Second),
-		&workqueue.BucketRateLimiter{Limiter: rate.NewLimiter(rate.Limit(50), 300)},
+	ratelimiter := workqueue.NewTypedMaxOfRateLimiter(
+		workqueue.NewTypedItemExponentialFailureRateLimiter[string](5*time.Millisecond, 1000*time.Second),
+		&workqueue.TypedBucketRateLimiter[string]{Limiter: rate.NewLimiter(rate.Limit(50), 300)},
 	)
 
 	c := &Controller{
@@ -121,7 +121,7 @@ func NewController(
 		nadInformer:           nadInformer,
 		nadLister:             nadInformer.Lister(),
 		nadSynced:             nadInformer.Informer().HasSynced,
-		workqueue:             workqueue.NewRateLimitingQueue(ratelimiter),
+		workqueue:             workqueue.NewTypedRateLimitingQueue(ratelimiter),
 		recorder:              recorder,
 		sortResults:           sortResults,
 		whereaboutsNamespace:  whereaboutsNamespace,
@@ -253,29 +253,20 @@ func (c *Controller) processNextWorkItem(ctx context.Context) bool {
 	}
 
 	// We wrap this block in a func so we can defer c.workqueue.Done.
-	err := func(obj interface{}) error {
+	err := func(key string) error {
 		// We call Done here so the workqueue knows we have finished
 		// processing this item. We also must remember to call Forget if we
 		// do not want this work item being re-queued. For example, we do
 		// not call Forget if a transient error occurs, instead the item is
 		// put back on the workqueue and attempted again after a back-off
 		// period.
-		defer c.workqueue.Done(obj)
-		var key string
-		var ok bool
+		defer c.workqueue.Done(key)
 		// We expect strings to come off the workqueue. These are of the
 		// form namespace/name. We do this as the delayed nature of the
 		// workqueue means the items in the informer cache may actually be
 		// more up to date that when the item was initially put onto the
 		// workqueue.
-		if key, ok = obj.(string); !ok {
-			// As the item in the workqueue is actually invalid, we call
-			// Forget here else we'd go into a loop of attempting to
-			// process a work item that is invalid.
-			c.workqueue.Forget(obj)
-			utilruntime.HandleError(fmt.Errorf("expected string in workqueue but got %#v", obj))
-			return nil
-		}
+
 		// Run the syncHandler, passing it the namespace/name string of the
 		// Foo resource to be synced.
 		if err := c.syncHandler(ctx, key); err != nil {
@@ -285,7 +276,7 @@ func (c *Controller) processNextWorkItem(ctx context.Context) bool {
 		}
 		// Finally, if no error occurs we Forget this item so it does not
 		// get queued again until another change happens.
-		c.workqueue.Forget(obj)
+		c.workqueue.Forget(key)
 		logger.Info("Successfully synced", "resourceName", key)
 		return nil
 	}(obj)

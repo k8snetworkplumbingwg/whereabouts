@@ -20,11 +20,15 @@ set -o pipefail
 
 SCRIPT_ROOT=$(dirname "${BASH_SOURCE[0]}")/..
 
-bash ./vendor/k8s.io/code-generator/generate-groups.sh "client,informer,lister" \
-  github.com/k8snetworkplumbingwg/whereabouts/pkg/client \
-  github.com/k8snetworkplumbingwg/whereabouts/pkg/api \
-  whereabouts.cni.cncf.io:v1alpha1 \
-  --go-header-file "${SCRIPT_ROOT}"/hack/boilerplate.go.txt
+CODEGEN_PKG=${CODEGEN_PKG:-$(cd "${SCRIPT_ROOT}"; ls -d -1 ./vendor/k8s.io/code-generator 2>/dev/null || echo ../code-generator)}
+source "${CODEGEN_PKG}/kube_codegen.sh"
 
-cp -r github.com/k8snetworkplumbingwg/whereabouts/pkg/client/* pkg/client
+THIS_PKG="github.com/k8snetworkplumbingwg/whereabouts"
+
+kube::codegen::gen_client \
+    --with-watch \
+    --output-dir "${SCRIPT_ROOT}/pkg/generated" \
+    --output-pkg "${THIS_PKG}/pkg/generated" \
+    --boilerplate "${SCRIPT_ROOT}/hack/boilerplate.go.txt" \
+    "${SCRIPT_ROOT}/pkg/api"
 

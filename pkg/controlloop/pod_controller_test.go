@@ -24,8 +24,8 @@ import (
 	fakenadclient "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/client/clientset/versioned/fake"
 
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
-	wbclient "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/clientset/versioned"
-	fakewbclient "github.com/k8snetworkplumbingwg/whereabouts/pkg/client/clientset/versioned/fake"
+	wbclient "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/clientset/versioned"
+	fakewbclient "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/clientset/versioned/fake"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage/kubernetes"
 )
 
