@@ -241,9 +241,11 @@ func (s *scheduler) stopScheduler() {
 	}
 	var err error
 	if s.started {
+		t := time.NewTimer(s.exec.stopTimeout + 1*time.Second)
 		select {
 		case err = <-s.exec.done:
-		case <-time.After(s.exec.stopTimeout + 1*time.Second):
+			t.Stop()
+		case <-t.C:
 			err = ErrStopExecutorTimedOut
 		}
 	}
@@ -741,20 +743,27 @@ func (s *scheduler) StopJobs() error {
 		return nil
 	case s.stopCh <- struct{}{}:
 	}
+
+	t := time.NewTimer(s.exec.stopTimeout + 2*time.Second)
 	select {
 	case err := <-s.stopErrCh:
+		t.Stop()
 		return err
-	case <-time.After(s.exec.stopTimeout + 2*time.Second):
+	case <-t.C:
 		return ErrStopSchedulerTimedOut
 	}
 }
 
 func (s *scheduler) Shutdown() error {
 	s.shutdownCancel()
+
+	t := time.NewTimer(s.exec.stopTimeout + 2*time.Second)
 	select {
 	case err := <-s.stopErrCh:
+
+		t.Stop()
 		return err
-	case <-time.After(s.exec.stopTimeout + 2*time.Second):
+	case <-t.C:
 		return ErrStopSchedulerTimedOut
 	}
 }
@@ -809,6 +818,8 @@ func WithDistributedElector(elector Elector) SchedulerOption {
 // WithDistributedLocker sets the locker to be used by multiple
 // Scheduler instances to ensure that only one instance of each
 // job is run.
+// To disable this global locker for specific jobs, see
+// WithDisabledDistributedJobLocker.
 func WithDistributedLocker(locker Locker) SchedulerOption {
 	return func(s *scheduler) error {
 		if locker == nil {
@@ -942,6 +953,17 @@ func WithMonitor(monitor Monitor) SchedulerOption {
 			return ErrWithMonitorNil
 		}
 		s.exec.monitor = monitor
+		return nil
+	}
+}
+
+// WithMonitorStatus sets the metrics provider to be used by the Scheduler.
+func WithMonitorStatus(monitor MonitorStatus) SchedulerOption {
+	return func(s *scheduler) error {
+		if monitor == nil {
+			return ErrWithMonitorNil
+		}
+		s.exec.monitorStatus = monitor
 		return nil
 	}
 }
