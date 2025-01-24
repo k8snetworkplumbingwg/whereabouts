@@ -26,3 +26,11 @@ type Monitor interface {
 	// to handle instantiating and recording the value
 	RecordJobTiming(startTime, endTime time.Time, id uuid.UUID, name string, tags []string)
 }
+
+// MonitorStatus extends RecordJobTiming with the job status.
+type MonitorStatus interface {
+	Monitor
+	// RecordJobTimingWithStatus will provide details about the job, its status, error and the timing and expects the underlying implementation
+	// to handle instantiating and recording the value
+	RecordJobTimingWithStatus(startTime, endTime time.Time, id uuid.UUID, name string, tags []string, status JobStatus, err error)
+}

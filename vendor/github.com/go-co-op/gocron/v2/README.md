@@ -151,6 +151,7 @@ The provided NewLogger uses the standard library's log package.
 ### Metrics
 Metrics may be collected from the execution of each job.
 - [**Monitor**](https://pkg.go.dev/github.com/go-co-op/gocron/v2#Monitor):
+- [**MonitorStatus**](https://pkg.go.dev/github.com/go-co-op/gocron/v2#MonitorStatus) (includes status and error (if any) of the Job)
 A monitor can be used to collect metrics for each job from a scheduler.
   - Implementations: [go-co-op monitors](https://github.com/go-co-op?q=-monitor&type=all&language=&sort=)
     (don't see what you need? request on slack to get a repo created to contribute it!)
@@ -168,8 +169,11 @@ We appreciate the support for free and open source software!
 
 This project is supported by:
 
-- [Jetbrains](https://www.jetbrains.com/?from=gocron)
-- [Sentry](https://sentry.io/welcome/)
+[Jetbrains](https://www.jetbrains.com/?from=gocron)
+![JetBrains logo](https://resources.jetbrains.com/storage/products/company/brand/logos/jetbrains.png)
+
+
+[Sentry](https://sentry.io/welcome/)
 
 ## Star History
 

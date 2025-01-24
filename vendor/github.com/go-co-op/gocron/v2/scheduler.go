@@ -21,6 +21,10 @@ type Scheduler interface {
 	// NewJob creates a new job in the Scheduler. The job is scheduled per the provided
 	// definition when the Scheduler is started. If the Scheduler is already running
 	// the job will be scheduled when the Scheduler is started.
+	// If you set the first argument of your Task func to be a context.Context,
+	// gocron will pass in a context (either the default Job context, or one
+	// provided via WithContext) to the job and will cancel the context on shutdown.
+	// This allows you to listen for and handle cancellation within your job.
 	NewJob(JobDefinition, Task, ...JobOption) (Job, error)
 	// RemoveByTags removes all jobs that have at least one of the provided tags.
 	RemoveByTags(...string)
@@ -241,9 +245,11 @@ func (s *scheduler) stopScheduler() {
 	}
 	var err error
 	if s.started {
+		t := time.NewTimer(s.exec.stopTimeout + 1*time.Second)
 		select {
 		case err = <-s.exec.done:
-		case <-time.After(s.exec.stopTimeout + 1*time.Second):
+			t.Stop()
+		case <-t.C:
 			err = ErrStopExecutorTimedOut
 		}
 	}
@@ -646,8 +652,6 @@ func (s *scheduler) addOrUpdateJob(id uuid.UUID, definition JobDefinition, taskW
 		j.id = id
 	}
 
-	j.ctx, j.cancel = context.WithCancel(s.shutdownCtx)
-
 	if taskWrapper == nil {
 		return nil, ErrNewJobTaskNil
 	}
@@ -660,10 +664,6 @@ func (s *scheduler) addOrUpdateJob(id uuid.UUID, definition JobDefinition, taskW
 
 	if taskFunc.Kind() != reflect.Func {
 		return nil, ErrNewJobTaskNotFunc
-	}
-
-	if err := s.verifyParameterType(taskFunc, tsk); err != nil {
-		return nil, err
 	}
 
 	j.name = runtime.FuncForPC(taskFunc.Pointer()).Name()
@@ -682,6 +682,28 @@ func (s *scheduler) addOrUpdateJob(id uuid.UUID, definition JobDefinition, taskW
 		if err := option(&j, s.now()); err != nil {
 			return nil, err
 		}
+	}
+
+	if j.parentCtx == nil {
+		j.parentCtx = s.shutdownCtx
+	}
+	j.ctx, j.cancel = context.WithCancel(j.parentCtx)
+
+	if !taskFunc.IsZero() && taskFunc.Type().NumIn() > 0 {
+		// if the first parameter is a context.Context and params have no context.Context, add current ctx to the params
+		if taskFunc.Type().In(0) == reflect.TypeOf((*context.Context)(nil)).Elem() {
+			if len(tsk.parameters) == 0 {
+				tsk.parameters = []any{j.ctx}
+				j.parameters = []any{j.ctx}
+			} else if _, ok := tsk.parameters[0].(context.Context); !ok {
+				tsk.parameters = append([]any{j.ctx}, tsk.parameters...)
+				j.parameters = append([]any{j.ctx}, j.parameters...)
+			}
+		}
+	}
+
+	if err := s.verifyParameterType(taskFunc, tsk); err != nil {
+		return nil, err
 	}
 
 	if err := definition.setup(&j, s.location, s.exec.clock.Now()); err != nil {
@@ -741,20 +763,27 @@ func (s *scheduler) StopJobs() error {
 		return nil
 	case s.stopCh <- struct{}{}:
 	}
+
+	t := time.NewTimer(s.exec.stopTimeout + 2*time.Second)
 	select {
 	case err := <-s.stopErrCh:
+		t.Stop()
 		return err
-	case <-time.After(s.exec.stopTimeout + 2*time.Second):
+	case <-t.C:
 		return ErrStopSchedulerTimedOut
 	}
 }
 
 func (s *scheduler) Shutdown() error {
 	s.shutdownCancel()
+
+	t := time.NewTimer(s.exec.stopTimeout + 2*time.Second)
 	select {
 	case err := <-s.stopErrCh:
+
+		t.Stop()
 		return err
-	case <-time.After(s.exec.stopTimeout + 2*time.Second):
+	case <-t.C:
 		return ErrStopSchedulerTimedOut
 	}
 }
@@ -809,6 +838,8 @@ func WithDistributedElector(elector Elector) SchedulerOption {
 // WithDistributedLocker sets the locker to be used by multiple
 // Scheduler instances to ensure that only one instance of each
 // job is run.
+// To disable this global locker for specific jobs, see
+// WithDisabledDistributedJobLocker.
 func WithDistributedLocker(locker Locker) SchedulerOption {
 	return func(s *scheduler) error {
 		if locker == nil {
@@ -942,6 +973,17 @@ func WithMonitor(monitor Monitor) SchedulerOption {
 			return ErrWithMonitorNil
 		}
 		s.exec.monitor = monitor
+		return nil
+	}
+}
+
+// WithMonitorStatus sets the metrics provider to be used by the Scheduler.
+func WithMonitorStatus(monitor MonitorStatus) SchedulerOption {
+	return func(s *scheduler) error {
+		if monitor == nil {
+			return ErrWithMonitorNil
+		}
+		s.exec.monitorStatus = monitor
 		return nil
 	}
 }
