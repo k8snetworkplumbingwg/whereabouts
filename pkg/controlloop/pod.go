@@ -225,17 +225,16 @@ func (pc *PodController) garbageCollectPodIPs(pod *v1.Pod) error {
 				if allocation.PodRef == podID(podNamespace, podName) {
 					logging.Verbosef("stale allocation to cleanup: %+v", allocation)
 
-					client := *wbclient.NewKubernetesClient(nil, pc.k8sClient)
-					wbClient := &wbclient.KubernetesIPAM{
-						Client: client,
-						Config: *ipamConfig,
+					client := *wbclient.NewKubernetesClient(pc.wbClient, pc.k8sClient)
+					k8sIPAM := &wbclient.KubernetesIPAM{
+						Config:      *ipamConfig,
+						ContainerID: allocation.ContainerID,
+						IfName:      allocation.IfName,
+						Namespace:   pool.Namespace,
+						Client:      client,
 					}
 
-					if err != nil {
-						logging.Debugf("error while generating the IPAM client: %v", err)
-						continue
-					}
-					if _, err := pc.cleanupFunc(context.TODO(), types.Deallocate, *ipamConfig, wbClient); err != nil {
+					if _, err := pc.cleanupFunc(context.TODO(), types.Deallocate, *ipamConfig, k8sIPAM); err != nil {
 						logging.Errorf("failed to cleanup allocation: %v", err)
 					}
 					if err := pc.addressGarbageCollected(pod, nad.GetName(), pool.Spec.Range, allocationIndex); err != nil {
@@ -245,7 +244,6 @@ func (pc *PodController) garbageCollectPodIPs(pod *v1.Pod) error {
 			}
 		}
 	}
-
 	return nil
 }
 
