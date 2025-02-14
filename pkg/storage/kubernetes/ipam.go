@@ -355,16 +355,22 @@ func NormalizeIP(ip net.IP, networkName string) string {
 	return normalizedIP
 }
 
-// TODO: what's the best way to discover the node name? this should work in both controller pod and whereabouts host process
-func getNodeName() (string, error) {
+// getNodeName prefers an OS env var of NODENAME, or, uses a file named ./nodename in the whereabouts configuration path.
+func getNodeName(ipam *KubernetesIPAM) (string, error) {
+
 	envName := os.Getenv("NODENAME")
 	if envName != "" {
 		return strings.TrimSpace(envName), nil
 	}
-	file, err := os.Open("/etc/hostname")
+
+	nodeNamePath := fmt.Sprintf("%s/%s", ipam.Config.ConfigurationPath, "nodename")
+	file, err := os.Open(nodeNamePath)
 	if err != nil {
-		logging.Errorf("Error opening file /etc/hostname: %v", err)
-		return "", err
+		file, err = os.Open("/etc/hostname")
+		if err != nil {
+			logging.Errorf("Could not determine nodename and could not open /etc/hostname: %v", err)
+			return "", err
+		}
 	}
 	defer file.Close()
 
@@ -395,7 +401,7 @@ func newLeaderElector(ctx context.Context, clientset kubernetes.Interface, names
 	leaseName := "whereabouts"
 	if ipamConf.Config.NodeSliceSize != "" {
 		// we lock per IP Pool so just use the pool name for the lease name
-		hostname, err := getNodeName()
+		hostname, err := getNodeName(ipamConf)
 		if err != nil {
 			logging.Errorf("Failed to create leader elector: %v", err)
 			return nil, leaderOK, deposed
@@ -580,7 +586,7 @@ func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *Kubernete
 			}
 			poolIdentifier := PoolIdentifier{IpRange: ipRange.Range, NetworkName: ipamConf.NetworkName}
 			if ipamConf.NodeSliceSize != "" {
-				hostname, err := getNodeName()
+				hostname, err := getNodeName(ipam)
 				if err != nil {
 					logging.Errorf("Failed to get node hostname: %v", err)
 					return newips, err
