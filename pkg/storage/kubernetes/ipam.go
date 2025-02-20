@@ -70,6 +70,17 @@ func NewKubernetesIPAM(containerID, ifName string, ipamConf whereaboutstypes.IPA
 	return k8sIPAM, nil
 }
 
+// NewKubernetesIPAMWithClient returns a new KubernetesIPAM Client configured to a kubernetes CRD backend
+func NewKubernetesIPAMWithClient(containerID, ifName string, ipamConf whereaboutstypes.IPAMConfig, namespace string, kubernetesClient Client) *KubernetesIPAM {
+	return &KubernetesIPAM{
+		Config:      ipamConf,
+		containerID: containerID,
+		IfName:      ifName,
+		namespace:   namespace,
+		Client:      kubernetesClient,
+	}
+}
+
 // NewKubernetesIPAMWithNamespace returns a new KubernetesIPAM Client configured to a kubernetes CRD backend
 func NewKubernetesIPAMWithNamespace(containerID, ifName string, ipamConf whereaboutstypes.IPAMConfig, namespace string) (*KubernetesIPAM, error) {
 	k8sIPAM, err := NewKubernetesIPAM(containerID, ifName, ipamConf)
