@@ -58,7 +58,7 @@ helm template whereabouts oci://ghcr.io/k8snetworkplumbingwg/whereabouts-chart -
 
 ```
 
-Helm will install the crd as well as the daemonset
+Helm will install the crd as well as the daemonset 
 
 ## Example IPAM Config
 
@@ -365,3 +365,4 @@ The typeface used in the logo is [AZONIX](https://www.dafont.com/azonix.font), b
 * The etcd method has a number of limitations, in that it uses an all ASCII methodology. If this was binary, it could probably store more and have more efficient IP address comparison.
 * Unlikely to work in Canada, apparently it would have to be "where aboots?" for Canadians to be able to operate it.
 * In case of wide IPv6 CIDRs (`range`≤/64) only the first /65 range is addressable by Whereabouts due to uint64 offset calculation.
+* foo 
