@@ -45,7 +45,9 @@ git clone https://github.com/k8snetworkplumbingwg/whereabouts && cd whereabouts
 kubectl apply \
     -f doc/crds/daemonset-install.yaml \
     -f doc/crds/whereabouts.cni.cncf.io_ippools.yaml \
-    -f doc/crds/whereabouts.cni.cncf.io_overlappingrangeipreservations.yaml
+    -f doc/crds/whereabouts.cni.cncf.io_nodeslicepools.yaml \
+    -f doc/crds/whereabouts.cni.cncf.io_overlappingrangeipreservations.yaml \
+    -f doc/crds/node-slice-controller.yaml
 ```
 
 The daemonset installation requires Kubernetes Version 1.16 or later.
@@ -211,8 +213,8 @@ spec:
     "mode": "bridge",
     "ipam": {
       "type": "whereabouts",
-      "range": "192.168.2.0/24",
-      "node_slice_size": "/22"
+      "range": "203.0.113.0/20",
+      "node_slice_size": "/24"
     }
   }'
 ```
