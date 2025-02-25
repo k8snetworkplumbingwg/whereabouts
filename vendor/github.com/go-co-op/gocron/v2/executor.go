@@ -31,6 +31,9 @@ type executor struct {
 	// used to request jobs from the scheduler
 	jobOutRequest chan jobOutRequest
 
+	// sends out job needs to update the next runs
+	jobUpdateNextRuns chan uuid.UUID
+
 	// used by the executor to receive a stop signal from the scheduler
 	stopCh chan struct{}
 	// the timeout value when stopping
@@ -49,6 +52,8 @@ type executor struct {
 	locker Locker
 	// monitor for reporting metrics
 	monitor Monitor
+	// monitorStatus for reporting metrics
+	monitorStatus MonitorStatus
 }
 
 type jobIn struct {
@@ -245,6 +250,14 @@ func (e *executor) sendOutForRescheduling(jIn *jobIn) {
 	jIn.shouldSendOut = false
 }
 
+func (e *executor) sendOutForNextRunUpdate(jIn *jobIn) {
+	select {
+	case e.jobUpdateNextRuns <- jIn.id:
+	case <-e.ctx.Done():
+		return
+	}
+}
+
 func (e *executor) limitModeRunner(name string, in chan jobIn, wg *waitGroupWithMutex, limitMode LimitMode, rescheduleLimiter chan struct{}) {
 	e.logger.Debug("gocron: limitModeRunner starting", "name", name)
 	for {
@@ -368,26 +381,41 @@ func (e *executor) runJob(j internalJob, jIn jobIn) {
 			e.incrementJobCounter(j, Skip)
 			return
 		}
-	} else if j.locker != nil {
+	} else if !j.disabledLocker && j.locker != nil {
 		lock, err := j.locker.Lock(j.ctx, j.name)
 		if err != nil {
 			_ = callJobFuncWithParams(j.afterLockError, j.id, j.name, err)
 			e.sendOutForRescheduling(&jIn)
 			e.incrementJobCounter(j, Skip)
+			e.sendOutForNextRunUpdate(&jIn)
 			return
 		}
 		defer func() { _ = lock.Unlock(j.ctx) }()
-	} else if e.locker != nil {
+	} else if !j.disabledLocker && e.locker != nil {
 		lock, err := e.locker.Lock(j.ctx, j.name)
 		if err != nil {
 			_ = callJobFuncWithParams(j.afterLockError, j.id, j.name, err)
 			e.sendOutForRescheduling(&jIn)
 			e.incrementJobCounter(j, Skip)
+			e.sendOutForNextRunUpdate(&jIn)
 			return
 		}
 		defer func() { _ = lock.Unlock(j.ctx) }()
 	}
+
 	_ = callJobFuncWithParams(j.beforeJobRuns, j.id, j.name)
+
+	err := callJobFuncWithParams(j.beforeJobRunsSkipIfBeforeFuncErrors, j.id, j.name)
+	if err != nil {
+		e.sendOutForRescheduling(&jIn)
+
+		select {
+		case e.jobsOutCompleted <- j.id:
+		case <-e.ctx.Done():
+		}
+
+		return
+	}
 
 	e.sendOutForRescheduling(&jIn)
 	select {
@@ -396,7 +424,6 @@ func (e *executor) runJob(j internalJob, jIn jobIn) {
 	}
 
 	startTime := time.Now()
-	var err error
 	if j.afterJobRunsWithPanic != nil {
 		err = e.callJobWithRecover(j)
 	} else {
@@ -406,9 +433,11 @@ func (e *executor) runJob(j internalJob, jIn jobIn) {
 	if err != nil {
 		_ = callJobFuncWithParams(j.afterJobRunsWithError, j.id, j.name, err)
 		e.incrementJobCounter(j, Fail)
+		e.recordJobTimingWithStatus(startTime, time.Now(), j, Fail, err)
 	} else {
 		_ = callJobFuncWithParams(j.afterJobRuns, j.id, j.name)
 		e.incrementJobCounter(j, Success)
+		e.recordJobTimingWithStatus(startTime, time.Now(), j, Success, nil)
 	}
 }
 
@@ -428,6 +457,12 @@ func (e *executor) callJobWithRecover(j internalJob) (err error) {
 func (e *executor) recordJobTiming(start time.Time, end time.Time, j internalJob) {
 	if e.monitor != nil {
 		e.monitor.RecordJobTiming(start, end, j.id, j.name, j.tags)
+	}
+}
+
+func (e *executor) recordJobTimingWithStatus(start time.Time, end time.Time, j internalJob, status JobStatus, err error) {
+	if e.monitorStatus != nil {
+		e.monitorStatus.RecordJobTimingWithStatus(start, end, j.id, j.name, j.tags, status, err)
 	}
 }
 
