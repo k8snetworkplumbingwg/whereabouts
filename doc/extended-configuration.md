@@ -23,7 +23,13 @@ You can compile from this repo (with `./hack/build-go.sh`) and copy the resultin
 
 Not that we're also including a Custom Resource Definition (CRD) to use the `kubernetes` datastore option. This installs the kubernetes CRD specification for the `ippools.whereabouts.cni.k8s.io/v1alpha1` type.
 
-### Example etcd datastore configuration
+## Nodename for node slice controller.
+
+The provided example `install-cni.sh` that's built into the image, along with the `daemonset-install.yaml` has a method by which the name of the node is retrieved from [the k8s downward API](https://kubernetes.io/docs/concepts/workloads/pods/downward-api/), and then written to a file named `nodename` in the whereabouts flatfile configuration directory.
+
+This is to standardize the nodename from what's used in the API. You may adjust this to your environments, if you so please.
+
+### Example etcd datastore configuration [DEPRECATED]
 
 If you'll use the etcd datastore option, you'll likely want to install etcd first. Etcd installation suggestions follow below.
 
