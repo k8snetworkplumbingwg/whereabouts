@@ -16,6 +16,6 @@ COPY --from=builder /go/src/github.com/k8snetworkplumbingwg/whereabouts/bin/ip-c
 
 LABEL org.opencontainers.image.source=https://github.com/k8snetworkplumbingwg/whereabouts
 LABEL io.k8s.display-name="Whereabouts CNI" \
-      io.k8s.description="This is a component of OpenShift Container Platform and provides a cluster-wide IPAM CNI plugin." \
-      io.openshift.tags="openshift" \
-      maintainer="CTO Networking <nfvpe-container@redhat.com>"
+       io.k8s.description="This is a component of OpenShift Container Platform and provides a cluster-wide IPAM CNI plugin." \
+       io.openshift.tags="openshift" \
+       maintainer="CTO Networking <nfvpe-container@redhat.com>"
