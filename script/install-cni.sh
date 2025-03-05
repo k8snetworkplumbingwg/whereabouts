@@ -19,7 +19,7 @@ WHEREABOUTS_RECONCILER_CRON=${WHEREABOUTS_RECONCILER_CRON:-30 4 * * *}
 
 mkdir -p $CNI_CONF_DIR/whereabouts.d
 WHEREABOUTS_KUBECONFIG=$CNI_CONF_DIR/whereabouts.d/whereabouts.kubeconfig
-WHEREABOUTS_CONF_FILE=$CNI_CONF_DIR/whereabouts.d/whereabouts.conf 
+WHEREABOUTS_CONF_FILE=$CNI_CONF_DIR/whereabouts.d/whereabouts.conf
 WHEREABOUTS_KUBECONFIG_LITERAL=$(echo "$WHEREABOUTS_KUBECONFIG" | sed -e s'|/host||')
 
 # ------------------------------- Generate a "kube-config"
@@ -140,24 +140,16 @@ cp -f /whereabouts $CNI_BIN_DIR
 
 # ---------------------- end generate a "kube-config".
 
+echo "Done configuring CNI. Sleep and start token watcher"
 # enter sleep/watch loop
-
 while true; do
   # Check the md5sum of the service account token and ca.
-    svcaccountsum=$(md5sum $SERVICE_ACCOUNT_TOKEN_PATH | awk '{print $1}')
-    casum=$(md5sum $KUBE_CA_FILE | awk '{print $1}')
-    if [ "$svcaccountsum" != "$LAST_SERVICEACCOUNT_MD5SUM" ] || [ "$casum" != "$LAST_KUBE_CA_FILE_MD5SUM" ]; then
-      # log "Detected service account or CA file change, regenerating kubeconfig..."
-      generateKubeConfig
-    fi
+  svcaccountsum=$(md5sum $SERVICE_ACCOUNT_TOKEN_PATH | awk '{print $1}')
+  casum=$(md5sum $KUBE_CA_FILE | awk '{print $1}')
+  if [ "$svcaccountsum" != "$LAST_SERVICEACCOUNT_MD5SUM" ] || [ "$casum" != "$LAST_KUBE_CA_FILE_MD5SUM" ]; then
+    # log "Detected service account or CA file change, regenerating kubeconfig..."
+    generateKubeConfig
+  fi
 
-    sleep 1
-  done
-
-# Unless told otherwise, sleep forever.
-# This prevents Kubernetes from restarting the pod repeatedly.
-should_sleep=${SLEEP:-"true"}
-echo "Done configuring CNI.  Sleep=$should_sleep"
-while [ "$should_sleep" == "true"  ]; do
-    sleep 1000000000000
+  sleep 1
 done
