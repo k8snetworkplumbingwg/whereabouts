@@ -11,4 +11,6 @@ COPY --from=0 /go/src/github.com/k8snetworkplumbingwg/whereabouts/bin/whereabout
 COPY --from=0 /go/src/github.com/k8snetworkplumbingwg/whereabouts/bin/ip-control-loop .
 COPY --from=0 /go/src/github.com/k8snetworkplumbingwg/whereabouts/bin/node-slice-controller .
 COPY script/install-cni.sh .
+COPY script/lib.sh .
+COPY script/token-watcher.sh .
 CMD ["/install-cni.sh"]
