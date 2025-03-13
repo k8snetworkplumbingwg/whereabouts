@@ -1,7 +1,6 @@
 module github.com/k8snetworkplumbingwg/whereabouts
 
 go 1.23
-
 require (
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/containernetworking/cni v1.2.3
@@ -14,7 +13,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	gomodules.xyz/jsonpatch/v2 v2.4.0
 	k8s.io/api v0.31.3
-	k8s.io/apimachinery v0.31.3
+	k8s.io/apimachinery v0.32.3
 	k8s.io/client-go v0.31.3
 	k8s.io/code-generator v0.31.3
 	k8s.io/kube-openapi v0.0.0-20241127205056-99599406b04f
@@ -34,7 +33,7 @@ require (
 	golang.org/x/sync v0.10.0 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
 	k8s.io/gengo/v2 v2.0.0-20240826214909-a7b603a56eb7 // indirect
-	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
+	sigs.k8s.io/json v0.0.0-20241010143419-9aa6b5e7a4b3 // indirect
 )
 
 require (
