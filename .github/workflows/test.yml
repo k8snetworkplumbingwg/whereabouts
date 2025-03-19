@@ -17,7 +17,8 @@ jobs:
 
     - name: Get all changed files excluding docs and README
       id: changed-files
-      run: echo "changed_files=$(git diff --name-only ${GITHUB_BASE_REF} -- . ':(exclude)**/*.md' ':(exclude)doc/*.{json,png,svg}' | wc -l)" >> "$GITHUB_OUTPUT"
+      run: git fetch --unshallow --all --tags && \
+          echo "changed_files=$(git diff --name-only ${GITHUB_BASE_REF} -- . ':(exclude)**/*.md' ':(exclude)doc/*.{json,png,svg}' | wc -l)" >> "$GITHUB_OUTPUT"
 
     - name: Run Revive Action by building from repository
       uses: morphy2k/revive-action@v2.7.4
