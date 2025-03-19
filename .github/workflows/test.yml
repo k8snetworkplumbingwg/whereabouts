@@ -17,46 +17,42 @@ jobs:
 
     - name: Get all changed files excluding docs and README
       id: changed-files
-      uses: tj-actions/changed-files@v46
-      with:
-        files_ignore: |
-          **/*.md
-          doc/*.{json,png,svg}
+      run: echo "changed_files=$(git diff --name-only ${GITHUB_BASE_REF} -- . ':(exclude)**/*.md' ':(exclude)doc/*.{json,png,svg}' | wc -l)" >> "$GITHUB_OUTPUT"
 
     - name: Run Revive Action by building from repository
       uses: morphy2k/revive-action@v2.7.4
-      if: steps.changed-files.outputs.any_changed == 'true'
+      if: steps.changed-files.outputs.changed_files > 0
       with:
         exclude: "./vendor/..."
         name: "Revive"
 
     - name: Install kubebuilder tools
-      if: steps.changed-files.outputs.any_changed == 'true'
+      if: steps.changed-files.outputs.changed_files > 0
       run: ./hack/install-kubebuilder-tools.sh
 
     - name: Generate code
-      if: steps.changed-files.outputs.any_changed == 'true'
+      if: steps.changed-files.outputs.changed_files > 0
       run: ./hack/generate-code.sh && hack/verify-codegen.sh
 
     - name: Run go fmt
-      if: steps.changed-files.outputs.any_changed == 'true'
+      if: steps.changed-files.outputs.changed_files > 0
       run: go fmt ./...
       #run: diff -u <(echo -n) <(gofmt -d -s .)
 
     - name: Run go vet
-      if: steps.changed-files.outputs.any_changed == 'true'
+      if: steps.changed-files.outputs.changed_files > 0
       run: go vet --tags=test ./...
 
     - name: Install static check
-      if: steps.changed-files.outputs.any_changed == 'true'
+      if: steps.changed-files.outputs.changed_files > 0
       run: go install honnef.co/go/tools/cmd/staticcheck@latest
 
     - name: Test
-      if: steps.changed-files.outputs.any_changed == 'true'
+      if: steps.changed-files.outputs.changed_files > 0
       run: sudo PATH=${PATH}:./bin ./hack/test-go.sh
 
     - name: Send coverage
-      if: steps.changed-files.outputs.any_changed == 'true'
+      if: steps.changed-files.outputs.changed_files > 0
       uses: shogo82148/actions-goveralls@v1
       with:
         path-to-profile: coverage.out
@@ -87,19 +83,19 @@ jobs:
             doc/*.{json,png,svg}
 
       - name: Install requirements
-        if: steps.changed-files.outputs.any_changed == 'true'
+        if: steps.changed-files.outputs.changed_files > 0
         run: sudo apt-get install nmap jq && ./hack/build-go.sh
 
       - name: Get tools, setup KinD cluster test environment
-        if: steps.changed-files.outputs.any_changed == 'true'
+        if: steps.changed-files.outputs.changed_files > 0
         run: source hack/e2e-get-test-tools.sh && ./hack/e2e-setup-kind-cluster.sh --number-of-compute $NUMBER_OF_COMPUTE_NODES
 
       - name: Clear test-cache
-        if: steps.changed-files.outputs.any_changed == 'true'
+        if: steps.changed-files.outputs.changed_files > 0
         run: go clean -testcache
 
       - name: Execute golang based E2E tests
-        if: steps.changed-files.outputs.any_changed == 'true'
+        if: steps.changed-files.outputs.changed_files > 0
         env:
           KUBECONFIG: /home/runner/.kube/config
           NUMBER_OF_THRASH_ITER: 20
