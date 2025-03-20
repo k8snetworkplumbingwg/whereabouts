@@ -36,17 +36,17 @@ const UnnamedNetwork string = ""
 type KubernetesIPAM struct {
 	Client
 	Config      whereaboutstypes.IPAMConfig
-	namespace   string
-	containerID string
+	Namespace   string
+	ContainerID string
 	IfName      string
 }
 
 func newKubernetesIPAM(containerID, ifName string, ipamConf whereaboutstypes.IPAMConfig, namespace string, kubernetesClient Client) *KubernetesIPAM {
 	return &KubernetesIPAM{
 		Config:      ipamConf,
-		containerID: containerID,
+		ContainerID: containerID,
 		IfName:      ifName,
-		namespace:   namespace,
+		Namespace:   namespace,
 		Client:      kubernetesClient,
 	}
 }
@@ -76,7 +76,7 @@ func NewKubernetesIPAMWithNamespace(containerID, ifName string, ipamConf whereab
 	if err != nil {
 		return nil, err
 	}
-	k8sIPAM.namespace = namespace
+	k8sIPAM.Namespace = namespace
 	return k8sIPAM, nil
 }
 
@@ -137,14 +137,14 @@ func (i *KubernetesIPAM) getPool(ctx context.Context, name string, iprange strin
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, storage.RequestTimeout)
 	defer cancel()
 
-	pool, err := i.client.WhereaboutsV1alpha1().IPPools(i.namespace).Get(ctxWithTimeout, name, metav1.GetOptions{})
+	pool, err := i.client.WhereaboutsV1alpha1().IPPools(i.Namespace).Get(ctxWithTimeout, name, metav1.GetOptions{})
 	if err != nil && errors.IsNotFound(err) {
 		// pool does not exist, create it
 		newPool := &whereaboutsv1alpha1.IPPool{}
 		newPool.ObjectMeta.Name = name
 		newPool.Spec.Range = iprange
 		newPool.Spec.Allocations = make(map[string]whereaboutsv1alpha1.IPAllocation)
-		_, err = i.client.WhereaboutsV1alpha1().IPPools(i.namespace).Create(ctxWithTimeout, newPool, metav1.CreateOptions{})
+		_, err = i.client.WhereaboutsV1alpha1().IPPools(i.Namespace).Create(ctxWithTimeout, newPool, metav1.CreateOptions{})
 		if err != nil && errors.IsAlreadyExists(err) {
 			// the pool was just created -- allow retry
 			return nil, &temporaryError{err}
@@ -162,7 +162,7 @@ func (i *KubernetesIPAM) getPool(ctx context.Context, name string, iprange strin
 
 // Status tests connectivity to the kubernetes backend
 func (i *KubernetesIPAM) Status(ctx context.Context) error {
-	_, err := i.client.WhereaboutsV1alpha1().IPPools(i.namespace).List(ctx, metav1.ListOptions{})
+	_, err := i.client.WhereaboutsV1alpha1().IPPools(i.Namespace).List(ctx, metav1.ListOptions{})
 	return err
 }
 
@@ -276,7 +276,7 @@ type KubernetesOverlappingRangeStore struct {
 
 // GetOverlappingRangeStore returns a clusterstore interface
 func (i *KubernetesIPAM) GetOverlappingRangeStore() (storage.OverlappingRangeStore, error) {
-	return &KubernetesOverlappingRangeStore{i.client, i.namespace}, nil
+	return &KubernetesOverlappingRangeStore{i.client, i.Namespace}, nil
 }
 
 // IsAllocatedInOverlappingRange checks for IP addresses to see if they're allocated cluster wide, for overlapping
@@ -463,7 +463,7 @@ func IPManagement(ctx context.Context, mode int, ipamConf whereaboutstypes.IPAMC
 	}
 
 	// setup leader election
-	le, leader, deposed := newLeaderElector(ctx, client.clientSet, client.namespace, client)
+	le, leader, deposed := newLeaderElector(ctx, client.clientSet, client.Namespace, client)
 	var wg sync.WaitGroup
 	wg.Add(2)
 
@@ -517,10 +517,10 @@ func IPManagement(ctx context.Context, mode int, ipamConf whereaboutstypes.IPAMC
 }
 
 func GetNodeSlicePoolRange(ctx context.Context, ipam *KubernetesIPAM, nodeName string) (string, error) {
-	logging.Debugf("ipam namespace is %v", ipam.namespace)
-	nodeSlice, err := ipam.client.WhereaboutsV1alpha1().NodeSlicePools(ipam.namespace).Get(ctx, getNodeSliceName(ipam), metav1.GetOptions{})
+	logging.Debugf("ipam namespace is %v", ipam.Namespace)
+	nodeSlice, err := ipam.client.WhereaboutsV1alpha1().NodeSlicePools(ipam.Namespace).Get(ctx, getNodeSliceName(ipam), metav1.GetOptions{})
 	if err != nil {
-		logging.Errorf("error getting node slice %s/%s %v", ipam.namespace, getNodeSliceName(ipam), err)
+		logging.Errorf("error getting node slice %s/%s %v", ipam.Namespace, getNodeSliceName(ipam), err)
 		return "", err
 	}
 	for _, allocation := range nodeSlice.Status.Allocations {
@@ -542,7 +542,7 @@ func getNodeSliceName(ipam *KubernetesIPAM) string {
 
 // IPManagementKubernetesUpdate manages k8s updates
 func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *KubernetesIPAM, ipamConf whereaboutstypes.IPAMConfig) ([]net.IPNet, error) {
-	logging.Debugf("IPManagement -- mode: %d / containerID: %q / podRef: %q / ifName: %q ", mode, ipam.containerID, ipamConf.GetPodRef(), ipam.IfName)
+	logging.Debugf("IPManagement -- mode: %d / containerID: %q / podRef: %q / ifName: %q ", mode, ipam.ContainerID, ipamConf.GetPodRef(), ipam.IfName)
 
 	var newips []net.IPNet
 	var newip net.IPNet
@@ -633,7 +633,7 @@ func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *Kubernete
 			var updatedreservelist []whereaboutstypes.IPReservation
 			switch mode {
 			case whereaboutstypes.Allocate:
-				newip, updatedreservelist, err = allocate.AssignIP(ipRange, reservelist, ipam.containerID, ipamConf.GetPodRef(), ipam.IfName)
+				newip, updatedreservelist, err = allocate.AssignIP(ipRange, reservelist, ipam.ContainerID, ipamConf.GetPodRef(), ipam.IfName)
 				if err != nil {
 					logging.Errorf("Error assigning IP: %v", err)
 					return newips, err
@@ -664,10 +664,10 @@ func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *Kubernete
 				}
 
 			case whereaboutstypes.Deallocate:
-				updatedreservelist, ipforoverlappingrangeupdate = allocate.DeallocateIP(reservelist, ipam.containerID, ipam.IfName)
+				updatedreservelist, ipforoverlappingrangeupdate = allocate.DeallocateIP(reservelist, ipam.ContainerID, ipam.IfName)
 				if ipforoverlappingrangeupdate == nil {
 					// Do not fail if allocation was not found.
-					logging.Debugf("Failed to find allocation for container ID: %s", ipam.containerID)
+					logging.Debugf("Failed to find allocation for container ID: %s", ipam.ContainerID)
 					return nil, nil
 				}
 			}
