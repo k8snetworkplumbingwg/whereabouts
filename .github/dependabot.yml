@@ -5,6 +5,15 @@ updates:
     directory: /
     schedule:
       interval: daily
+    groups:
+      k8s:
+        patterns: [ "k8s.io/*", "sigs.k8s.io/*" ]
+        update-types: [ "major", "minor", "patch" ]
+      other-go-modules:
+        patterns: [ "*" ]
+        exclude-patterns: 
+          - "k8s.io/*"
+          - "sigs.k8s.io/*"
   - package-ecosystem: docker
     directory: /
     schedule:
