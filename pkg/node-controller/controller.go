@@ -2,6 +2,7 @@ package node_controller
 
 import (
 	"context"
+	nativeerrors "errors"
 	"fmt"
 	"sort"
 	"time"
@@ -271,6 +272,10 @@ func (c *Controller) processNextWorkItem(ctx context.Context) bool {
 		// Foo resource to be synced.
 		if err := c.syncHandler(ctx, key); err != nil {
 			// Put the item back on the workqueue to handle any transient errors.
+			if nativeerrors.Is(err, types.ErrNoIPRanges) {
+				logger.Info(fmt.Sprintf("Ignoring net-attach-def with no IP ranges '%s': %s", key, err.Error()))
+				return nil // Don't requeue
+			}
 			c.workqueue.AddRateLimited(key)
 			return fmt.Errorf("error syncing '%s': %s, requeuing", key, err.Error())
 		}
@@ -505,6 +510,11 @@ func (c *Controller) checkForMultiNadMismatch(name, namespace string) error {
 		return err
 	}
 
+	// We need a valid IPAM configuration for comparison.
+	if len(ipamConf.IPRanges) == 0 {
+		return fmt.Errorf("%w: %s/%s", types.ErrNoIPRanges, namespace, name)
+	}
+
 	nadList, err := c.nadLister.List(labels.Everything())
 	if err != nil {
 		return err
@@ -514,6 +524,11 @@ func (c *Controller) checkForMultiNadMismatch(name, namespace string) error {
 		if err != nil {
 			return err
 		}
+
+		if len(additionalIpamConf.IPRanges) == 0 {
+			continue // skip this net-attach-def, it has no ranges
+		}
+
 		if !checkIpamConfMatch(ipamConf, additionalIpamConf) {
 			return fmt.Errorf("found IPAM conf mismatch for network-attachment-definitions with same network name")
 		}
