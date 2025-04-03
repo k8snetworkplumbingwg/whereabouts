@@ -2,6 +2,7 @@ package types
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"time"
@@ -205,3 +206,5 @@ const (
 	// Deallocate operation identifier
 	Deallocate = 1
 )
+
+var ErrNoIPRanges = errors.New("no IP ranges in whereabouts config")
