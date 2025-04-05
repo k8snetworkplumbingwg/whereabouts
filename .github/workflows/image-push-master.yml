@@ -8,6 +8,7 @@ env:
 jobs:
   push-amd64:
     name: Image push/amd64
+    if: github.repository_owner == 'k8snetworkplumbingwg'
     runs-on: ubuntu-latest
     steps:
       - name: Check out code into the Go module directory
@@ -17,7 +18,6 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Login to Container Registry
-        if: github.repository_owner == 'k8snetworkplumbingwg'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -25,7 +25,6 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push container image
-        if: github.repository_owner == 'k8snetworkplumbingwg'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -35,6 +34,7 @@ jobs:
 
   push-origin:
     name: Image push/origin
+    if: github.repository_owner == 'k8snetworkplumbingwg'
     runs-on: ubuntu-latest
     steps:
       - name: Check out code into the Go module directory
@@ -44,7 +44,6 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Login to Container Registry
-        if: github.repository_owner == 'k8snetworkplumbingwg'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -52,7 +51,6 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push container image
-        if: github.repository_owner == 'k8snetworkplumbingwg'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -62,6 +60,7 @@ jobs:
 
   push-arm64:
     name: Image build/arm64
+    if: github.repository_owner == 'k8snetworkplumbingwg'
     runs-on: ubuntu-latest
     steps:
       - name: Check out code into the Go module directory
@@ -74,7 +73,6 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Login to Container Registry
-        if: github.repository_owner == 'k8snetworkplumbingwg'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -92,6 +90,7 @@ jobs:
 
   push-multi-arch:
     name: Image build multi-arch
+    if: github.repository_owner == 'k8snetworkplumbingwg'
     runs-on: ubuntu-latest
     steps:
       - name: Check out code into the Go module directory
@@ -104,7 +103,6 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Login to Container Registry
-        if: github.repository_owner == 'k8snetworkplumbingwg'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
