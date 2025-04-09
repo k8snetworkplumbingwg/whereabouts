@@ -8,6 +8,7 @@ import (
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage"
 
 	v1 "k8s.io/api/core/v1"
+	v1podutil "k8s.io/kubernetes/pkg/api/v1/pod"
 )
 
 type podWrapper struct {
@@ -47,7 +48,7 @@ func indexPods(livePodList []v1.Pod, whereaboutsPodNames map[string]void) map[st
 			continue
 		}
 
-		if isPodMarkedForDeletion(pod.Status.Conditions) {
+		if isPodMarkedForDeletion(&pod) {
 			logging.Debugf("Pod %s is marked for deletion; skipping", podRef)
 			continue
 		}
@@ -60,12 +61,18 @@ func indexPods(livePodList []v1.Pod, whereaboutsPodNames map[string]void) map[st
 	return podMap
 }
 
-func isPodMarkedForDeletion(conditions []v1.PodCondition) bool {
-	for _, c := range conditions {
+func isPodMarkedForDeletion(pod *v1.Pod) bool {
+	for _, c := range pod.Status.Conditions {
 		if c.Type == v1.DisruptionTarget && c.Status == v1.ConditionTrue && c.Reason == "DeletionByTaintManager" {
 			return true
 		}
 	}
+
+	// If a Pod ran to completion, like a Job, consider it dead
+	if v1podutil.IsPodTerminal(pod) {
+		return true
+	}
+
 	return false
 }
 
