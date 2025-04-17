@@ -6,7 +6,7 @@ fmt:
 	@go list -f {{.Dir}} ./... | xargs -I{} gofmt -w -s {}
 
 lint:
-	@grep "^func " example_test.go | sort -c
+	@grep "^func [a-zA-Z]" example_test.go | sort -c
 	@golangci-lint run
 
 test:
@@ -16,7 +16,7 @@ test_coverage:
 	@go test -race -v $(GO_FLAGS) -count=1 -coverprofile=coverage.out -covermode=atomic $(GO_PKGS)
 
 test_ci:
-	@TEST_ENV=ci go test -race -v $(GO_FLAGS) -count=1 $(GO_PKGS)
+	@go test -race -v $(GO_FLAGS) -count=1 $(GO_PKGS)
 
 mocks:
 	@go generate ./...
