@@ -10,7 +10,7 @@ set -u -e
 #
 #SPDX-License-Identifier: Apache-2.0
 
-source lib.sh
+source /lib.sh
 
 # Setup our logging routines
 

@@ -2,7 +2,7 @@
 
 set -u -e
 
-source lib.sh
+source /lib.sh
 
 echo "Sleep and Watching for service account token and CA file changes..."
 # enter sleep/watch loop
