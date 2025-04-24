@@ -1,3 +1,4 @@
+# Dont'forget to update deployment/whereabouts-chart/templates/node-slice-controller.yaml as well
 apiVersion: apps/v1
 kind: Deployment
 metadata:
