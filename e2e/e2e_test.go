@@ -3,6 +3,7 @@ package whereabouts_e2e
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"net"
 	"sort"
 	"strings"
@@ -850,6 +851,58 @@ var _ = Describe("Whereabouts functionality", func() {
 				Expect(secondaryIfaceIPs2[0]).NotTo(Equal(secondaryIfaceIPs3[0]))
 			})
 		})
+
+		Context("Pod cleanup controller", func() {
+			const singlePodName = "whereabouts-pod-cleanup-controller-test"
+			var err error
+
+			AfterEach(func() {
+				_ = clientInfo.DeletePod(pod)
+			})
+
+			It("verifies that the pod cleanup controller deletes an orphaned allocation", func() {
+				By("creating a pod with whereabouts net-attach-def")
+				pod, err = clientInfo.ProvisionPod(
+					singlePodName,
+					testNamespace,
+					util.PodTierLabel(singlePodName),
+					entities.PodNetworkSelectionElements(testNetworkName),
+				)
+				Expect(err).NotTo(HaveOccurred())
+
+				By("duplicating the existing ippool allocation with a different offset")
+				ip, err := retrievers.SecondaryIfaceIPValue(pod, "net1")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(ip).NotTo(BeEmpty())
+
+				firstIP, _, err := net.ParseCIDR(ipv4TestRange)
+				Expect(err).NotTo(HaveOccurred())
+				offset, err := iphelpers.IPGetOffset(net.ParseIP(ip[0]), firstIP)
+				Expect(err).NotTo(HaveOccurred())
+
+				ipPool, err := clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(context.TODO(),
+					wbstorage.IPPoolName(wbstorage.PoolIdentifier{IpRange: ipv4TestRange, NetworkName: wbstorage.UnnamedNetwork}),
+					metav1.GetOptions{})
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(ipPool.Spec.Allocations).To(HaveKey(fmt.Sprintf("%d", offset)))
+
+				newOffset := int(offset) + rand.Intn(100)
+
+				ipPool.Spec.Allocations[fmt.Sprintf("%d", newOffset)] = ipPool.Spec.Allocations[fmt.Sprintf("%d", offset)]
+				_, err = clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Update(context.Background(), ipPool, metav1.UpdateOptions{})
+				Expect(err).NotTo(HaveOccurred())
+
+				By("deleting pod")
+				err = clientInfo.DeletePod(pod)
+				Expect(err).NotTo(HaveOccurred())
+
+				By("checking that all IP allocations are removed")
+				ip = append(ip, iphelpers.IPAddOffset(firstIP, uint64(newOffset)).String())
+				verifyNoAllocationsForPodRef(clientInfo, ipv4TestRange, testNamespace, pod.Name, ip)
+			})
+		})
+
 	})
 })
 
