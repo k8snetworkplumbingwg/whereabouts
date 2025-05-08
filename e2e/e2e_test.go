@@ -476,14 +476,12 @@ var _ = Describe("Whereabouts functionality", func() {
 				})
 
 				Context("deleting a pod from the statefulset", func() {
-					var (
-						containerID string
-						podRef      string
-					)
+					It("can recover from an exhausted IP pool", func() {
+						var containerID string
+						var podRef string
 
-					ctx := context.Background()
+						ctx := context.Background()
 
-					BeforeEach(func() {
 						ipPool, err := clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(
 							ctx,
 							wbstorage.IPPoolName(wbstorage.PoolIdentifier{IpRange: rangeWithTwoIPs, NetworkName: wbstorage.UnnamedNetwork}),
@@ -498,39 +496,31 @@ var _ = Describe("Whereabouts functionality", func() {
 						Expect(decomposedPodRef).To(HaveLen(2))
 						podName := decomposedPodRef[1]
 
+						By("deleting pod")
 						rightNow := int64(0)
 						Expect(clientInfo.Client.CoreV1().Pods(namespace).Delete(
 							ctx, podName, metav1.DeleteOptions{GracePeriodSeconds: &rightNow})).To(Succeed())
 
-						Expect(wbtestclient.WaitForStatefulSetCondition(
-							ctx,
-							clientInfo.Client,
-							namespace,
-							serviceName,
-							replicaNumber,
-							5*time.Second,
-							wbtestclient.IsStatefulSetDegradedPredicate)).Should(Succeed())
+						By("checking that the IP allocation is recreated")
+						Eventually(func() error {
+							ipPool, err = clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(
+								ctx,
+								wbstorage.IPPoolName(wbstorage.PoolIdentifier{IpRange: rangeWithTwoIPs, NetworkName: wbstorage.UnnamedNetwork}),
+								metav1.GetOptions{})
+							if err != nil {
+								return err
+							}
 
-						scaleUpTimeout := 2 * util.CreatePodTimeout
-						Expect(wbtestclient.WaitForStatefulSetCondition(
-							ctx,
-							clientInfo.Client,
-							namespace,
-							serviceName,
-							replicaNumber,
-							scaleUpTimeout,
-							wbtestclient.IsStatefulSetReadyPredicate)).Should(Succeed())
-					})
+							if len(ipPool.Spec.Allocations) == 0 {
+								return fmt.Errorf("IP pool is empty")
+							}
 
-					It("can recover from an exhausted IP pool", func() {
-						ipPool, err := clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(
-							ctx,
-							wbstorage.IPPoolName(wbstorage.PoolIdentifier{IpRange: rangeWithTwoIPs, NetworkName: wbstorage.UnnamedNetwork}),
-							metav1.GetOptions{})
-						Expect(err).NotTo(HaveOccurred())
-						Expect(ipPool.Spec.Allocations).NotTo(BeEmpty())
-						Expect(allocationForPodRef(podRef, *ipPool)[0].ContainerID).NotTo(Equal(containerID))
-						Expect(allocationForPodRef(podRef, *ipPool)[0].PodRef).To(Equal(podRef))
+							if allocationForPodRef(podRef, *ipPool)[0].ContainerID == containerID {
+								return fmt.Errorf("IP allocation not recreated")
+							}
+
+							return nil
+						}, 3*time.Second, 500*time.Millisecond).Should(Succeed(), "the IP allocation should be recreated")
 					})
 				})
 			})
