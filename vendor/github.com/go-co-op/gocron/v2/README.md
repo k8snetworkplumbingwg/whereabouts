@@ -121,6 +121,8 @@ other instances checking to see if a new leader needs to be elected.
 - [**Locker**](https://pkg.go.dev/github.com/go-co-op/gocron/v2#WithDistributedLocker):
 A locker can be used to lock each run of a job to a single instance of gocron.
 Locker can be at job or scheduler, if it is defined both at job and scheduler then locker of job will take precedence.
+  - See Notes in the doc for [Locker](https://pkg.go.dev/github.com/go-co-op/gocron/v2#Locker) for
+    details and limitations of the locker design.
   - Implementations: [go-co-op lockers](https://github.com/go-co-op?q=-lock&type=all&language=&sort=)
     (don't see what you need? request on slack to get a repo created to contribute it!)
 
@@ -169,21 +171,32 @@ We appreciate the support for free and open source software!
 
 This project is supported by:
 
-[Jetbrains](https://www.jetbrains.com/?from=gocron)
+[JetBrains](https://www.jetbrains.com/?from=gocron)
 
-![JetBrains logo](https://resources.jetbrains.com/storage/products/company/brand/logos/jetbrains.png)
-
+<a href="https://www.jetbrains.com/?from=gocron">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="assets/jetbrains-mono-white.png" />
+   <source media="(prefers-color-scheme: light)" srcset="https://resources.jetbrains.com/storage/products/company/brand/logos/jetbrains.png" />
+   <img alt="JetBrains logo" src="https://resources.jetbrains.com/storage/products/company/brand/logos/jetbrains.png" />
+ </picture>
+</a>
 
 [Sentry](https://sentry.io/welcome/)
 
-<p align="left">
-  <p align="left">
-    <a href="https://sentry.io/?utm_source=github&utm_medium=logo" target="_blank">
-      <img src="https://sentry-brand.storage.googleapis.com/sentry-wordmark-dark-280x84.png" alt="Sentry" width="280" height="84" />
-    </a>
-  </p>
-</p>
+<a href="https://sentry.io/?utm_source=github&utm_medium=logo">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="assets/sentry-wordmark-light-280x84.png" />
+   <source media="(prefers-color-scheme: light)" srcset="https://sentry-brand.storage.googleapis.com/sentry-wordmark-dark-280x84.png" />
+   <img alt="Sentry logo" src="https://sentry-brand.storage.googleapis.com/sentry-wordmark-dark-280x84.png" />
+ </picture>
+</a>
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=go-co-op/gocron&type=Date)](https://star-history.com/#go-co-op/gocron&Date)
+<a href="https://www.star-history.com/#go-co-op/gocron&Date">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=go-co-op/gocron&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=go-co-op/gocron&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=go-co-op/gocron&type=Date" />
+ </picture>
+</a>
