@@ -25,6 +25,9 @@ spec:
     spec:
       hostNetwork: true
       serviceAccountName: {{ include "whereabouts.serviceAccountName" . }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}

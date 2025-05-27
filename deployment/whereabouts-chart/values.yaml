@@ -49,9 +49,12 @@ tolerations:
 
 affinity: {}
 
+priorityClassName: ""
+
 cniConf:
   confDir: /etc/cni/net.d
   binDir: /opt/cni/bin
 
 nodeSliceController:
   enabled: true
+  priorityClassName: ""
