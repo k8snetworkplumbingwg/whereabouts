@@ -25,7 +25,7 @@ jobs:
         go-version-file: go.mod
 
     - name: Run Revive Action by building from repository
-      uses: morphy2k/revive-action@v2.7.6
+      uses: morphy2k/revive-action@v2.7.7
       with:
         exclude: "./vendor/..."
         name: "Revive"
