@@ -15,6 +15,9 @@ spec:
       labels:
         app: {{ include "whereabouts.fullname" . }}-controller
     spec:
+      {{- with .Values.nodeSliceController.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
       containers:
         - command:
             - /node-slice-controller
