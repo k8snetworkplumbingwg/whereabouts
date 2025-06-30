@@ -475,7 +475,7 @@ var _ = Describe("Whereabouts functionality", func() {
 							wbtestclient.IsStatefulSetReadyPredicate)).To(HaveOccurred(), "the IPPool is already at its limits")
 				})
 
-				Context("deleting a pod from the statefulset", func() {
+				Context("eleting a pod from the statefulset", func() {
 					It("can recover from an exhausted IP pool", func() {
 						var containerID string
 						var podRef string
