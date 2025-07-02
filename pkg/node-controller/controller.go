@@ -367,7 +367,7 @@ func (c *Controller) syncHandler(ctx context.Context, key string) error {
 			},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      getSliceName(ipamConf),
-				Namespace: c.whereaboutsNamespace,
+				Namespace: namespace,
 				OwnerReferences: []metav1.OwnerReference{
 					*metav1.NewControllerRef(nad, cncfV1.SchemeGroupVersion.WithKind("NetworkAttachmentDefinition")),
 				},
