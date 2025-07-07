@@ -20,7 +20,7 @@ jobs:
           file: Dockerfile
           
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.31.0
+        uses: aquasecurity/trivy-action@0.32.0
         with:
           image-ref: ghcr.io/${{ github.repository }}:latest-amd64
           ignore-unfixed: true
