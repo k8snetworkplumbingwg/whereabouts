@@ -3,7 +3,7 @@ package e2e_node_slice
 
 import (
 	"context"
-	"github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
+	"testing"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -22,10 +22,16 @@ import (
 	"github.com/k8snetworkplumbingwg/whereabouts/e2e/retrievers"
 	testenv "github.com/k8snetworkplumbingwg/whereabouts/e2e/testenvironment"
 	"github.com/k8snetworkplumbingwg/whereabouts/e2e/util"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage"
 	wbstorage "github.com/k8snetworkplumbingwg/whereabouts/pkg/storage/kubernetes"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 )
+
+func TestWhereaboutsE2ENodeSlice(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "whereabouts-e2e-node-slice")
+}
 
 var _ = Describe("Whereabouts node slice functionality", func() {
 	Context("Test setup", func() {
