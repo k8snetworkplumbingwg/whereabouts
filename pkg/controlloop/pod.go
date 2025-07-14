@@ -13,6 +13,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -222,6 +223,21 @@ func (pc *PodController) garbageCollectPodIPs(pod *v1.Pod) error {
 		for _, pool := range pools {
 			for allocationIndex, allocation := range pool.Spec.Allocations {
 				if allocation.PodRef == podID(podNamespace, podName) {
+					logging.Verbosef("Found an existing allocation: %+v", allocation)
+
+					// The allocation could belong to a new pod with the same name and namespace. Stateful set scenarios.
+					// The previous pod should be gone by the time a pod deletion event is received.
+					if newPod, err := pc.k8sClient.CoreV1().Pods(podNamespace).Get(context.TODO(), podName, metav1.GetOptions{}); err == nil {
+						if newPod.DeletionTimestamp == nil {
+							logging.Verbosef("A pod with the same name and namespace was found and is not marked for deletion. Skipping deallocation")
+							continue
+						}
+
+						logging.Verbosef("A pod with the same name and namespace was found and is marked for deletion. Cleaning up the stale allocation. DeletionTimestamp: %+v", newPod.DeletionTimestamp)
+					} else if !apierrors.IsNotFound(err) {
+						return fmt.Errorf("failed to get pod to verify allocation: %+v", err)
+					}
+
 					logging.Verbosef("stale allocation to cleanup: %+v", allocation)
 
 					client := *wbclient.NewKubernetesClient(pc.wbClient, pc.k8sClient)
