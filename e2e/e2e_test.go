@@ -10,8 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/k8snetworkplumbingwg/whereabouts/e2e/util"
-
 	. "github.com/onsi/ginkgo"
 	"github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -28,13 +26,11 @@ import (
 	"github.com/k8snetworkplumbingwg/whereabouts/e2e/poolconsistency"
 	"github.com/k8snetworkplumbingwg/whereabouts/e2e/retrievers"
 	testenv "github.com/k8snetworkplumbingwg/whereabouts/e2e/testenvironment"
+	"github.com/k8snetworkplumbingwg/whereabouts/e2e/util"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/iphelpers"
 	wbstorage "github.com/k8snetworkplumbingwg/whereabouts/pkg/storage/kubernetes"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
-
-	// Import node slice tests to execute in the suite
-	_ "github.com/k8snetworkplumbingwg/whereabouts/e2e/e2e_node_slice"
 )
 
 const (
