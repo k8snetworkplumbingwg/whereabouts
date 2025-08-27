@@ -10,7 +10,7 @@ require (
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/k8snetworkplumbingwg/network-attachment-definition-client v1.7.7
 	github.com/onsi/ginkgo v1.16.5
-	github.com/onsi/gomega v1.38.1
+	github.com/onsi/gomega v1.38.2
 	github.com/pkg/errors v0.9.1
 	gomodules.xyz/jsonpatch/v2 v2.5.0
 	k8s.io/api v0.31.3
