@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"golang.org/x/tools/go/packages"
+
 	"k8s.io/gengo/v2/types"
 	"k8s.io/klog/v2"
 )
@@ -642,9 +643,16 @@ func (p *Parser) walkType(u types.Universe, useName *types.Name, in gotypes.Type
 		name = *useName
 	}
 
+	// Handle alias types conditionally on go1.22+.
+	// Inline this once the minimum supported version is go1.22
+	if out := p.walkAliasType(u, in); out != nil {
+		return out
+	}
+
 	switch t := in.(type) {
 	case *gotypes.Struct:
 		out := u.Type(name)
+		out.GoType = in
 		if out.Kind != types.Unknown {
 			return out
 		}
@@ -663,6 +671,7 @@ func (p *Parser) walkType(u types.Universe, useName *types.Name, in gotypes.Type
 		return out
 	case *gotypes.Map:
 		out := u.Type(name)
+		out.GoType = in
 		if out.Kind != types.Unknown {
 			return out
 		}
@@ -672,6 +681,7 @@ func (p *Parser) walkType(u types.Universe, useName *types.Name, in gotypes.Type
 		return out
 	case *gotypes.Pointer:
 		out := u.Type(name)
+		out.GoType = in
 		if out.Kind != types.Unknown {
 			return out
 		}
@@ -680,6 +690,7 @@ func (p *Parser) walkType(u types.Universe, useName *types.Name, in gotypes.Type
 		return out
 	case *gotypes.Slice:
 		out := u.Type(name)
+		out.GoType = in
 		if out.Kind != types.Unknown {
 			return out
 		}
@@ -688,6 +699,7 @@ func (p *Parser) walkType(u types.Universe, useName *types.Name, in gotypes.Type
 		return out
 	case *gotypes.Array:
 		out := u.Type(name)
+		out.GoType = in
 		if out.Kind != types.Unknown {
 			return out
 		}
@@ -697,6 +709,7 @@ func (p *Parser) walkType(u types.Universe, useName *types.Name, in gotypes.Type
 		return out
 	case *gotypes.Chan:
 		out := u.Type(name)
+		out.GoType = in
 		if out.Kind != types.Unknown {
 			return out
 		}
@@ -710,6 +723,7 @@ func (p *Parser) walkType(u types.Universe, useName *types.Name, in gotypes.Type
 			Package: "", // This is a magic package name in the Universe.
 			Name:    t.Name(),
 		})
+		out.GoType = in
 		if out.Kind != types.Unknown {
 			return out
 		}
@@ -717,6 +731,7 @@ func (p *Parser) walkType(u types.Universe, useName *types.Name, in gotypes.Type
 		return out
 	case *gotypes.Signature:
 		out := u.Type(name)
+		out.GoType = in
 		if out.Kind != types.Unknown {
 			return out
 		}
@@ -725,6 +740,7 @@ func (p *Parser) walkType(u types.Universe, useName *types.Name, in gotypes.Type
 		return out
 	case *gotypes.Interface:
 		out := u.Type(name)
+		out.GoType = in
 		if out.Kind != types.Unknown {
 			return out
 		}
@@ -747,6 +763,7 @@ func (p *Parser) walkType(u types.Universe, useName *types.Name, in gotypes.Type
 		case *gotypes.Named, *gotypes.Basic, *gotypes.Map, *gotypes.Slice:
 			name := goNameToName(t.String())
 			out = u.Type(name)
+			out.GoType = in
 			if out.Kind != types.Unknown {
 				return out
 			}
@@ -769,6 +786,7 @@ func (p *Parser) walkType(u types.Universe, useName *types.Name, in gotypes.Type
 			}
 
 			if out := u.Type(name); out.Kind != types.Unknown {
+				out.GoType = in
 				return out // short circuit if we've already made this.
 			}
 			out = p.walkType(u, &name, t.Underlying())
@@ -810,6 +828,7 @@ func (p *Parser) walkType(u types.Universe, useName *types.Name, in gotypes.Type
 		}
 	default:
 		out := u.Type(name)
+		out.GoType = in
 		if out.Kind != types.Unknown {
 			return out
 		}
