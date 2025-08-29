@@ -33,7 +33,7 @@ github.com/fsnotify/fsnotify/internal
 # github.com/fxamacker/cbor/v2 v2.7.0
 ## explicit; go 1.17
 github.com/fxamacker/cbor/v2
-# github.com/go-co-op/gocron/v2 v2.16.3
+# github.com/go-co-op/gocron/v2 v2.16.4
 ## explicit; go 1.23.0
 github.com/go-co-op/gocron/v2
 # github.com/go-logr/logr v1.4.3
@@ -150,8 +150,8 @@ github.com/onsi/ginkgo/reporters/stenographer
 github.com/onsi/ginkgo/reporters/stenographer/support/go-colorable
 github.com/onsi/ginkgo/reporters/stenographer/support/go-isatty
 github.com/onsi/ginkgo/types
-# github.com/onsi/gomega v1.38.1
-## explicit; go 1.24.0
+# github.com/onsi/gomega v1.38.2
+## explicit; go 1.23.0
 github.com/onsi/gomega
 github.com/onsi/gomega/format
 github.com/onsi/gomega/internal
