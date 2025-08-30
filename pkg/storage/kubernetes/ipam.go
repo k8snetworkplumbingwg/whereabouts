@@ -20,6 +20,8 @@ import (
 	"k8s.io/client-go/tools/leaderelection"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 
+	"gomodules.xyz/jsonpatch/v2"
+
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/allocate"
 	whereaboutsv1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
 	wbclient "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/clientset/versioned"
@@ -27,7 +29,6 @@ import (
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage"
 	whereaboutstypes "github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
-	"gomodules.xyz/jsonpatch/v2"
 )
 
 const UnnamedNetwork string = ""
@@ -708,6 +709,9 @@ func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *Kubernete
 		}
 
 		newips = append(newips, newip)
+		if ipamConf.SingleIP {
+			break
+		}
 	}
 	return newips, err
 }
