@@ -14,7 +14,7 @@ build:
 	hack/build-go.sh
 
 docker-build:
-	$(OCI_BIN) build -t ${IMAGE_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} -f Dockerfile .
+	$(OCI_BIN) build -t ${IMAGE_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} -f Dockerfile --platform linux/amd64 .
 
 generate-api:
 	hack/verify-codegen.sh
