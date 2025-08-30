@@ -52,6 +52,7 @@ type IPAMConfig struct {
 	Routes                   []*cnitypes.Route    `json:"routes"`
 	Addresses                []Address            `json:"addresses,omitempty"`
 	IPRanges                 []RangeConfiguration `json:"ipRanges"`
+	SingleIP                 bool                 `json:"singleIP,omitempty"`
 	OmitRanges               []string             `json:"exclude,omitempty"`
 	DNS                      cnitypes.DNS         `json:"dns"`
 	Range                    string               `json:"range"`
