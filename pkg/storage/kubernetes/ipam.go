@@ -3,6 +3,7 @@ package kubernetes
 import (
 	"context"
 	"encoding/json"
+	goerr "errors"
 	"fmt"
 	"net"
 	"os"
@@ -10,8 +11,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	goerr "errors"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -641,10 +640,10 @@ func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *Kubernete
 					if !goerr.Is(err, allocate.AssignmentError{}) {
 						logging.Errorf("Error assigning IP: %v", err)
 						return newips, err
-					} else {
-						logging.Debugf("Cannot assign addr from %v pool: %v", ipRange, err)
-						continue
 					}
+
+					logging.Debugf("Cannot assign addr from %v pool: %v", ipRange, err)
+					continue
 				}
 				// Now check if this is allocated overlappingrange wide
 				// When it's allocated overlappingrange wide, we add it to a local reserved list
@@ -716,7 +715,8 @@ func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *Kubernete
 		}
 
 		newips = append(newips, newip)
-		if ipamConf.SingleIP {
+		if ipamConf.SingleIP && len(newips) > 0 {
+			logging.Debugf("Single IP is allocated from %v pool, stop iterating", ipRange)
 			break
 		}
 	}
