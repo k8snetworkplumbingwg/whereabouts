@@ -52,7 +52,7 @@ type IPAMConfig struct {
 	Routes                   []*cnitypes.Route    `json:"routes"`
 	Addresses                []Address            `json:"addresses,omitempty"`
 	IPRanges                 []RangeConfiguration `json:"ipRanges"`
-	SingleIP                 bool                 `json:"singleIP,omitempty"`
+	SingleIP                 bool                 `json:"singleIP"`
 	OmitRanges               []string             `json:"exclude,omitempty"`
 	DNS                      cnitypes.DNS         `json:"dns"`
 	Range                    string               `json:"range"`
@@ -84,6 +84,7 @@ func (ic *IPAMConfig) UnmarshalJSON(data []byte) error {
 		Datastore                string               `json:"datastore"`
 		Addresses                []Address            `json:"addresses,omitempty"`
 		IPRanges                 []RangeConfiguration `json:"ipRanges"`
+		SingleIP                 bool                 `json:"singleIP,omitempty"`
 		NodeSliceSize            string               `json:"node_slice_size"`
 		OmitRanges               []string             `json:"exclude,omitempty"`
 		DNS                      cnitypes.DNS         `json:"dns"`
@@ -127,6 +128,7 @@ func (ic *IPAMConfig) UnmarshalJSON(data []byte) error {
 		Routes:                   ipamConfigAlias.Routes,
 		Addresses:                ipamConfigAlias.Addresses,
 		IPRanges:                 ipamConfigAlias.IPRanges,
+		SingleIP:                 ipamConfigAlias.SingleIP,
 		OmitRanges:               ipamConfigAlias.OmitRanges,
 		DNS:                      ipamConfigAlias.DNS,
 		Range:                    ipamConfigAlias.Range,
