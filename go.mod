@@ -1,16 +1,16 @@
 module github.com/k8snetworkplumbingwg/whereabouts
 
-go 1.24.0
+go 1.24.2
 
 require (
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/containernetworking/cni v1.3.0
-	github.com/containernetworking/plugins v1.7.1
+	github.com/containernetworking/plugins v1.8.0
 	github.com/imdario/mergo v0.3.16
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/k8snetworkplumbingwg/network-attachment-definition-client v1.7.7
 	github.com/onsi/ginkgo v1.16.5
-	github.com/onsi/gomega v1.38.1
+	github.com/onsi/gomega v1.38.2
 	github.com/pkg/errors v0.9.1
 	gomodules.xyz/jsonpatch/v2 v2.5.0
 	k8s.io/api v0.31.3
@@ -20,7 +20,7 @@ require (
 	k8s.io/kube-openapi v0.0.0-20241127205056-99599406b04f
 )
 
-require github.com/go-co-op/gocron/v2 v2.16.3
+require github.com/go-co-op/gocron/v2 v2.16.4
 
 require (
 	github.com/emicklei/go-restful/v3 v3.11.0 // indirect
