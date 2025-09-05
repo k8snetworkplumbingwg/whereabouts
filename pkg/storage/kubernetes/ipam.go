@@ -572,6 +572,7 @@ func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *Kubernete
 	var overlappingrangeallocations []whereaboutstypes.IPReservation
 	var ipforoverlappingrangeupdate net.IP
 	skipOverlappingRangeUpdate := false
+RANGESLOOP:
 	for _, ipRange := range ipamConf.IPRanges {
 	RETRYLOOP:
 		for j := 0; j < storage.DatastoreRetries; j++ {
@@ -637,13 +638,13 @@ func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *Kubernete
 			case whereaboutstypes.Allocate:
 				newip, updatedreservelist, err = allocate.AssignIP(ipRange, reservelist, ipam.ContainerID, ipamConf.GetPodRef(), ipam.IfName)
 				if err != nil {
-					if !goerr.Is(err, allocate.AssignmentError{}) {
-						logging.Errorf("Error assigning IP: %v", err)
+					if ok := goerr.As(err, new(allocate.AssignmentError)); !ok {
+						_ = logging.Errorf("Error assigning IP: %v", err)
 						return newips, err
 					}
 
 					logging.Debugf("Cannot assign addr from %v pool: %v", ipRange, err)
-					continue
+					continue RANGESLOOP
 				}
 				// Now check if this is allocated overlappingrange wide
 				// When it's allocated overlappingrange wide, we add it to a local reserved list
