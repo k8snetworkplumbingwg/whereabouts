@@ -120,20 +120,28 @@ func SubnetBroadcastIP(ipnet net.IPNet) net.IP {
 
 // FirstUsableIP returns the first usable IP (not the network IP) in a given net.IPNet.
 // This does not work for IPv4 /31 to /32 or IPv6 /127 to /128 netmasks.
-func FirstUsableIP(ipnet net.IPNet) (net.IP, error) {
+func FirstUsableIP(ipnet net.IPNet, includeNetworkAddress bool) (net.IP, error) {
 	if !HasUsableIPs(ipnet) {
 		return nil, fmt.Errorf("net mask is too short, subnet %s has no usable IP addresses, it is too small", ipnet)
 	}
-	return IncIP(NetworkIP(ipnet)), nil
+	ip := NetworkIP(ipnet)
+	if !includeNetworkAddress {
+		ip = IncIP(ip)
+	}
+	return ip, nil
 }
 
 // LastUsableIP returns the last usable IP (not the broadcast IP in a given net.IPNet).
 // This does not work for IPv4 /31 to /32 or IPv6 /127 to /128 netmasks.
-func LastUsableIP(ipnet net.IPNet) (net.IP, error) {
+func LastUsableIP(ipnet net.IPNet, includeBroadcastAddress bool) (net.IP, error) {
 	if !HasUsableIPs(ipnet) {
 		return nil, fmt.Errorf("net mask is too short, subnet %s has no usable IP addresses, it is too small", ipnet)
 	}
-	return DecIP(SubnetBroadcastIP(ipnet)), nil
+	ip := SubnetBroadcastIP(ipnet)
+	if !includeBroadcastAddress {
+		ip = DecIP(ip)
+	}
+	return ip, nil
 }
 
 // HasUsableIPs returns true if this subnet has usable IPs (i.e. not the network nor the broadcast IP).
@@ -238,12 +246,12 @@ func IsIPv4(checkip net.IP) bool {
 // they will be silently ignored and the first usable IP and/or last usable IP will be used. A valid rangeEnd cannot
 // be smaller than a valid rangeStart, otherwise it will be silently ignored.
 // We do this also for backwards compatibility to avoid throwing unexpected errors in existing environments.
-func GetIPRange(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP) (net.IP, net.IP, error) {
-	firstUsableIP, err := FirstUsableIP(ipnet)
+func GetIPRange(ipnet net.IPNet, rangeStart net.IP, includeNetworkAddress bool, rangeEnd net.IP, includeBroadcastAddress bool) (net.IP, net.IP, error) {
+	firstUsableIP, err := FirstUsableIP(ipnet, includeNetworkAddress)
 	if err != nil {
 		return nil, nil, err
 	}
-	lastUsableIP, err := LastUsableIP(ipnet)
+	lastUsableIP, err := LastUsableIP(ipnet, includeBroadcastAddress)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -41,7 +41,7 @@ func AssignIP(ipamConf types.RangeConfiguration, reservelist []types.IPReservati
 		}
 	}
 
-	newip, updatedreservelist, err := IterateForAssignment(*ipnet, ipamConf.RangeStart, ipamConf.RangeEnd, reservelist, ipamConf.OmitRanges, containerID, podRef, ifName)
+	newip, updatedreservelist, err := IterateForAssignment(*ipnet, ipamConf.RangeStart, ipamConf.IncludeNetworkAddress, ipamConf.RangeEnd, ipamConf.IncludeBroadcastAddress, reservelist, ipamConf.OmitRanges, containerID, podRef, ifName)
 	if err != nil {
 		return net.IPNet{}, nil, err
 	}
@@ -83,9 +83,9 @@ func removeIdxFromSlice(s []types.IPReservation, i int) []types.IPReservation {
 // If rangeEnd is specified, it is respected if it lies within the ipnet and if it is >= rangeStart.
 // reserveList holds a list of reserved IPs.
 // excludeRanges holds a list of subnets to be excluded (meaning the full subnet, including the network and broadcast IP).
-func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, reserveList []types.IPReservation, excludeRanges []string, containerID, podRef, ifName string) (net.IP, []types.IPReservation, error) {
+func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, includeNetworkAddress bool, rangeEnd net.IP, includeBroadcastAddress bool, reserveList []types.IPReservation, excludeRanges []string, containerID, podRef, ifName string) (net.IP, []types.IPReservation, error) {
 	// Get the valid range, delimited by the ipnet's first and last usable IP as well as the rangeStart and rangeEnd.
-	firstIP, lastIP, err := iphelpers.GetIPRange(ipnet, rangeStart, rangeEnd)
+	firstIP, lastIP, err := iphelpers.GetIPRange(ipnet, rangeStart, includeNetworkAddress, rangeEnd, includeBroadcastAddress)
 	if err != nil {
 		logging.Errorf("GetIPRange request failed with: %v", err)
 		return net.IP{}, reserveList, err
