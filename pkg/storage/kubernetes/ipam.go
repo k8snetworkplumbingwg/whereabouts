@@ -605,12 +605,12 @@ RANGESLOOP:
 					return newips, err
 				}
 				poolIdentifier.IpRange = nodeSliceRange
-				rangeStart, err := iphelpers.FirstUsableIP(*ipNet)
+				rangeStart, err := iphelpers.FirstUsableIP(*ipNet, ipRange.IncludeNetworkAddress)
 				if err != nil {
 					logging.Errorf("Error parsing node slice cidr to range start: %v", err)
 					return newips, err
 				}
-				rangeEnd, err := iphelpers.LastUsableIP(*ipNet)
+				rangeEnd, err := iphelpers.LastUsableIP(*ipNet, ipRange.IncludeBroadcastAddress)
 				if err != nil {
 					logging.Errorf("Error parsing node slice cidr to range start: %v", err)
 					return newips, err
@@ -676,7 +676,7 @@ RANGESLOOP:
 				if ipforoverlappingrangeupdate == nil {
 					// Do not fail if allocation was not found.
 					logging.Debugf("Failed to find allocation for container ID: %s", ipam.ContainerID)
-					return nil, nil
+					continue RANGESLOOP
 				}
 			}
 
@@ -716,7 +716,7 @@ RANGESLOOP:
 		}
 
 		newips = append(newips, newip)
-		if ipamConf.SingleIP && len(newips) > 0 {
+		if mode == whereaboutstypes.Allocate && ipamConf.SingleIP && len(newips) > 0 {
 			logging.Debugf("Single IP is allocated from %v pool, stop iterating", ipRange)
 			break
 		}

@@ -81,10 +81,12 @@ func LoadIPAMConfig(bytes []byte, envArgs string, extraConfigPaths ...string) (*
 	if n.IPAM.Range != "" {
 
 		oldRange := types.RangeConfiguration{
-			OmitRanges: n.IPAM.OmitRanges,
-			Range:      n.IPAM.Range,
-			RangeStart: n.IPAM.RangeStart,
-			RangeEnd:   n.IPAM.RangeEnd,
+			OmitRanges:              n.IPAM.OmitRanges,
+			Range:                   n.IPAM.Range,
+			RangeStart:              n.IPAM.RangeStart,
+			RangeEnd:                n.IPAM.RangeEnd,
+			IncludeNetworkAddress:   n.IPAM.IncludeNetworkAddress,
+			IncludeBroadcastAddress: n.IPAM.IncludeBroadcastAddress,
 		}
 
 		n.IPAM.IPRanges = append([]types.RangeConfiguration{oldRange}, n.IPAM.IPRanges...)
