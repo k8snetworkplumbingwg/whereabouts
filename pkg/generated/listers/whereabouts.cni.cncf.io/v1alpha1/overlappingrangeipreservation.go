@@ -18,10 +18,10 @@ limitations under the License.
 package v1alpha1
 
 import (
-	v1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
-	"k8s.io/client-go/tools/cache"
+	whereaboutscnicncfiov1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // OverlappingRangeIPReservationLister helps list OverlappingRangeIPReservations.
@@ -29,7 +29,7 @@ import (
 type OverlappingRangeIPReservationLister interface {
 	// List lists all OverlappingRangeIPReservations in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1alpha1.OverlappingRangeIPReservation, err error)
+	List(selector labels.Selector) (ret []*whereaboutscnicncfiov1alpha1.OverlappingRangeIPReservation, err error)
 	// OverlappingRangeIPReservations returns an object that can list and get OverlappingRangeIPReservations.
 	OverlappingRangeIPReservations(namespace string) OverlappingRangeIPReservationNamespaceLister
 	OverlappingRangeIPReservationListerExpansion
@@ -37,17 +37,17 @@ type OverlappingRangeIPReservationLister interface {
 
 // overlappingRangeIPReservationLister implements the OverlappingRangeIPReservationLister interface.
 type overlappingRangeIPReservationLister struct {
-	listers.ResourceIndexer[*v1alpha1.OverlappingRangeIPReservation]
+	listers.ResourceIndexer[*whereaboutscnicncfiov1alpha1.OverlappingRangeIPReservation]
 }
 
 // NewOverlappingRangeIPReservationLister returns a new OverlappingRangeIPReservationLister.
 func NewOverlappingRangeIPReservationLister(indexer cache.Indexer) OverlappingRangeIPReservationLister {
-	return &overlappingRangeIPReservationLister{listers.New[*v1alpha1.OverlappingRangeIPReservation](indexer, v1alpha1.Resource("overlappingrangeipreservation"))}
+	return &overlappingRangeIPReservationLister{listers.New[*whereaboutscnicncfiov1alpha1.OverlappingRangeIPReservation](indexer, whereaboutscnicncfiov1alpha1.Resource("overlappingrangeipreservation"))}
 }
 
 // OverlappingRangeIPReservations returns an object that can list and get OverlappingRangeIPReservations.
 func (s *overlappingRangeIPReservationLister) OverlappingRangeIPReservations(namespace string) OverlappingRangeIPReservationNamespaceLister {
-	return overlappingRangeIPReservationNamespaceLister{listers.NewNamespaced[*v1alpha1.OverlappingRangeIPReservation](s.ResourceIndexer, namespace)}
+	return overlappingRangeIPReservationNamespaceLister{listers.NewNamespaced[*whereaboutscnicncfiov1alpha1.OverlappingRangeIPReservation](s.ResourceIndexer, namespace)}
 }
 
 // OverlappingRangeIPReservationNamespaceLister helps list and get OverlappingRangeIPReservations.
@@ -55,15 +55,15 @@ func (s *overlappingRangeIPReservationLister) OverlappingRangeIPReservations(nam
 type OverlappingRangeIPReservationNamespaceLister interface {
 	// List lists all OverlappingRangeIPReservations in the indexer for a given namespace.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1alpha1.OverlappingRangeIPReservation, err error)
+	List(selector labels.Selector) (ret []*whereaboutscnicncfiov1alpha1.OverlappingRangeIPReservation, err error)
 	// Get retrieves the OverlappingRangeIPReservation from the indexer for a given namespace and name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1alpha1.OverlappingRangeIPReservation, error)
+	Get(name string) (*whereaboutscnicncfiov1alpha1.OverlappingRangeIPReservation, error)
 	OverlappingRangeIPReservationNamespaceListerExpansion
 }
 
 // overlappingRangeIPReservationNamespaceLister implements the OverlappingRangeIPReservationNamespaceLister
 // interface.
 type overlappingRangeIPReservationNamespaceLister struct {
-	listers.ResourceIndexer[*v1alpha1.OverlappingRangeIPReservation]
+	listers.ResourceIndexer[*whereaboutscnicncfiov1alpha1.OverlappingRangeIPReservation]
 }

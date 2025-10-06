@@ -18,10 +18,10 @@ limitations under the License.
 package v1alpha1
 
 import (
-	v1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
-	"k8s.io/client-go/tools/cache"
+	whereaboutscnicncfiov1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // IPPoolLister helps list IPPools.
@@ -29,7 +29,7 @@ import (
 type IPPoolLister interface {
 	// List lists all IPPools in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1alpha1.IPPool, err error)
+	List(selector labels.Selector) (ret []*whereaboutscnicncfiov1alpha1.IPPool, err error)
 	// IPPools returns an object that can list and get IPPools.
 	IPPools(namespace string) IPPoolNamespaceLister
 	IPPoolListerExpansion
@@ -37,17 +37,17 @@ type IPPoolLister interface {
 
 // iPPoolLister implements the IPPoolLister interface.
 type iPPoolLister struct {
-	listers.ResourceIndexer[*v1alpha1.IPPool]
+	listers.ResourceIndexer[*whereaboutscnicncfiov1alpha1.IPPool]
 }
 
 // NewIPPoolLister returns a new IPPoolLister.
 func NewIPPoolLister(indexer cache.Indexer) IPPoolLister {
-	return &iPPoolLister{listers.New[*v1alpha1.IPPool](indexer, v1alpha1.Resource("ippool"))}
+	return &iPPoolLister{listers.New[*whereaboutscnicncfiov1alpha1.IPPool](indexer, whereaboutscnicncfiov1alpha1.Resource("ippool"))}
 }
 
 // IPPools returns an object that can list and get IPPools.
 func (s *iPPoolLister) IPPools(namespace string) IPPoolNamespaceLister {
-	return iPPoolNamespaceLister{listers.NewNamespaced[*v1alpha1.IPPool](s.ResourceIndexer, namespace)}
+	return iPPoolNamespaceLister{listers.NewNamespaced[*whereaboutscnicncfiov1alpha1.IPPool](s.ResourceIndexer, namespace)}
 }
 
 // IPPoolNamespaceLister helps list and get IPPools.
@@ -55,15 +55,15 @@ func (s *iPPoolLister) IPPools(namespace string) IPPoolNamespaceLister {
 type IPPoolNamespaceLister interface {
 	// List lists all IPPools in the indexer for a given namespace.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1alpha1.IPPool, err error)
+	List(selector labels.Selector) (ret []*whereaboutscnicncfiov1alpha1.IPPool, err error)
 	// Get retrieves the IPPool from the indexer for a given namespace and name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1alpha1.IPPool, error)
+	Get(name string) (*whereaboutscnicncfiov1alpha1.IPPool, error)
 	IPPoolNamespaceListerExpansion
 }
 
 // iPPoolNamespaceLister implements the IPPoolNamespaceLister
 // interface.
 type iPPoolNamespaceLister struct {
-	listers.ResourceIndexer[*v1alpha1.IPPool]
+	listers.ResourceIndexer[*whereaboutscnicncfiov1alpha1.IPPool]
 }
