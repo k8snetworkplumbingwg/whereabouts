@@ -18,13 +18,13 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"context"
+	context "context"
 	time "time"
 
-	whereaboutscnicncfiov1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
+	apiwhereaboutscnicncfiov1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
 	versioned "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/clientset/versioned"
 	internalinterfaces "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/informers/externalversions/internalinterfaces"
-	v1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/listers/whereabouts.cni.cncf.io/v1alpha1"
+	whereaboutscnicncfiov1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/listers/whereabouts.cni.cncf.io/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
@@ -35,7 +35,7 @@ import (
 // IPPools.
 type IPPoolInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() v1alpha1.IPPoolLister
+	Lister() whereaboutscnicncfiov1alpha1.IPPoolLister
 }
 
 type iPPoolInformer struct {
@@ -61,16 +61,28 @@ func NewFilteredIPPoolInformer(client versioned.Interface, namespace string, res
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.WhereaboutsV1alpha1().IPPools(namespace).List(context.TODO(), options)
+				return client.WhereaboutsV1alpha1().IPPools(namespace).List(context.Background(), options)
 			},
 			WatchFunc: func(options v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.WhereaboutsV1alpha1().IPPools(namespace).Watch(context.TODO(), options)
+				return client.WhereaboutsV1alpha1().IPPools(namespace).Watch(context.Background(), options)
+			},
+			ListWithContextFunc: func(ctx context.Context, options v1.ListOptions) (runtime.Object, error) {
+				if tweakListOptions != nil {
+					tweakListOptions(&options)
+				}
+				return client.WhereaboutsV1alpha1().IPPools(namespace).List(ctx, options)
+			},
+			WatchFuncWithContext: func(ctx context.Context, options v1.ListOptions) (watch.Interface, error) {
+				if tweakListOptions != nil {
+					tweakListOptions(&options)
+				}
+				return client.WhereaboutsV1alpha1().IPPools(namespace).Watch(ctx, options)
 			},
 		},
-		&whereaboutscnicncfiov1alpha1.IPPool{},
+		&apiwhereaboutscnicncfiov1alpha1.IPPool{},
 		resyncPeriod,
 		indexers,
 	)
@@ -81,9 +93,9 @@ func (f *iPPoolInformer) defaultInformer(client versioned.Interface, resyncPerio
 }
 
 func (f *iPPoolInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&whereaboutscnicncfiov1alpha1.IPPool{}, f.defaultInformer)
+	return f.factory.InformerFor(&apiwhereaboutscnicncfiov1alpha1.IPPool{}, f.defaultInformer)
 }
 
-func (f *iPPoolInformer) Lister() v1alpha1.IPPoolLister {
-	return v1alpha1.NewIPPoolLister(f.Informer().GetIndexer())
+func (f *iPPoolInformer) Lister() whereaboutscnicncfiov1alpha1.IPPoolLister {
+	return whereaboutscnicncfiov1alpha1.NewIPPoolLister(f.Informer().GetIndexer())
 }

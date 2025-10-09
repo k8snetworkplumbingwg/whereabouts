@@ -18,10 +18,10 @@ limitations under the License.
 package v1alpha1
 
 import (
-	v1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
-	"k8s.io/client-go/tools/cache"
+	whereaboutscnicncfiov1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // NodeSlicePoolLister helps list NodeSlicePools.
@@ -29,7 +29,7 @@ import (
 type NodeSlicePoolLister interface {
 	// List lists all NodeSlicePools in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1alpha1.NodeSlicePool, err error)
+	List(selector labels.Selector) (ret []*whereaboutscnicncfiov1alpha1.NodeSlicePool, err error)
 	// NodeSlicePools returns an object that can list and get NodeSlicePools.
 	NodeSlicePools(namespace string) NodeSlicePoolNamespaceLister
 	NodeSlicePoolListerExpansion
@@ -37,17 +37,17 @@ type NodeSlicePoolLister interface {
 
 // nodeSlicePoolLister implements the NodeSlicePoolLister interface.
 type nodeSlicePoolLister struct {
-	listers.ResourceIndexer[*v1alpha1.NodeSlicePool]
+	listers.ResourceIndexer[*whereaboutscnicncfiov1alpha1.NodeSlicePool]
 }
 
 // NewNodeSlicePoolLister returns a new NodeSlicePoolLister.
 func NewNodeSlicePoolLister(indexer cache.Indexer) NodeSlicePoolLister {
-	return &nodeSlicePoolLister{listers.New[*v1alpha1.NodeSlicePool](indexer, v1alpha1.Resource("nodeslicepool"))}
+	return &nodeSlicePoolLister{listers.New[*whereaboutscnicncfiov1alpha1.NodeSlicePool](indexer, whereaboutscnicncfiov1alpha1.Resource("nodeslicepool"))}
 }
 
 // NodeSlicePools returns an object that can list and get NodeSlicePools.
 func (s *nodeSlicePoolLister) NodeSlicePools(namespace string) NodeSlicePoolNamespaceLister {
-	return nodeSlicePoolNamespaceLister{listers.NewNamespaced[*v1alpha1.NodeSlicePool](s.ResourceIndexer, namespace)}
+	return nodeSlicePoolNamespaceLister{listers.NewNamespaced[*whereaboutscnicncfiov1alpha1.NodeSlicePool](s.ResourceIndexer, namespace)}
 }
 
 // NodeSlicePoolNamespaceLister helps list and get NodeSlicePools.
@@ -55,15 +55,15 @@ func (s *nodeSlicePoolLister) NodeSlicePools(namespace string) NodeSlicePoolName
 type NodeSlicePoolNamespaceLister interface {
 	// List lists all NodeSlicePools in the indexer for a given namespace.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1alpha1.NodeSlicePool, err error)
+	List(selector labels.Selector) (ret []*whereaboutscnicncfiov1alpha1.NodeSlicePool, err error)
 	// Get retrieves the NodeSlicePool from the indexer for a given namespace and name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1alpha1.NodeSlicePool, error)
+	Get(name string) (*whereaboutscnicncfiov1alpha1.NodeSlicePool, error)
 	NodeSlicePoolNamespaceListerExpansion
 }
 
 // nodeSlicePoolNamespaceLister implements the NodeSlicePoolNamespaceLister
 // interface.
 type nodeSlicePoolNamespaceLister struct {
-	listers.ResourceIndexer[*v1alpha1.NodeSlicePool]
+	listers.ResourceIndexer[*whereaboutscnicncfiov1alpha1.NodeSlicePool]
 }

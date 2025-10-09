@@ -18,13 +18,13 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"context"
+	context "context"
 	time "time"
 
-	whereaboutscnicncfiov1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
+	apiwhereaboutscnicncfiov1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
 	versioned "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/clientset/versioned"
 	internalinterfaces "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/informers/externalversions/internalinterfaces"
-	v1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/listers/whereabouts.cni.cncf.io/v1alpha1"
+	whereaboutscnicncfiov1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/listers/whereabouts.cni.cncf.io/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
@@ -35,7 +35,7 @@ import (
 // NodeSlicePools.
 type NodeSlicePoolInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() v1alpha1.NodeSlicePoolLister
+	Lister() whereaboutscnicncfiov1alpha1.NodeSlicePoolLister
 }
 
 type nodeSlicePoolInformer struct {
@@ -61,16 +61,28 @@ func NewFilteredNodeSlicePoolInformer(client versioned.Interface, namespace stri
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.WhereaboutsV1alpha1().NodeSlicePools(namespace).List(context.TODO(), options)
+				return client.WhereaboutsV1alpha1().NodeSlicePools(namespace).List(context.Background(), options)
 			},
 			WatchFunc: func(options v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.WhereaboutsV1alpha1().NodeSlicePools(namespace).Watch(context.TODO(), options)
+				return client.WhereaboutsV1alpha1().NodeSlicePools(namespace).Watch(context.Background(), options)
+			},
+			ListWithContextFunc: func(ctx context.Context, options v1.ListOptions) (runtime.Object, error) {
+				if tweakListOptions != nil {
+					tweakListOptions(&options)
+				}
+				return client.WhereaboutsV1alpha1().NodeSlicePools(namespace).List(ctx, options)
+			},
+			WatchFuncWithContext: func(ctx context.Context, options v1.ListOptions) (watch.Interface, error) {
+				if tweakListOptions != nil {
+					tweakListOptions(&options)
+				}
+				return client.WhereaboutsV1alpha1().NodeSlicePools(namespace).Watch(ctx, options)
 			},
 		},
-		&whereaboutscnicncfiov1alpha1.NodeSlicePool{},
+		&apiwhereaboutscnicncfiov1alpha1.NodeSlicePool{},
 		resyncPeriod,
 		indexers,
 	)
@@ -81,9 +93,9 @@ func (f *nodeSlicePoolInformer) defaultInformer(client versioned.Interface, resy
 }
 
 func (f *nodeSlicePoolInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&whereaboutscnicncfiov1alpha1.NodeSlicePool{}, f.defaultInformer)
+	return f.factory.InformerFor(&apiwhereaboutscnicncfiov1alpha1.NodeSlicePool{}, f.defaultInformer)
 }
 
-func (f *nodeSlicePoolInformer) Lister() v1alpha1.NodeSlicePoolLister {
-	return v1alpha1.NewNodeSlicePoolLister(f.Informer().GetIndexer())
+func (f *nodeSlicePoolInformer) Lister() whereaboutscnicncfiov1alpha1.NodeSlicePoolLister {
+	return whereaboutscnicncfiov1alpha1.NewNodeSlicePoolLister(f.Informer().GetIndexer())
 }
