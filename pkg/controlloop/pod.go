@@ -184,8 +184,7 @@ func (pc *PodController) garbageCollectPodIPs(pod *v1.Pod) error {
 	}
 
 	for _, ifaceStatus := range ifaceStatuses {
-		if ifaceStatus.Default {
-			logging.Verbosef("skipped net-attach-def for default network")
+		if !strings.Contains(ifaceStatus.Name, "/") {
 			continue
 		}
 		nad, err := pc.ifaceNetAttachDef(ifaceStatus)

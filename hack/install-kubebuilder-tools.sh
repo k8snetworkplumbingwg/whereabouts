@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 BASEDIR=$(pwd)
 
 # install controller-gen
