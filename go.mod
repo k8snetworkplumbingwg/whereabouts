@@ -1,6 +1,9 @@
 module github.com/k8snetworkplumbingwg/whereabouts
+
 go 1.24.2
+
 toolchain go1.24.6
+
 require (
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/containernetworking/cni v1.3.0
@@ -19,7 +22,7 @@ require (
 	k8s.io/kube-openapi v0.0.0-20250910181357-589584f1c912
 )
 
-require github.com/go-co-op/gocron/v2 v2.16.5
+require github.com/go-co-op/gocron/v2 v2.16.6
 
 require (
 	github.com/emicklei/go-restful/v3 v3.12.2 // indirect
@@ -64,7 +67,7 @@ require (
 	golang.org/x/sys v0.35.0 // indirect
 	golang.org/x/term v0.34.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
-	golang.org/x/time v0.12.0
+	golang.org/x/time v0.14.0
 	golang.org/x/tools v0.36.0 // indirect
 	google.golang.org/protobuf v1.36.7 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
