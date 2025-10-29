@@ -17,6 +17,7 @@ import (
 var _ = Describe("Pod Wrapper operations", func() {
 	generateDefaultNetworkStatus := func(ip string) k8snetworkplumbingwgv1.NetworkStatus {
 		return k8snetworkplumbingwgv1.NetworkStatus{
+			Name:    "default/foo",
 			IPs:     []string{ip},
 			Default: true,
 		}
@@ -24,7 +25,7 @@ var _ = Describe("Pod Wrapper operations", func() {
 
 	generateMultusNetworkStatus := func(ifaceName string, networkName string, ip string) k8snetworkplumbingwgv1.NetworkStatus {
 		return k8snetworkplumbingwgv1.NetworkStatus{
-			Name:      networkName,
+			Name:      "default/" + networkName,
 			Interface: ifaceName,
 			IPs:       []string{ip},
 		}
@@ -97,7 +98,7 @@ var _ = Describe("Pod Wrapper operations", func() {
 			table.Entry("when the annotation has multiple multus networks", "192.168.14.14", "10.10.10.10"),
 		)
 
-		It("should skip the default network annotations", func() {
+		It("should not skip the default network annotations", func() {
 			secondaryIfacesNetworkStatuses := generateMultusNetworkStatusList("192.168.14.14", "10.10.10.10")
 
 			networkStatus := append(
@@ -110,8 +111,8 @@ var _ = Describe("Pod Wrapper operations", func() {
 			}
 
 			podSecondaryIPs := wrapPod(pod).ips
-			Expect(podSecondaryIPs).To(HaveLen(2))
-			Expect(podSecondaryIPs).To(Equal(map[string]void{"192.168.14.14": {}, "10.10.10.10": {}}))
+			Expect(podSecondaryIPs).To(HaveLen(3))
+			Expect(podSecondaryIPs).To(Equal(map[string]void{"192.168.14.14": {}, "10.10.10.10": {}, "14.15.16.20": {}}))
 		})
 
 		It("return an empty list when the network annotations of a pod are invalid", func() {
