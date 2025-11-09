@@ -149,19 +149,14 @@ func LastUsableIP(pool types.Pool) (net.IP, error) {
 // HasUsableIPs returns true if this subnet has usable IPs (i.e. not the network nor the broadcast IP).
 func HasUsableIPs(pool types.Pool) bool {
 	ones, totalBits := pool.IPNet.Mask.Size()
-	if pool.IncludeNetworkAddress {
-		ones--
-	}
-	if pool.IncludeBroadcastAddress {
-		ones--
-	}
 
-	must := 1
+	expected := 1
 	if pool.IncludeNetworkAddress || pool.IncludeBroadcastAddress {
-		must = 0
+		expected = 0
+		ones--
 	}
 
-	return totalBits-ones > must
+	return totalBits-ones > expected
 }
 
 // IncIP increases the given IP address by one. IncIP will overflow for all 0xf adresses.
