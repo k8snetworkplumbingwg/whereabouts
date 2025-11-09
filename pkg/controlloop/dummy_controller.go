@@ -54,7 +54,7 @@ func newDummyPodController(
 		netAttachDefInformerFactory,
 		nil,
 		recorder,
-		func(_ context.Context, _ int, ipamConfig types.IPAMConfig, client *kubeClient.KubernetesIPAM) ([]net.IPNet, error) {
+		func(_ context.Context, _ types.OperationType, ipamConfig types.IPAMConfig, client *kubeClient.KubernetesIPAM) ([]net.IPNet, error) {
 			ipPools := castToIPPool(wbInformerFactory.Whereabouts().V1alpha1().IPPools().Informer().GetStore().List())
 			for _, pool := range ipPools {
 				for index, allocation := range pool.Spec.Allocations {

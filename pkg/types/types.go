@@ -212,9 +212,11 @@ func (ir IPReservation) String() string {
 	return fmt.Sprintf("IP: %s is reserved for pod: %s", ir.IP.String(), ir.PodRef)
 }
 
+type OperationType int
+
 const (
 	// Allocate operation identifier
-	Allocate = 0
+	Allocate OperationType = 0
 	// Deallocate operation identifier
 	Deallocate = 1
 )
