@@ -290,6 +290,15 @@ var _ = Describe("FirstUsableIP operations", func() {
 			})
 			Expect(err).To(MatchError(HavePrefix("net mask is too short")))
 		})
+		It("throws an error when running FirstUsableIP for a /32 with includeNetwork options", func() {
+			_, ipnet, _ := net.ParseCIDR("192.168.0.0/32")
+			ip, err := FirstUsableIP(types.Pool{
+				IPNet:                 *ipnet,
+				IncludeNetworkAddress: true,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ip.String()).To(Equal("192.168.0.0"))
+		})
 
 		It("throws an error when running FirstUsableIP for a /31", func() {
 			_, ipnet, _ := net.ParseCIDR("192.168.0.0/31")
@@ -297,6 +306,15 @@ var _ = Describe("FirstUsableIP operations", func() {
 				IPNet: *ipnet,
 			})
 			Expect(err).To(MatchError(HavePrefix("net mask is too short")))
+		})
+		It("throws an error when running FirstUsableIP for a /31 with includeNetwork option", func() {
+			_, ipnet, _ := net.ParseCIDR("192.168.0.0/31")
+			ip, err := FirstUsableIP(types.Pool{
+				IPNet:                 *ipnet,
+				IncludeNetworkAddress: true,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ip.String()).To(Equal("192.168.0.0"))
 		})
 
 		It("correctly gets the FirstUsableIP for a /30", func() {
@@ -373,6 +391,16 @@ var _ = Describe("LastUsableIP operations", func() {
 			Expect(err).To(MatchError(HavePrefix("net mask is too short")))
 		})
 
+		It("throws an error when running LastUsableIP for a /31 with includeBroadcast option", func() {
+			_, ipnet, _ := net.ParseCIDR("192.168.0.0/31")
+			ip, err := LastUsableIP(types.Pool{
+				IPNet:                   *ipnet,
+				IncludeBroadcastAddress: true,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ip.String()).To(Equal("192.168.0.1"))
+		})
+
 		It("correctly gets the LastUsableIP for a /30", func() {
 			_, ipnet, _ := net.ParseCIDR("192.168.0.0/30")
 			ip, err := LastUsableIP(types.Pool{
@@ -437,12 +465,33 @@ var _ = Describe("HasUsableIPs operations", func() {
 				IPNet: *ipnet,
 			})).To(BeFalse())
 		})
-
+		It("IPv4 /32 has no usable IPs with includeNetwork option", func() {
+			_, ipnet, _ := net.ParseCIDR("192.168.0.0/32")
+			Expect(HasUsableIPs(types.Pool{
+				IPNet:                 *ipnet,
+				IncludeNetworkAddress: true,
+			})).To(BeTrue())
+		})
 		It("IPv4 /31 has no usable IPs", func() {
 			_, ipnet, _ := net.ParseCIDR("192.168.0.0/31")
 			Expect(HasUsableIPs(types.Pool{
 				IPNet: *ipnet,
 			})).To(BeFalse())
+		})
+		It("IPv4 /31 has no usable IPs with includeBroadcast option", func() {
+			_, ipnet, _ := net.ParseCIDR("192.168.0.0/31")
+			Expect(HasUsableIPs(types.Pool{
+				IPNet:                 *ipnet,
+				IncludeNetworkAddress: true,
+			})).To(BeTrue())
+		})
+		It("IPv4 /31 has no usable IPs with includeNetwork and includeBroadcast options", func() {
+			_, ipnet, _ := net.ParseCIDR("192.168.0.0/31")
+			Expect(HasUsableIPs(types.Pool{
+				IPNet:                   *ipnet,
+				IncludeNetworkAddress:   true,
+				IncludeBroadcastAddress: true,
+			})).To(BeTrue())
 		})
 
 		It("IPv6 /128 has no usable IPs", func() {
