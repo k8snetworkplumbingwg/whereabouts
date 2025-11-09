@@ -306,7 +306,7 @@ func (c *KubernetesOverlappingRangeStore) GetOverlappingRangeIPReservation(ctx c
 }
 
 // UpdateOverlappingRangeAllocation updates clusterwide allocation for overlapping ranges.
-func (c *KubernetesOverlappingRangeStore) UpdateOverlappingRangeAllocation(ctx context.Context, mode int, ip net.IP,
+func (c *KubernetesOverlappingRangeStore) UpdateOverlappingRangeAllocation(ctx context.Context, mode whereaboutstypes.OperationType, ip net.IP,
 	podRef, ifName, networkName string) error {
 	normalizedIP := NormalizeIP(ip, networkName)
 
@@ -457,7 +457,7 @@ func newLeaderElector(ctx context.Context, clientset kubernetes.Interface, names
 }
 
 // IPManagement manages ip allocation and deallocation from a storage perspective
-func IPManagement(ctx context.Context, mode int, ipamConf whereaboutstypes.IPAMConfig, client *KubernetesIPAM) ([]net.IPNet, error) {
+func IPManagement(ctx context.Context, mode whereaboutstypes.OperationType, ipamConf whereaboutstypes.IPAMConfig, client *KubernetesIPAM) ([]net.IPNet, error) {
 	var newips []net.IPNet
 
 	if ipamConf.PodName == "" {
@@ -543,7 +543,7 @@ func getNodeSliceName(ipam *KubernetesIPAM) string {
 }
 
 // IPManagementKubernetesUpdate manages k8s updates
-func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *KubernetesIPAM, ipamConf whereaboutstypes.IPAMConfig) ([]net.IPNet, error) {
+func IPManagementKubernetesUpdate(ctx context.Context, mode whereaboutstypes.OperationType, ipam *KubernetesIPAM, ipamConf whereaboutstypes.IPAMConfig) ([]net.IPNet, error) {
 	logging.Debugf("IPManagement -- mode: %d / containerID: %q / podRef: %q / ifName: %q ", mode, ipam.ContainerID, ipamConf.GetPodRef(), ipam.IfName)
 
 	var newips []net.IPNet
@@ -605,12 +605,17 @@ RANGESLOOP:
 					return newips, err
 				}
 				poolIdentifier.IpRange = nodeSliceRange
-				rangeStart, err := iphelpers.FirstUsableIP(*ipNet, ipRange.IncludeNetworkAddress)
+				pool := whereaboutstypes.Pool{
+					IPNet:                   *ipNet,
+					IncludeNetworkAddress:   ipRange.IncludeNetworkAddress,
+					IncludeBroadcastAddress: ipRange.IncludeBroadcastAddress,
+				}
+				rangeStart, err := iphelpers.FirstUsableIP(pool)
 				if err != nil {
 					logging.Errorf("Error parsing node slice cidr to range start: %v", err)
 					return newips, err
 				}
-				rangeEnd, err := iphelpers.LastUsableIP(*ipNet, ipRange.IncludeBroadcastAddress)
+				rangeEnd, err := iphelpers.LastUsableIP(pool)
 				if err != nil {
 					logging.Errorf("Error parsing node slice cidr to range start: %v", err)
 					return newips, err

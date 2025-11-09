@@ -2,9 +2,10 @@ package storage
 
 import (
 	"context"
-	"github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
 	"net"
 	"time"
+
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
 
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 )
@@ -35,7 +36,7 @@ type Store interface {
 // OverlappingRangeStore is an interface for wrapping overlappingrange storage options
 type OverlappingRangeStore interface {
 	GetOverlappingRangeIPReservation(ctx context.Context, ip net.IP, podRef, networkName string) (*v1alpha1.OverlappingRangeIPReservation, error)
-	UpdateOverlappingRangeAllocation(ctx context.Context, mode int, ip net.IP, podRef, ifName, networkName string) error
+	UpdateOverlappingRangeAllocation(ctx context.Context, mode types.OperationType, ip net.IP, podRef, ifName, networkName string) error
 }
 
 type Temporary interface {
