@@ -8,6 +8,8 @@ import (
 	"net"
 	"strconv"
 	"strings"
+
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 )
 
 // CompareIPs reports whether out of 2 given IPs, ipX and ipY, ipY is smaller (-1), the same (0) or larger (1).
@@ -120,12 +122,12 @@ func SubnetBroadcastIP(ipnet net.IPNet) net.IP {
 
 // FirstUsableIP returns the first usable IP (not the network IP) in a given net.IPNet.
 // This does not work for IPv4 /31 to /32 or IPv6 /127 to /128 netmasks.
-func FirstUsableIP(ipnet net.IPNet, includeNetworkAddress bool) (net.IP, error) {
-	if !HasUsableIPs(ipnet) {
-		return nil, fmt.Errorf("net mask is too short, subnet %s has no usable IP addresses, it is too small", ipnet)
+func FirstUsableIP(pool types.Pool) (net.IP, error) {
+	if !HasUsableIPs(pool) {
+		return nil, fmt.Errorf("net mask is too short, subnet %s has no usable IP addresses, it is too small", pool.IPNet.String())
 	}
-	ip := NetworkIP(ipnet)
-	if !includeNetworkAddress {
+	ip := NetworkIP(pool.IPNet)
+	if !pool.IncludeNetworkAddress {
 		ip = IncIP(ip)
 	}
 	return ip, nil
@@ -133,20 +135,26 @@ func FirstUsableIP(ipnet net.IPNet, includeNetworkAddress bool) (net.IP, error) 
 
 // LastUsableIP returns the last usable IP (not the broadcast IP in a given net.IPNet).
 // This does not work for IPv4 /31 to /32 or IPv6 /127 to /128 netmasks.
-func LastUsableIP(ipnet net.IPNet, includeBroadcastAddress bool) (net.IP, error) {
-	if !HasUsableIPs(ipnet) {
-		return nil, fmt.Errorf("net mask is too short, subnet %s has no usable IP addresses, it is too small", ipnet)
+func LastUsableIP(pool types.Pool) (net.IP, error) {
+	if !HasUsableIPs(pool) {
+		return nil, fmt.Errorf("net mask is too short, subnet %s has no usable IP addresses, it is too small", pool.IPNet.String())
 	}
-	ip := SubnetBroadcastIP(ipnet)
-	if !includeBroadcastAddress {
+	ip := SubnetBroadcastIP(pool.IPNet)
+	if !pool.IncludeBroadcastAddress {
 		ip = DecIP(ip)
 	}
 	return ip, nil
 }
 
 // HasUsableIPs returns true if this subnet has usable IPs (i.e. not the network nor the broadcast IP).
-func HasUsableIPs(ipnet net.IPNet) bool {
-	ones, totalBits := ipnet.Mask.Size()
+func HasUsableIPs(pool types.Pool) bool {
+	ones, totalBits := pool.IPNet.Mask.Size()
+	if pool.IncludeNetworkAddress {
+		ones--
+	}
+	if pool.IncludeBroadcastAddress {
+		ones--
+	}
 	return totalBits-ones > 1
 }
 
@@ -246,31 +254,31 @@ func IsIPv4(checkip net.IP) bool {
 // they will be silently ignored and the first usable IP and/or last usable IP will be used. A valid rangeEnd cannot
 // be smaller than a valid rangeStart, otherwise it will be silently ignored.
 // We do this also for backwards compatibility to avoid throwing unexpected errors in existing environments.
-func GetIPRange(ipnet net.IPNet, rangeStart net.IP, includeNetworkAddress bool, rangeEnd net.IP, includeBroadcastAddress bool) (net.IP, net.IP, error) {
-	firstUsableIP, err := FirstUsableIP(ipnet, includeNetworkAddress)
+func GetIPRange(pool types.Pool) (net.IP, net.IP, error) {
+	firstUsableIP, err := FirstUsableIP(pool)
 	if err != nil {
 		return nil, nil, err
 	}
-	lastUsableIP, err := LastUsableIP(ipnet, includeBroadcastAddress)
+	lastUsableIP, err := LastUsableIP(pool)
 	if err != nil {
 		return nil, nil, err
 	}
-	if rangeStart != nil {
-		rangeStartInRange, err := IsIPInRange(rangeStart, firstUsableIP, lastUsableIP)
+	if pool.RangeStart != nil {
+		rangeStartInRange, err := IsIPInRange(pool.RangeStart, firstUsableIP, lastUsableIP)
 		if err != nil {
 			return nil, nil, err
 		}
 		if rangeStartInRange {
-			firstUsableIP = rangeStart
+			firstUsableIP = pool.RangeStart
 		}
 	}
-	if rangeEnd != nil {
-		rangeEndInRange, err := IsIPInRange(rangeEnd, firstUsableIP, lastUsableIP)
+	if pool.RangeEnd != nil {
+		rangeEndInRange, err := IsIPInRange(pool.RangeEnd, firstUsableIP, lastUsableIP)
 		if err != nil {
 			return nil, nil, err
 		}
 		if rangeEndInRange {
-			lastUsableIP = rangeEnd
+			lastUsableIP = pool.RangeEnd
 		}
 	}
 	return firstUsableIP, lastUsableIP, nil
