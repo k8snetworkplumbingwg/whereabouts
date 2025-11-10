@@ -653,7 +653,7 @@ RANGESLOOP:
 			case whereaboutstypes.Allocate:
 				newip, updatedreservelist, err = allocate.AssignIP(ipRange, reservelist, ipam.ContainerID, ipamConf.GetPodRef(), ipam.IfName)
 				if err != nil {
-					if ok := goerr.As(err, new(allocate.AssignmentError)); !ipamConf.SingleIP || !ok {
+					if ok := goerr.As(err, new(allocate.AssignmentError)); !ok {
 						_ = logging.Errorf("Error assigning IP: %v", err)
 						return newips, err
 					}
