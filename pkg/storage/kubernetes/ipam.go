@@ -720,10 +720,13 @@ RANGESLOOP:
 			}
 		}
 
-		newips = append(newips, newip)
-		if mode == whereaboutstypes.Allocate && ipamConf.SingleIP && len(newips) > 0 {
-			logging.Debugf("Single IP is allocated from %v pool, stop iterating", ipRange)
-			break
+		if mode == whereaboutstypes.Allocate {
+			newips = append(newips, newip)
+
+			if ipamConf.SingleIP && len(newips) > 0 {
+				logging.Debugf("Single IP is allocated from %v pool, stop iterating", ipRange)
+				break
+			}
 		}
 	}
 	return newips, err
