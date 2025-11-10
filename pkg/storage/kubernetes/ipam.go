@@ -621,9 +621,13 @@ RANGESLOOP:
 					return newips, err
 				}
 				ipRange = whereaboutstypes.RangeConfiguration{
-					Range:      ipRange.Range,
-					RangeStart: rangeStart,
-					RangeEnd:   rangeEnd,
+					Range: ipRange.Range,
+
+					RangeStart:            rangeStart,
+					IncludeNetworkAddress: ipRange.IncludeNetworkAddress,
+
+					RangeEnd:                rangeEnd,
+					IncludeBroadcastAddress: ipRange.IncludeBroadcastAddress,
 				}
 			}
 			logging.Debugf("using pool identifier: %v", poolIdentifier)
