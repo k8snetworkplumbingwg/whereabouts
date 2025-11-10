@@ -147,7 +147,7 @@ func GenerateNetAttachDefSpec(name, namespace, config string) *nettypes.NetworkA
 	}
 }
 
-func MacvlanNetworkWithWhereaboutsIPAMNetwork(networkName string, namespaceName string, ipRange string, ipRanges []string, poolName string, enableOverlappingRanges bool) *nettypes.NetworkAttachmentDefinition {
+func MacvlanNetworkWithWhereaboutsIPAMNetwork(networkName string, namespaceName string, ipRange string, ipRanges []string, poolName string, enableOverlappingRanges, singleIP bool) *nettypes.NetworkAttachmentDefinition {
 	macvlanConfig := fmt.Sprintf(`{
         "cniVersion": "0.3.0",
         "disableCheck": true,
@@ -166,11 +166,12 @@ func MacvlanNetworkWithWhereaboutsIPAMNetwork(networkName string, namespaceName 
                     "log_level": "debug",
                     "log_file": "/tmp/wb",
                     "network_name": "%s",
-                    "enable_overlapping_ranges": %v
+                    "enable_overlapping_ranges": %v,
+					"singleIP": %t
                 }
             }
         ]
-    }`, ipRange, CreateIPRanges(ipRanges), poolName, enableOverlappingRanges)
+    }`, ipRange, CreateIPRanges(ipRanges), poolName, enableOverlappingRanges, singleIP)
 	return GenerateNetAttachDefSpec(networkName, namespaceName, macvlanConfig)
 }
 
