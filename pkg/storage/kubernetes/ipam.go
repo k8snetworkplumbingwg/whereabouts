@@ -555,10 +555,6 @@ func IPManagementKubernetesUpdate(ctx context.Context, mode whereaboutstypes.Ope
 		return newips, fmt.Errorf("got an unknown mode passed to IPManagement: %v", mode)
 	}
 
-	var overlappingrangestore storage.OverlappingRangeStore
-	var pool storage.IPPool
-	var err error
-
 	requestCtx, requestCancel := context.WithTimeout(ctx, storage.RequestTimeout)
 	defer requestCancel()
 
@@ -568,12 +564,21 @@ func IPManagementKubernetesUpdate(ctx context.Context, mode whereaboutstypes.Ope
 		return newips, err
 	}
 
-	// handle the ip add/del until successful
-	var overlappingrangeallocations []whereaboutstypes.IPReservation
-	var ipforoverlappingrangeupdate net.IP
-	skipOverlappingRangeUpdate := false
+	var err error
+
 RANGESLOOP:
 	for _, ipRange := range ipamConf.IPRanges {
+		var (
+			// handle the ip add/del until successful
+			overlappingrangeallocations []whereaboutstypes.IPReservation
+			ipforoverlappingrangeupdate net.IP
+
+			overlappingrangestore storage.OverlappingRangeStore
+			pool                  storage.IPPool
+
+			skipOverlappingRangeUpdate bool
+		)
+
 	RETRYLOOP:
 		for j := 0; j < storage.DatastoreRetries; j++ {
 			select {
@@ -582,6 +587,7 @@ RANGESLOOP:
 			default:
 				// retry the IPAM loop if the context has not been cancelled
 			}
+
 			overlappingrangestore, err = ipam.GetOverlappingRangeStore()
 			if err != nil {
 				logging.Errorf("IPAM error getting OverlappingRangeStore: %v", err)
@@ -647,7 +653,7 @@ RANGESLOOP:
 			case whereaboutstypes.Allocate:
 				newip, updatedreservelist, err = allocate.AssignIP(ipRange, reservelist, ipam.ContainerID, ipamConf.GetPodRef(), ipam.IfName)
 				if err != nil {
-					if ok := goerr.As(err, new(allocate.AssignmentError)); !ok {
+					if ok := goerr.As(err, new(allocate.AssignmentError)); !ipamConf.SingleIP || !ok {
 						_ = logging.Errorf("Error assigning IP: %v", err)
 						return newips, err
 					}
