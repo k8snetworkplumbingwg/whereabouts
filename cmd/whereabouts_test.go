@@ -980,8 +980,7 @@ var _ = Describe("Whereabouts operations", func() {
 		Expect(err).To(HaveOccurred())
 
 		// ensure the error is of the correct type
-		var assignErr *allocate.AssignmentError
-		if !errors.As(err, &assignErr) {
+		if !errors.As(err, new(allocate.AssignmentError)) {
 			Fail(fmt.Sprintf("expected AssignmentError, got: %s", err))
 		}
 	})
