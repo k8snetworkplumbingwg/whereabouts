@@ -146,30 +146,17 @@ func LastUsableIP(pool types.Pool) (net.IP, error) {
 	return ip, nil
 }
 
-// HasUsableIPs returns true if this subnet has usable IPs (i.e. not the network nor the broadcast IP).
+// HasUsableIPs returns true if this subnet has usable IPs (i.e. not the network nor the broadcast IP if not explicitly enabled).
 func HasUsableIPs(pool types.Pool) bool {
-	first := NetworkIP(pool.IPNet)
-	last := SubnetBroadcastIP(pool.IPNet)
-
-	if !pool.IncludeNetworkAddress {
-		first = IncIP(first)
-	}
-
-	if !pool.IncludeBroadcastAddress {
-		last = DecIP(last)
-	}
-
-	// Ensure both endpoints are still within the subnet
-	if !pool.IPNet.Contains(first) || !pool.IPNet.Contains(last) {
-		return false
-	}
+	ones, totalBits := pool.IPNet.Mask.Size()
 
 	expected := 1
 	if pool.IncludeNetworkAddress || pool.IncludeBroadcastAddress {
 		expected = 0
+		ones--
 	}
 
-	return CompareIPs(first, last) >= expected
+	return totalBits-ones > expected
 }
 
 // IncIP increases the given IP address by one. IncIP will overflow for all 0xf adresses.
