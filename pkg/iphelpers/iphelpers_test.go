@@ -478,11 +478,18 @@ var _ = Describe("HasUsableIPs operations", func() {
 				IPNet: *ipnet,
 			})).To(BeFalse())
 		})
-		It("IPv4 /31 has no usable IPs with includeBroadcast option", func() {
+		It("IPv4 /31 has no usable IPs with includeNetwork option", func() {
 			_, ipnet, _ := net.ParseCIDR("192.168.0.0/31")
 			Expect(HasUsableIPs(types.Pool{
 				IPNet:                 *ipnet,
 				IncludeNetworkAddress: true,
+			})).To(BeTrue())
+		})
+		It("IPv4 /31 has no usable IPs with includeBroadcast option", func() {
+			_, ipnet, _ := net.ParseCIDR("192.168.0.0/31")
+			Expect(HasUsableIPs(types.Pool{
+				IPNet:                   *ipnet,
+				IncludeBroadcastAddress: true,
 			})).To(BeTrue())
 		})
 		It("IPv4 /31 has no usable IPs with includeNetwork and includeBroadcast options", func() {
