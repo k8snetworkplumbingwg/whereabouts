@@ -215,8 +215,9 @@ func (ir IPReservation) String() string {
 type OperationType int
 
 const (
+	_ OperationType = iota
 	// Allocate operation identifier
-	Allocate OperationType = 0
+	Allocate
 	// Deallocate operation identifier
 	Deallocate = 1
 )
