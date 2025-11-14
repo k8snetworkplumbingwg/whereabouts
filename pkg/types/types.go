@@ -43,6 +43,9 @@ type RangeConfiguration struct {
 	Range      string   `json:"range"`
 	RangeStart net.IP   `json:"range_start,omitempty"`
 	RangeEnd   net.IP   `json:"range_end,omitempty"`
+
+	IncludeNetworkAddress   bool `json:"include_network_address,omitempty"`
+	IncludeBroadcastAddress bool `json:"include_broadcast_address,omitempty"`
 }
 
 // IPAMConfig describes the expected json configuration for this plugin
@@ -52,12 +55,15 @@ type IPAMConfig struct {
 	Routes                   []*cnitypes.Route    `json:"routes"`
 	Addresses                []Address            `json:"addresses,omitempty"`
 	IPRanges                 []RangeConfiguration `json:"ipRanges"`
+	SingleIP                 bool                 `json:"singleIP"`
 	OmitRanges               []string             `json:"exclude,omitempty"`
 	DNS                      cnitypes.DNS         `json:"dns"`
 	Range                    string               `json:"range"`
 	NodeSliceSize            string               `json:"node_slice_size"`
 	RangeStart               net.IP               `json:"range_start,omitempty"`
 	RangeEnd                 net.IP               `json:"range_end,omitempty"`
+	IncludeNetworkAddress    bool                 `json:"include_network_address,omitempty"`
+	IncludeBroadcastAddress  bool                 `json:"include_broadcast_address,omitempty"`
 	GatewayStr               string               `json:"gateway"`
 	LeaderLeaseDuration      int                  `json:"leader_lease_duration,omitempty"`
 	LeaderRenewDeadline      int                  `json:"leader_renew_deadline,omitempty"`
@@ -83,12 +89,15 @@ func (ic *IPAMConfig) UnmarshalJSON(data []byte) error {
 		Datastore                string               `json:"datastore"`
 		Addresses                []Address            `json:"addresses,omitempty"`
 		IPRanges                 []RangeConfiguration `json:"ipRanges"`
+		SingleIP                 bool                 `json:"singleIP,omitempty"`
 		NodeSliceSize            string               `json:"node_slice_size"`
 		OmitRanges               []string             `json:"exclude,omitempty"`
 		DNS                      cnitypes.DNS         `json:"dns"`
 		Range                    string               `json:"range"`
 		RangeStart               string               `json:"range_start,omitempty"`
 		RangeEnd                 string               `json:"range_end,omitempty"`
+		IncludeNetworkAddress    bool                 `json:"include_network_address,omitempty"`
+		IncludeBroadcastAddress  bool                 `json:"include_broadcast_address,omitempty"`
 		GatewayStr               string               `json:"gateway"`
 		EtcdHost                 string               `json:"etcd_host,omitempty"`
 		EtcdUsername             string               `json:"etcd_username,omitempty"`
@@ -126,11 +135,14 @@ func (ic *IPAMConfig) UnmarshalJSON(data []byte) error {
 		Routes:                   ipamConfigAlias.Routes,
 		Addresses:                ipamConfigAlias.Addresses,
 		IPRanges:                 ipamConfigAlias.IPRanges,
+		SingleIP:                 ipamConfigAlias.SingleIP,
 		OmitRanges:               ipamConfigAlias.OmitRanges,
 		DNS:                      ipamConfigAlias.DNS,
 		Range:                    ipamConfigAlias.Range,
 		RangeStart:               backwardsCompatibleIPAddress(ipamConfigAlias.RangeStart),
 		RangeEnd:                 backwardsCompatibleIPAddress(ipamConfigAlias.RangeEnd),
+		IncludeNetworkAddress:    ipamConfigAlias.IncludeNetworkAddress,
+		IncludeBroadcastAddress:  ipamConfigAlias.IncludeBroadcastAddress,
 		NodeSliceSize:            ipamConfigAlias.NodeSliceSize,
 		GatewayStr:               ipamConfigAlias.GatewayStr,
 		LeaderLeaseDuration:      ipamConfigAlias.LeaderLeaseDuration,
@@ -200,11 +212,14 @@ func (ir IPReservation) String() string {
 	return fmt.Sprintf("IP: %s is reserved for pod: %s", ir.IP.String(), ir.PodRef)
 }
 
+type OperationType int
+
 const (
+	_ OperationType = iota
 	// Allocate operation identifier
-	Allocate = 0
+	Allocate
 	// Deallocate operation identifier
-	Deallocate = 1
+	Deallocate
 )
 
 var ErrNoIPRanges = errors.New("no IP ranges in whereabouts config")
