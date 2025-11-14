@@ -164,8 +164,12 @@ func HasUsableIPs(pool types.Pool) bool {
 		return false
 	}
 
-	// There are usable IPs iff first <= last
-	return CompareIPs(first, last) <= 0
+	expected := 1
+	if pool.IncludeNetworkAddress || pool.IncludeBroadcastAddress {
+		expected = 0
+	}
+
+	return CompareIPs(first, last) >= expected
 }
 
 // IncIP increases the given IP address by one. IncIP will overflow for all 0xf adresses.
