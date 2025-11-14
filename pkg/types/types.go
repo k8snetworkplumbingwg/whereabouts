@@ -219,7 +219,7 @@ const (
 	// Allocate operation identifier
 	Allocate
 	// Deallocate operation identifier
-	Deallocate = 1
+	Deallocate
 )
 
 var ErrNoIPRanges = errors.New("no IP ranges in whereabouts config")
