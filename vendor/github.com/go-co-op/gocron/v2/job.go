@@ -31,16 +31,17 @@ type internalJob struct {
 	// have multiple nextScheduled times
 	nextScheduled []time.Time
 
-	lastRun            time.Time
-	function           any
-	parameters         []any
-	timer              clockwork.Timer
-	singletonMode      bool
-	singletonLimitMode LimitMode
-	limitRunsTo        *limitRunsTo
-	startTime          time.Time
-	startImmediately   bool
-	stopTime           time.Time
+	lastRun                time.Time
+	function               any
+	parameters             []any
+	timer                  clockwork.Timer
+	singletonMode          bool
+	singletonLimitMode     LimitMode
+	limitRunsTo            *limitRunsTo
+	startTime              time.Time
+	startImmediately       bool
+	stopTime               time.Time
+	intervalFromCompletion bool
 	// event listeners
 	afterJobRuns                        func(jobID uuid.UUID, jobName string)
 	beforeJobRuns                       func(jobID uuid.UUID, jobName string)
@@ -225,6 +226,9 @@ func (d durationJobDefinition) setup(j *internalJob, _ *time.Location, _ time.Ti
 	if d.duration == 0 {
 		return ErrDurationJobIntervalZero
 	}
+	if d.duration < 0 {
+		return ErrDurationJobIntervalNegative
+	}
 	j.jobSchedule = &durationJob{duration: d.duration}
 	return nil
 }
@@ -246,6 +250,10 @@ type durationRandomJobDefinition struct {
 func (d durationRandomJobDefinition) setup(j *internalJob, _ *time.Location, _ time.Time) error {
 	if d.min >= d.max {
 		return ErrDurationRandomJobMinMax
+	}
+
+	if d.min <= 0 || d.max <= 0 {
+		return ErrDurationRandomJobPositive
 	}
 
 	j.jobSchedule = &durationRandomJob{
@@ -635,6 +643,9 @@ func WithEventListeners(eventListeners ...EventListener) JobOption {
 // Upon reaching the limit, the job is removed from the scheduler.
 func WithLimitedRuns(limit uint) JobOption {
 	return func(j *internalJob, _ time.Time) error {
+		if limit == 0 {
+			return ErrWithLimitedRunsZero
+		}
 		j.limitRunsTo = &limitRunsTo{
 			limit:    limit,
 			runCount: 0,
@@ -675,6 +686,45 @@ func WithSingletonMode(mode LimitMode) JobOption {
 	}
 }
 
+// WithIntervalFromCompletion configures the job to calculate the next run time
+// from the job's completion time rather than its scheduled start time.
+// This ensures consistent rest periods between job executions regardless of
+// how long each execution takes.
+//
+// By default (without this option), a job scheduled to run every N time units
+// will start N time units after its previous scheduled start time. For example,
+// if a job is scheduled to run every 5 minutes starting at 09:00 and takes 2 minutes
+// to complete, the next run will start at 09:05 (5 minutes from 09:00), giving
+// only 3 minutes of rest between completion and the next start.
+//
+// With this option enabled, the next run will start N time units after the job
+// completes. Using the same example, if the job completes at 09:02, the next run
+// will start at 09:07 (5 minutes from 09:02), ensuring a full 5 minutes of rest.
+//
+// Note: This option only makes sense with interval-based jobs (DurationJob, DurationRandomJob).
+// For time-based jobs (CronJob, DailyJob, etc.) that run at specific times, this option
+// will be ignored as those jobs are inherently scheduled at fixed times.
+//
+// Example:
+//
+//	s.NewJob(
+//	    gocron.DurationJob(5*time.Minute),
+//	    gocron.NewTask(func() {
+//	        // Job that takes variable time to complete
+//	        doWork()
+//	    }),
+//	    gocron.WithIntervalFromCompletion(),
+//	)
+//
+// In this example, no matter how long doWork() takes, there will always be
+// exactly 5 minutes between when it completes and when it starts again.
+func WithIntervalFromCompletion() JobOption {
+	return func(j *internalJob, _ time.Time) error {
+		j.intervalFromCompletion = true
+		return nil
+	}
+}
+
 // WithStartAt sets the option for starting the job at
 // a specific datetime.
 func WithStartAt(option StartAtOption) JobOption {
@@ -702,6 +752,26 @@ func WithStartDateTime(start time.Time) StartAtOption {
 	return func(j *internalJob, now time.Time) error {
 		if start.IsZero() || start.Before(now) {
 			return ErrWithStartDateTimePast
+		}
+		if !j.stopTime.IsZero() && j.stopTime.Before(start) {
+			return ErrStartTimeLaterThanEndTime
+		}
+		j.startTime = start
+		return nil
+	}
+}
+
+// WithStartDateTimePast sets the first date & time at which the job should run
+// from a time in the past. This is useful when you want to backdate
+// the start time of a job to a time in the past, for example
+// if you want to start a job from a specific date in the past
+// and have it run on its schedule from then.
+// The start time can be in the past, but not zero.
+// If the start time is in the future, it behaves the same as WithStartDateTime.
+func WithStartDateTimePast(start time.Time) StartAtOption {
+	return func(j *internalJob, _ time.Time) error {
+		if start.IsZero() {
+			return ErrWithStartDateTimePastZero
 		}
 		if !j.stopTime.IsZero() && j.stopTime.Before(start) {
 			return ErrStartTimeLaterThanEndTime
@@ -952,16 +1022,14 @@ type weeklyJob struct {
 }
 
 func (w weeklyJob) next(lastRun time.Time) time.Time {
-	firstPass := true
-	next := w.nextWeekDayAtTime(lastRun, firstPass)
+	next := w.nextWeekDayAtTime(lastRun, true)
 	if !next.IsZero() {
 		return next
 	}
-	firstPass = false
 
 	startOfTheNextIntervalWeek := (lastRun.Day() - int(lastRun.Weekday())) + int(w.interval*7)
 	from := time.Date(lastRun.Year(), lastRun.Month(), startOfTheNextIntervalWeek, 0, 0, 0, 0, lastRun.Location())
-	return w.nextWeekDayAtTime(from, firstPass)
+	return w.nextWeekDayAtTime(from, false)
 }
 
 func (w weeklyJob) nextWeekDayAtTime(lastRun time.Time, firstPass bool) time.Time {

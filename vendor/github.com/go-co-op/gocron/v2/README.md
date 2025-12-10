@@ -5,6 +5,9 @@
 
 gocron is a job scheduling package which lets you run Go functions at pre-determined intervals.
 
+> Looking for a visual interface?  
+> Check out [**gocron-ui**](https://github.com/go-co-op/gocron-ui) — a lightweight web dashboard to monitor, trigger, and manage your `gocron` jobs in real time.
+
 If you want to chat, you can find us on Slack at
 [<img src="https://img.shields.io/badge/gophers-gocron-brightgreen?logo=slack">](https://gophers.slack.com/archives/CQ7T0T1FW)
 
@@ -71,6 +74,12 @@ func main() {
 - [Go doc examples](https://pkg.go.dev/github.com/go-co-op/gocron/v2#pkg-examples)
 - [Examples directory](examples)
 
+## Articles & Blog Posts
+
+Community articles and tutorials about using gocron:
+
+- [Building a dynamic, highly available scheduler in Go](https://tech.efg.gg/posts/2025/highly-available-scheduler-in-go/) - A deep dive into building a highly available scheduler using gocron, MongoDB change streams, and leader election patterns for the FACEIT Watch platform.
+
 ## Concepts
 
 - **Job**: The job encapsulates a "task", which is made up of a go function and any function parameters. The Job then
@@ -99,6 +108,15 @@ Jobs can be run every x weeks on specific days of the week and at specific times
 Jobs can be run every x months on specific days of the month and at specific times.
 - [**One time**](https://pkg.go.dev/github.com/go-co-op/gocron/v2#OneTimeJob):
 Jobs can be run at specific time(s) (either once or many times).
+
+### Interval Timing
+Jobs can be scheduled with different interval timing modes.
+- [**Interval from scheduled time (default)**](https://pkg.go.dev/github.com/go-co-op/gocron/v2#DurationJob):
+By default, jobs calculate their next run time from when they were scheduled to start, resulting in fixed intervals 
+regardless of execution time. Good for cron-like scheduling at predictable times.
+- [**Interval from completion time**](https://pkg.go.dev/github.com/go-co-op/gocron/v2#WithIntervalFromCompletion):
+Jobs can calculate their next run time from when they complete, ensuring consistent rest periods between executions.
+Ideal for rate-limited APIs, resource-intensive jobs, and scenarios where execution time varies.
 
 ### Concurrency Limits
 Jobs can be limited individually or across the entire scheduler.

@@ -200,7 +200,10 @@ func (e *executor) start() {
 							select {
 							case runner.rescheduleLimiter <- struct{}{}:
 								runner.in <- jIn
-								e.sendOutForRescheduling(&jIn)
+								// For intervalFromCompletion, skip rescheduling here - it will happen after job completes
+								if !j.intervalFromCompletion {
+									e.sendOutForRescheduling(&jIn)
+								}
 							default:
 								// runner is busy, reschedule the work for later
 								// which means we just skip it here and do nothing
@@ -210,7 +213,10 @@ func (e *executor) start() {
 						} else {
 							// wait mode, fill up that queue (buffered channel, so it's ok)
 							runner.in <- jIn
-							e.sendOutForRescheduling(&jIn)
+							// For intervalFromCompletion, skip rescheduling here - it will happen after job completes
+							if !j.intervalFromCompletion {
+								e.sendOutForRescheduling(&jIn)
+							}
 						}
 					} else {
 						select {
@@ -345,7 +351,10 @@ func (e *executor) singletonModeRunner(name string, in chan jobIn, wg *waitGroup
 				// need to set shouldSendOut = false here, as there is a duplicative call to sendOutForRescheduling
 				// inside the runJob function that needs to be skipped. sendOutForRescheduling is previously called
 				// when the job is sent to the singleton mode runner.
-				jIn.shouldSendOut = false
+				// Exception: for intervalFromCompletion, we want rescheduling to happen AFTER job completion
+				if !j.intervalFromCompletion {
+					jIn.shouldSendOut = false
+				}
 				e.runJob(*j, jIn)
 			}
 
@@ -419,10 +428,14 @@ func (e *executor) runJob(j internalJob, jIn jobIn) {
 		return
 	}
 
-	e.sendOutForRescheduling(&jIn)
-	select {
-	case e.jobsOutCompleted <- j.id:
-	case <-e.ctx.Done():
+	// For intervalFromCompletion, we need to reschedule AFTER the job completes,
+	// not before. For regular jobs, we reschedule before execution (existing behavior).
+	if !j.intervalFromCompletion {
+		e.sendOutForRescheduling(&jIn)
+		select {
+		case e.jobsOutCompleted <- j.id:
+		case <-e.ctx.Done():
+		}
 	}
 
 	startTime := time.Now()
@@ -440,6 +453,15 @@ func (e *executor) runJob(j internalJob, jIn jobIn) {
 		_ = callJobFuncWithParams(j.afterJobRuns, j.id, j.name)
 		e.incrementJobCounter(j, Success)
 		e.recordJobTimingWithStatus(startTime, time.Now(), j, Success, nil)
+	}
+
+	// For intervalFromCompletion, reschedule AFTER the job completes
+	if j.intervalFromCompletion {
+		select {
+		case e.jobsOutCompleted <- j.id:
+		case <-e.ctx.Done():
+		}
+		e.sendOutForRescheduling(&jIn)
 	}
 }
 
