@@ -17,3 +17,7 @@ bin/
 /github.com/
 
 .idea/
+
+#Claude 
+CLAUDE.local.md
+./claude
