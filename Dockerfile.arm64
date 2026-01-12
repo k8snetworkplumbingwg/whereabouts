@@ -1,4 +1,4 @@
-FROM golang:1.24
+FROM golang:1.25.5 AS builder
 ADD . /usr/src/whereabouts
 
 ENV GOARCH="arm64"
@@ -9,7 +9,7 @@ WORKDIR $GOPATH/src/github.com/k8snetworkplumbingwg/whereabouts
 COPY . .
 RUN ./hack/build-go.sh
 
-FROM arm64v8/alpine:latest
+FROM arm64v8/alpine:3.23.2
 LABEL org.opencontainers.image.source=https://github.com/k8snetworkplumbingwg/whereabouts
 COPY --from=0 /go/src/github.com/k8snetworkplumbingwg/whereabouts/bin/whereabouts .
 COPY --from=0 /go/src/github.com/k8snetworkplumbingwg/whereabouts/bin/ip-control-loop .
