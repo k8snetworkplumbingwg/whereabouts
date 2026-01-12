@@ -26,5 +26,5 @@ jobs:
     - name: Build
       env:
         GOARCH: ${{ matrix.goarch }}
-        GOOS: ${{ matrix.goos }}
+        GOOS: ${{ matrix.os }}
       run: ./hack/build-go.sh

@@ -1,6 +1,6 @@
 module github.com/k8snetworkplumbingwg/whereabouts
 
-go 1.24
+go 1.25
 
 require (
 	github.com/blang/semver v3.5.1+incompatible

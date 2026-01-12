@@ -1,4 +1,4 @@
-FROM golang:1.24
+FROM golang:1.25
 ADD . /usr/src/whereabouts
 
 ENV GOARCH="arm64"
