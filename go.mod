@@ -10,7 +10,7 @@ require (
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/k8snetworkplumbingwg/network-attachment-definition-client v1.7.7
 	github.com/onsi/ginkgo v1.16.5
-	github.com/onsi/gomega v1.38.3
+	github.com/onsi/gomega v1.39.0
 	github.com/pkg/errors v0.9.1
 	gomodules.xyz/jsonpatch/v2 v2.5.0
 	k8s.io/api v0.34.1
@@ -20,7 +20,7 @@ require (
 	k8s.io/kube-openapi v0.0.0-20250910181357-589584f1c912
 )
 
-require github.com/go-co-op/gocron/v2 v2.18.2
+require github.com/go-co-op/gocron/v2 v2.19.0
 
 require (
 	github.com/emicklei/go-restful/v3 v3.12.2 // indirect
