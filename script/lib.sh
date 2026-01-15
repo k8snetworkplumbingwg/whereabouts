@@ -12,7 +12,6 @@ WHEREABOUTS_KUBECONFIG_LITERAL=$(echo "$WHEREABOUTS_KUBECONFIG" | sed -e s'|/hos
 
 SERVICE_ACCOUNT_PATH=/var/run/secrets/kubernetes.io/serviceaccount
 KUBE_CA_FILE=${KUBE_CA_FILE:-$SERVICE_ACCOUNT_PATH/ca.crt}
-SERVICE_ACCOUNT_TOKEN=$(cat $SERVICE_ACCOUNT_PATH/token)
 SERVICE_ACCOUNT_TOKEN_PATH=$SERVICE_ACCOUNT_PATH/token
 SKIP_TLS_VERIFY=${SKIP_TLS_VERIFY:-false}
 
@@ -35,7 +34,8 @@ function warn()
 
 function generateKubeConfig {
   # Check if we're running as a k8s pod.
-if [ -f "$SERVICE_ACCOUNT_PATH/token" ]; then
+if [ -f "$SERVICE_ACCOUNT_TOKEN_PATH" ]; then
+  SERVICE_ACCOUNT_TOKEN=$(cat $SERVICE_ACCOUNT_TOKEN_PATH)
   # We're running as a k8d pod - expect some variables.
   if [ -z ${KUBERNETES_SERVICE_HOST} ]; then
     error "KUBERNETES_SERVICE_HOST not set"; exit 1;
