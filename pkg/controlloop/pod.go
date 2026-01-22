@@ -58,7 +58,7 @@ const (
 	noResyncPeriod                   = 0
 )
 
-type garbageCollector func(ctx context.Context, mode int, ipamConf types.IPAMConfig, client *wbclient.KubernetesIPAM) ([]net.IPNet, error)
+type garbageCollector func(ctx context.Context, mode types.OperationType, ipamConf types.IPAMConfig, client *wbclient.KubernetesIPAM) ([]net.IPNet, error)
 
 type PodController struct {
 	k8sClient               kubernetes.Interface
