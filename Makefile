@@ -1,3 +1,5 @@
+.PHONY: build clean docker-build generate-api install-tools test test-skip-static kind update-deps chart-prepare-release chart-push-release
+
 CURPATH=$(PWD)
 BIN_DIR=$(CURPATH)/bin
 
@@ -9,6 +11,8 @@ COMPUTE_NODES ?= 2
 
 OCI_BIN ?= docker
 
+clean:
+	rm -rf bin/ vendor/
 
 build:
 	hack/build-go.sh
