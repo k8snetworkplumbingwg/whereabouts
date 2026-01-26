@@ -34,7 +34,6 @@ kind:
 
 update-deps:
 	go mod tidy
-	go mod vendor
 	go mod verify
 
 $(BIN_DIR):
