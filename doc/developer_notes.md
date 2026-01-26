@@ -4,7 +4,6 @@ Run `go mod` with:
 
 ```
 go mod tidy
-go mod vendor
 go mod verify
 ```
 

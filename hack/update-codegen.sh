@@ -18,9 +18,10 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
-SCRIPT_ROOT=$(dirname "${BASH_SOURCE[0]}")/..
+SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
+SCRIPT_ROOT="${SCRIPT_DIR}/.."
+CODEGEN_PKG="${CODEGEN_PKG:-"${SCRIPT_ROOT}/bin/code-generator"}"
 
-CODEGEN_PKG=${CODEGEN_PKG:-$(cd "${SCRIPT_ROOT}"; ls -d -1 ./vendor/k8s.io/code-generator 2>/dev/null || echo ../code-generator)}
 source "${CODEGEN_PKG}/kube_codegen.sh"
 
 THIS_PKG="github.com/k8snetworkplumbingwg/whereabouts"

@@ -59,7 +59,7 @@ make generate-api
 ```bash
 # Update Go dependencies
 make update-deps
-# This runs: go mod tidy && go mod vendor && go mod verify
+# This runs: go mod tidy && go mod verify
 ```
 
 ### Local Development Cluster

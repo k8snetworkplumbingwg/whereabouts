@@ -5,6 +5,9 @@
 *.so
 *.dylib
 
+code-generator/
+vendor/*
+
 # Test binary, build with `go test -c`
 *.test
 

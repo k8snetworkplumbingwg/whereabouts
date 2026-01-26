@@ -1,3 +1,5 @@
+.PHONY: build clean docker-build generate-api install-tools test test-skip-static kind update-deps chart-prepare-release chart-push-release
+
 CURPATH=$(PWD)
 BIN_DIR=$(CURPATH)/bin
 
@@ -9,6 +11,8 @@ COMPUTE_NODES ?= 2
 
 OCI_BIN ?= docker
 
+clean:
+	rm -rf bin/
 
 build:
 	hack/build-go.sh
@@ -18,7 +22,6 @@ docker-build:
 
 generate-api:
 	hack/verify-codegen.sh
-	rm -rf github.com
 
 install-tools:
 	hack/install-kubebuilder-tools.sh
@@ -34,7 +37,6 @@ kind:
 
 update-deps:
 	go mod tidy
-	go mod vendor
 	go mod verify
 
 $(BIN_DIR):
