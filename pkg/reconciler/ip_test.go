@@ -537,7 +537,7 @@ func generatePodNetworkStatusAnnotation(ipNetworks ...ipInNetwork) string {
 	var networkStatus []multusv1.NetworkStatus
 	for i, ipNetworkInfo := range ipNetworks {
 		networkStatus = append(networkStatus, multusv1.NetworkStatus{
-			Name:      ipNetworkInfo.networkName,
+			Name:      "default/" + ipNetworkInfo.networkName,
 			Interface: fmt.Sprintf("net%d", i+1),
 			IPs:       []string{ipNetworkInfo.ip},
 		})
