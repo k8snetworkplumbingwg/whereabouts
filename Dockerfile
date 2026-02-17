@@ -5,7 +5,7 @@ WORKDIR $GOPATH/src/github.com/k8snetworkplumbingwg/whereabouts
 COPY . .
 RUN ./hack/build-go.sh
 
-FROM alpine:3.23.2
+FROM alpine:3.23.3
 LABEL org.opencontainers.image.source=https://github.com/k8snetworkplumbingwg/whereabouts
 COPY --from=0 /go/src/github.com/k8snetworkplumbingwg/whereabouts/bin/whereabouts .
 COPY --from=0 /go/src/github.com/k8snetworkplumbingwg/whereabouts/bin/ip-control-loop .
