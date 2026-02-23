@@ -839,15 +839,31 @@ var _ = Describe("Whereabouts functionality", func() {
 		})
 
 		Context("Pod cleanup controller", func() {
-			const singlePodName = "whereabouts-pod-cleanup-controller-test"
+			const singlePodName = "def-whereabouts-pod-cleanup-controller-test"
+			const defTestNetworkName = testNetworkName + "-default"
 			var err error
+			var defNetAttachDef *nettypes.NetworkAttachmentDefinition
+			var pod2 *core.Pod
+
+			BeforeEach(func() {
+				defNetAttachDef = util.MacvlanDefaultNetworkWithWhereaboutsIPAMNetwork(defTestNetworkName, testNamespace, ipv4TestRange, []string{}, wbstorage.UnnamedNetwork, true)
+				By(fmt.Sprintf("creating a NetworkAttachmentDefinition/%s for whereabouts", defTestNetworkName))
+				_, err := clientInfo.AddNetAttachDef(defNetAttachDef)
+				Expect(err).NotTo(HaveOccurred())
+			})
 
 			AfterEach(func() {
-				_ = clientInfo.DeletePod(pod)
+				if pod != nil {
+					_ = clientInfo.DeletePod(pod)
+				}
+				if pod2 != nil {
+					_ = clientInfo.DeletePod(pod2)
+				}
+				_ = clientInfo.DelNetAttachDef(defNetAttachDef)
 			})
 
 			It("verifies that the pod cleanup controller deletes an orphaned allocation", func() {
-				By("creating a pod with whereabouts net-attach-def")
+				By("creating a pod with default whereabouts net-attach-def")
 				pod, err = clientInfo.ProvisionPod(
 					singlePodName,
 					testNamespace,
@@ -886,6 +902,75 @@ var _ = Describe("Whereabouts functionality", func() {
 				By("checking that all IP allocations are removed")
 				ip = append(ip, iphelpers.IPAddOffset(firstIP, uint64(newOffset)).String())
 				verifyNoAllocationsForPodRef(clientInfo, ipv4TestRange, testNamespace, pod.Name, ip)
+			})
+
+			It("verifies that the pod cleanup controller does not delete an allocation for default network", func() {
+				By("creating two pods with the default whereabouts net-attach-def")
+				pod, err = clientInfo.ProvisionPod(
+					singlePodName,
+					testNamespace,
+					util.PodTierLabel(singlePodName),
+					entities.PodNetworkSelectionElements(defTestNetworkName),
+				)
+				Expect(err).NotTo(HaveOccurred())
+
+				ip1, err := retrievers.SecondaryIfaceIPValue(pod, "net1")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(ip1).NotTo(BeEmpty())
+
+				firstIP, _, err := net.ParseCIDR(ipv4TestRange)
+				Expect(err).NotTo(HaveOccurred())
+				offset1, err := iphelpers.IPGetOffset(net.ParseIP(ip1[0]), firstIP)
+				Expect(err).NotTo(HaveOccurred())
+
+				ipPool, err := clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(context.TODO(),
+					wbstorage.IPPoolName(wbstorage.PoolIdentifier{IpRange: ipv4TestRange, NetworkName: wbstorage.UnnamedNetwork}),
+					metav1.GetOptions{})
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(ipPool.Spec.Allocations).To(HaveKey(fmt.Sprintf("%d", offset1)))
+
+				By("creating 2nd pod")
+				pod2, err = clientInfo.ProvisionPod(
+					singlePodName+"-2",
+					testNamespace,
+					util.PodTierLabel(singlePodName),
+					entities.PodNetworkSelectionElements(defTestNetworkName),
+				)
+				Expect(err).NotTo(HaveOccurred())
+				ip2, err := retrievers.SecondaryIfaceIPValue(pod2, "net1")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(ip1).NotTo(BeEmpty())
+
+				firstIP, _, err = net.ParseCIDR(ipv4TestRange)
+				Expect(err).NotTo(HaveOccurred())
+				offset2, err := iphelpers.IPGetOffset(net.ParseIP(ip1[0]), firstIP)
+				Expect(err).NotTo(HaveOccurred())
+
+				ipPool, err = clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(context.TODO(),
+					wbstorage.IPPoolName(wbstorage.PoolIdentifier{IpRange: ipv4TestRange, NetworkName: wbstorage.UnnamedNetwork}),
+					metav1.GetOptions{})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(ipPool.Spec.Allocations).To(HaveKey(fmt.Sprintf("%d", offset1)))
+				Expect(ipPool.Spec.Allocations).To(HaveKey(fmt.Sprintf("%d", offset2)))
+
+				By("deleting 2nd pod")
+				err = clientInfo.DeletePod(pod2)
+				Expect(err).NotTo(HaveOccurred())
+
+				By("checking that the IP of the 1st and 2nd pod remained and disappeared respectively")
+				verifyNoAllocationsForPodRef(clientInfo, ipv4TestRange, testNamespace, pod2.Name, ip2)
+				ipPool, err = clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(context.TODO(),
+					wbstorage.IPPoolName(wbstorage.PoolIdentifier{IpRange: ipv4TestRange, NetworkName: wbstorage.UnnamedNetwork}),
+					metav1.GetOptions{})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(ipPool.Spec.Allocations).To(HaveKey(fmt.Sprintf("%d", offset1)))
+
+				By("deleting 1st pod")
+				err = clientInfo.DeletePod(pod)
+				Expect(err).NotTo(HaveOccurred())
+
+				verifyNoAllocationsForPodRef(clientInfo, ipv4TestRange, testNamespace, pod.Name, ip1)
 			})
 		})
 

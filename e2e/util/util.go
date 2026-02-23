@@ -131,8 +131,8 @@ func CheckZeroIPPoolAllocationsAndReplicas(ctx context.Context, clientInfo *wbte
 }
 
 // Returns a network attachment definition object configured by provided parameters
-func GenerateNetAttachDefSpec(name, namespace, config string) *nettypes.NetworkAttachmentDefinition {
-	return &nettypes.NetworkAttachmentDefinition{
+func GenerateNetAttachDefSpec(name, namespace, config string, defaultNetwork bool) *nettypes.NetworkAttachmentDefinition {
+	nad := &nettypes.NetworkAttachmentDefinition{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
 			Kind:       "NetworkAttachmentDefinition",
@@ -145,6 +145,11 @@ func GenerateNetAttachDefSpec(name, namespace, config string) *nettypes.NetworkA
 			Config: config,
 		},
 	}
+	if defaultNetwork {
+		nad.Annotations = make(map[string]string)
+		nad.Annotations["k8s.v1.cni.cncf.io/default-network"] = "true"
+	}
+	return nad
 }
 
 func MacvlanNetworkWithWhereaboutsIPAMNetwork(networkName string, namespaceName string, ipRange string, ipRanges []string, poolName string, enableOverlappingRanges bool) *nettypes.NetworkAttachmentDefinition {
@@ -171,7 +176,34 @@ func MacvlanNetworkWithWhereaboutsIPAMNetwork(networkName string, namespaceName 
             }
         ]
     }`, ipRange, CreateIPRanges(ipRanges), poolName, enableOverlappingRanges)
-	return GenerateNetAttachDefSpec(networkName, namespaceName, macvlanConfig)
+	return GenerateNetAttachDefSpec(networkName, namespaceName, macvlanConfig, false)
+}
+
+func MacvlanDefaultNetworkWithWhereaboutsIPAMNetwork(networkName string, namespaceName string, ipRange string, ipRanges []string, poolName string, enableOverlappingRanges bool) *nettypes.NetworkAttachmentDefinition {
+	macvlanConfig := fmt.Sprintf(`{
+        "cniVersion": "0.3.0",
+        "disableCheck": true,
+        "plugins": [
+            {
+                "type": "macvlan",
+                "master": "eth0",
+                "mode": "bridge",
+                "ipam": {
+                    "type": "whereabouts",
+                    "leader_lease_duration": 1500,
+                    "leader_renew_deadline": 1000,
+                    "leader_retry_period": 500,
+                    "range": "%s",
+                    "ipRanges": %s,
+                    "log_level": "debug",
+                    "log_file": "/tmp/wb",
+                    "network_name": "%s",
+                    "enable_overlapping_ranges": %v
+                }
+            }
+        ]
+    }`, ipRange, CreateIPRanges(ipRanges), poolName, enableOverlappingRanges)
+	return GenerateNetAttachDefSpec(networkName, namespaceName, macvlanConfig, true)
 }
 
 func MacvlanNetworkWithNodeSlice(networkName, namespaceName, ipRange, poolName, sliceSize string) *nettypes.NetworkAttachmentDefinition {
@@ -197,7 +229,7 @@ func MacvlanNetworkWithNodeSlice(networkName, namespaceName, ipRange, poolName, 
             }
         ]
     }`, ipRange, poolName, sliceSize)
-	return GenerateNetAttachDefSpec(networkName, namespaceName, macvlanConfig)
+	return GenerateNetAttachDefSpec(networkName, namespaceName, macvlanConfig, false)
 }
 
 func InNodeRange(clientInfo *wbtestclient.ClientInfo, nodeName, sliceName, namespace, ip string) error {
