@@ -75,8 +75,7 @@ func (rl *ReconcileLooper) findOrphanedIPsPerPool(ipPools []storage.IPPool) erro
 				_ = logging.Errorf("pod ref missing for Allocations: %s", ipReservation)
 				continue
 			}
-			if !rl.isOrphanedIP(ipReservation.PodRef, ipReservation.IP.String()) {
-				logging.Debugf("pod ref %s is not listed in the live pods list", ipReservation.PodRef)
+			if rl.isOrphanedIP(ipReservation.PodRef, ipReservation.IP.String()) {
 				orphanIP.Allocations = append(orphanIP.Allocations, ipReservation)
 			}
 		}
@@ -88,49 +87,51 @@ func (rl *ReconcileLooper) findOrphanedIPsPerPool(ipPools []storage.IPPool) erro
 	return nil
 }
 
-func (rl ReconcileLooper) isOrphanedIP(podRef string, ip string) bool {
-	for livePodRef, livePod := range rl.liveWhereaboutsPods {
-		if podRef == livePodRef {
-			isFound := isIpOnPod(&livePod, podRef, ip)
-			if !isFound && (livePod.phase == v1.PodPending) {
-				/* Sometimes pods are still coming up, and may not yet have Multus
-				 * annotation added to it yet. We don't want to check the IPs yet
-				 * so re-fetch the Pod 5x
-				 */
-				podToMatch := &livePod
-				retries := 0
+func (rl *ReconcileLooper) isOrphanedIP(podRef string, ip string) bool {
+	livePod, exists := rl.liveWhereaboutsPods[podRef]
+	if !exists {
+		logging.Debugf("Pod %s not found in live pod list, IP %s is orphaned", podRef, ip)
+		return true
+	}
 
-				logging.Debugf("Re-fetching Pending Pod: %s IP-to-match: %s", livePodRef, ip)
+	isIPFoundOnPod := isIpOnPod(&livePod, podRef, ip)
+	if isIPFoundOnPod {
+		return false
+	}
 
-				for retries < storage.PodRefreshRetries {
-					retries += 1
-					podToMatch = rl.refreshPod(livePodRef)
-					if podToMatch == nil {
-						logging.Debugf("Cleaning up...")
-						return false
-					} else if podToMatch.phase != v1.PodPending {
-						logging.Debugf("Pending Pod is now in phase: %s", podToMatch.phase)
-						break
-					} else {
-						isFound = isIpOnPod(podToMatch, podRef, ip)
-						// Short-circuit - Pending Pod may have IP now
-						if isFound {
-							logging.Debugf("Pod now has IP annotation while in Pending")
-							return true
-						}
-						time.Sleep(time.Duration(250) * time.Millisecond)
-					}
-				}
-				isFound = isIpOnPod(podToMatch, podRef, ip)
+	if livePod.phase == v1.PodPending {
+		podToMatch := &livePod
+		retries := 0
+
+		logging.Debugf("Re-fetching Pending Pod: %s IP-to-match: %s", podRef, ip)
+
+		for retries < storage.PodRefreshRetries {
+			retries++
+			podToMatch = rl.refreshPod(podRef)
+			if podToMatch == nil {
+				logging.Debugf("Pod refresh could not fetch Pod, retrying %d more times", (storage.PodRefreshRetries - retries))
+				continue
+			}
+			if podToMatch.phase != v1.PodPending {
+				logging.Debugf("Pending Pod is now in phase: %s", podToMatch.phase)
+				break
 			}
 
-			return isFound
+			isIPFoundOnPod = isIpOnPod(podToMatch, podRef, ip)
+			if isIPFoundOnPod {
+				logging.Debugf("Found IP on refreshed pending pod, not orphaned")
+				return false
+			}
+			time.Sleep(time.Duration(250) * time.Millisecond)
 		}
+
+		isIPFoundOnPod = isIpOnPod(podToMatch, podRef, ip)
 	}
-	return false
+
+	return !isIPFoundOnPod
 }
 
-func (rl ReconcileLooper) refreshPod(podRef string) *podWrapper {
+func (rl *ReconcileLooper) refreshPod(podRef string) *podWrapper {
 	namespace, podName := splitPodRef(podRef)
 	if namespace == "" || podName == "" {
 		logging.Errorf("Invalid podRef format: %s", podRef)
@@ -162,7 +163,7 @@ func composePodRef(pod v1.Pod) string {
 	return fmt.Sprintf("%s/%s", pod.GetNamespace(), pod.GetName())
 }
 
-func (rl ReconcileLooper) ReconcileIPPools() ([]net.IP, error) {
+func (rl *ReconcileLooper) ReconcileIPPools() ([]net.IP, error) {
 	findAllocationIndex := func(reservation types.IPReservation, reservations []types.IPReservation) int {
 		for idx, r := range reservations {
 			if r.PodRef == reservation.PodRef && r.IP.Equal(reservation.IP) {
@@ -225,8 +226,7 @@ func (rl *ReconcileLooper) findClusterWideIPReservations() error {
 
 		podRef := clusterWideIPReservation.Spec.PodRef
 
-		if !rl.isOrphanedIP(podRef, denormalizedip) {
-			logging.Debugf("pod ref %s is not listed in the live pods list", podRef)
+		if rl.isOrphanedIP(podRef, denormalizedip) {
 			rl.orphanedClusterWideIPs = append(rl.orphanedClusterWideIPs, clusterWideIPReservation)
 		}
 	}
@@ -234,7 +234,7 @@ func (rl *ReconcileLooper) findClusterWideIPReservations() error {
 	return nil
 }
 
-func (rl ReconcileLooper) ReconcileOverlappingIPAddresses() error {
+func (rl *ReconcileLooper) ReconcileOverlappingIPAddresses() error {
 	var failedReconciledClusterWideIPs []string
 
 	for _, overlappingIPStruct := range rl.orphanedClusterWideIPs {
