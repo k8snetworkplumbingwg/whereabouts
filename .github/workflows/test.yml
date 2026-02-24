@@ -26,10 +26,10 @@ jobs:
 
     - name: Run Revive Action by building from repository
       uses: morphy2k/revive-action@v2.7.8
-      with:
-        exclude: "./vendor/..."
-        name: "Revive"
 
+    - name: Install dependencies
+      run: make update-deps
+      
     - name: Install kubebuilder tools
       run: ./hack/install-kubebuilder-tools.sh
 
