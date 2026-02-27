@@ -612,10 +612,13 @@ func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *Kubernete
 					logging.Errorf("Error parsing node slice cidr to range start: %v", err)
 					return newips, err
 				}
+				// Preserve additional range configuration (e.g., omit ranges, pick addresses) while overriding start/end
 				ipRange = whereaboutstypes.RangeConfiguration{
-					Range:      ipRange.Range,
-					RangeStart: rangeStart,
-					RangeEnd:   rangeEnd,
+					OmitRanges:    ipRange.OmitRanges,
+					Range:         ipRange.Range,
+					RangeStart:    rangeStart,
+					RangeEnd:      rangeEnd,
+					PickAddresses: ipRange.PickAddresses,
 				}
 			}
 			logging.Debugf("using pool identifier: %v", poolIdentifier)
