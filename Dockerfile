@@ -1,4 +1,4 @@
-FROM golang:1.25.6
+FROM golang:1.26.1
 ADD . /usr/src/whereabouts
 RUN mkdir -p $GOPATH/src/github.com/k8snetworkplumbingwg/whereabouts
 WORKDIR $GOPATH/src/github.com/k8snetworkplumbingwg/whereabouts
