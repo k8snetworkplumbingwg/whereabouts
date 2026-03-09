@@ -4,6 +4,9 @@ on:
     types:
       - created
 
+permissions:
+  contents: write
+
 jobs:
   upload:
     runs-on: ubuntu-latest
@@ -11,17 +14,55 @@ jobs:
       matrix:
         arch: [amd64, arm64, arm]
     steps:
-    - uses: actions/checkout@v6
-    - name: Build whereabouts binary
+    - uses: actions/checkout@v6.0.2 # v6.0.2
+    - name: Install Go
+      uses: actions/setup-go@v6.3.0 # v6.3.0
+      with:
+        go-version-file: go.mod
+    - name: Build binaries
       env:
         GOARCH: ${{ matrix.arch }}
-      run: ./hack/build-go.sh
-    - name: Upload whereabouts binary
-      uses: actions/upload-release-asset@v1
+      run: |
+        make build
+        mv ./bin/whereabouts ./bin/whereabouts-${{ matrix.arch }}
+        mv ./bin/whereabouts-operator ./bin/whereabouts-operator-${{ matrix.arch }}
+        cd ./bin
+        sha256sum whereabouts-${{ matrix.arch }} > whereabouts-${{ matrix.arch }}.sha256
+        sha256sum whereabouts-operator-${{ matrix.arch }} > whereabouts-operator-${{ matrix.arch }}.sha256
+    - name: Upload release binaries
+      uses: softprops/action-gh-release@v2.5.0 # v2.5.0
+      with:
+        files: |
+          ./bin/whereabouts-${{ matrix.arch }}
+          ./bin/whereabouts-${{ matrix.arch }}.sha256
+          ./bin/whereabouts-operator-${{ matrix.arch }}
+          ./bin/whereabouts-operator-${{ matrix.arch }}.sha256
+        tag_name: ${{ github.event.release.tag_name }}
+        generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  upload-manifests:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6.0.2 # v6.0.2
+    - name: Install Go
+      uses: actions/setup-go@v6.3.0 # v6.3.0
       with:
-        upload_url: ${{ github.event.release.upload_url }}
-        asset_path: ./bin/whereabouts
-        asset_name: whereabouts-${{ matrix.arch }}
-        asset_content_type: application/octet-stream
+        go-version-file: go.mod
+    - name: Prepare manifests
+      run: |
+        mkdir -p ./manifests
+        TAG="${{ github.event.release.tag_name }}"
+        make kustomize
+        bin/kustomize build config/default | \
+          sed "s|ghcr.io/k8snetworkplumbingwg/whereabouts:[^ \"]*|ghcr.io/k8snetworkplumbingwg/whereabouts:${TAG}|g" \
+          > ./manifests/install.yaml
+    - name: Upload install manifests
+      uses: softprops/action-gh-release@v2.5.0 # v2.5.0
+      with:
+        files: |
+          ./manifests/*.yaml
+        tag_name: ${{ github.event.release.tag_name }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

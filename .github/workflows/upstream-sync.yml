@@ -1,0 +1,85 @@
+name: Sync from upstream
+
+on:
+  schedule:
+    # Run daily at 06:00 UTC
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    name: Sync upstream changes
+    runs-on: ubuntu-latest
+    if: github.repository == 'k8snetworkplumbingwg/whereabouts'
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v6.0.2 # v6.0.2
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: git remote add upstream https://github.com/k8snetworkplumbingwg/whereabouts.git || true
+
+      - name: Fetch upstream
+        run: git fetch upstream
+
+      - name: Check for new upstream commits
+        id: check
+        run: |
+          BEHIND=$(git rev-list --count HEAD..upstream/master)
+          echo "behind=$BEHIND" >> "$GITHUB_OUTPUT"
+          echo "Upstream is $BEHIND commits ahead"
+
+      - name: Create sync branch and PR
+        if: steps.check.outputs.behind != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SYNC_BRANCH="upstream-sync/$(date +%Y-%m-%d)"
+
+          # Check if a sync PR already exists
+          EXISTING_PR=$(gh pr list --head "$SYNC_BRANCH" --json number --jq '.[0].number' 2>/dev/null || true)
+          if [ -n "$EXISTING_PR" ]; then
+            echo "Sync PR #$EXISTING_PR already exists, skipping"
+            exit 0
+          fi
+
+          # Create sync branch from main
+          git checkout -b "$SYNC_BRANCH" origin/main
+
+          # Merge upstream (allow conflicts — they'll be flagged in the PR)
+          if git merge upstream/master --no-edit; then
+            BODY="Automated sync from [upstream k8snetworkplumbingwg/whereabouts](https://github.com/k8snetworkplumbingwg/whereabouts).
+
+          This PR merges **${{ steps.check.outputs.behind }}** new upstream commit(s) cleanly.
+
+          Please review the changes and merge when ready."
+          else
+            # Merge had conflicts — commit the conflict markers so the PR shows them
+            git add -A
+            git commit --no-edit || true
+            BODY="⚠️ Automated sync from [upstream k8snetworkplumbingwg/whereabouts](https://github.com/k8snetworkplumbingwg/whereabouts).
+
+          This PR has **merge conflicts** that need manual resolution.
+
+          **${{ steps.check.outputs.behind }}** new upstream commit(s) detected."
+          fi
+
+          git push origin "$SYNC_BRANCH"
+
+          gh pr create \
+            --base main \
+            --head "$SYNC_BRANCH" \
+            --title "chore: sync upstream whereabouts $(date +%Y-%m-%d)" \
+            --body "$BODY" \
+            --label "upstream-sync"

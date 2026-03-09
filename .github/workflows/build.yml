@@ -1,29 +1,98 @@
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 name: Build
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     strategy:
       matrix:
         goarch: [amd64, arm64]
-        os: [linux] 
+        os: [linux]
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
-      uses: actions/checkout@v6
+      uses: actions/checkout@v6.0.2 # v6.0.2
 
     - name: Install Go
-      uses: actions/setup-go@v6
+      uses: actions/setup-go@v6.3.0 # v6.3.0
       with:
         go-version-file: go.mod
 
-    - name: Install kubebuilder tools
-      run: ./hack/install-kubebuilder-tools.sh
-
     - name: Generate code
-      run: ./hack/generate-code.sh
+      run: make generate
 
     - name: Build
       env:
         GOARCH: ${{ matrix.goarch }}
         GOOS: ${{ matrix.os }}
-      run: ./hack/build-go.sh
+      run: make build
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6.0.2 # v6.0.2
+
+    - name: Install Go
+      uses: actions/setup-go@v6.3.0 # v6.3.0
+      with:
+        go-version-file: go.mod
+
+    - name: Run golangci-lint
+      uses: golangci/golangci-lint-action@v9.2.0 # v7.0.1
+      with:
+        version: latest
+        args: --timeout=5m
+
+  hadolint:
+    name: Dockerfile Lint
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6.0.2 # v6.0.2
+
+    - name: Run hadolint
+      uses: hadolint/hadolint-action@v3.3.0 # v3.1.0
+      with:
+        dockerfile: Dockerfile
+
+  vendor-check:
+    name: Vendor Consistency
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6.0.2 # v6.0.2
+
+    - name: Install Go
+      uses: actions/setup-go@v6.3.0 # v6.3.0
+      with:
+        go-version-file: go.mod
+
+    - name: Verify vendor directory
+      run: |
+        go mod tidy
+        go mod vendor
+        git diff --exit-code -- go.mod go.sum vendor/
+
+  helm-lint:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6.0.2 # v6.0.2
+
+    - name: Set up Helm
+      uses: azure/setup-helm@v4.3.1 # v4.3.1
+
+    - name: Lint Helm chart
+      run: helm lint deployment/whereabouts-chart

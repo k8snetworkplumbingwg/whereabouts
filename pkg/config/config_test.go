@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
@@ -15,7 +15,7 @@ import (
 
 func TestAllocate(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "cmd")
+	RunSpecs(t, "Config Suite")
 }
 
 var _ = Describe("Allocation operations", func() {
@@ -69,7 +69,7 @@ var _ = Describe("Allocation operations", func() {
 
 	It("throws an error when no flat-files are found", func() {
 		_, _, err := GetFlatIPAM(true, &types.IPAMConfig{})
-		Expect(err).To(MatchError(NewConfigFileNotFoundError()))
+		Expect(err).To(MatchError(NewFileNotFoundError()))
 	})
 
 	It("can load a global flat-file config", func() {
@@ -120,7 +120,7 @@ var _ = Describe("Allocation operations", func() {
 	})
 
 	It("overlapping range can be set", func() {
-		var globalConf string = `{
+		var globalConf = `{
 			"datastore": "kubernetes",
 			"kubernetes": {
 				"kubeconfig": "/etc/cni/net.d/whereabouts.d/whereabouts.kubeconfig"
@@ -139,7 +139,7 @@ var _ = Describe("Allocation operations", func() {
 	})
 
 	It("overlapping range can be disabled", func() {
-		var globalConf string = `{
+		var globalConf = `{
 			"datastore": "kubernetes",
 			"kubernetes": {
 				"kubeconfig": "/etc/cni/net.d/whereabouts.d/whereabouts.kubeconfig"
@@ -328,38 +328,6 @@ var _ = Describe("Allocation operations", func() {
 		Expect(ipamConfig.IPRanges[0].RangeEnd).To(Equal(net.ParseIP("192.168.1.209")))
 	})
 
-	It("can unmarshall the cronjob expression", func() {
-		conf := `{
-      "cniVersion": "0.3.1",
-      "name": "mynet",
-      "type": "ipvlan",
-      "master": "foo0",
-        "ipam": {
-          "type": "whereabouts",
-          "log_file" : "/tmp/whereabouts.log",
-          "log_level" : "debug",
-          "kubernetes": {
-            "kubeconfig": "/etc/cni/net.d/whereabouts.d/whereabouts.kubeconfig"
-          },
-          "range": "00192.00168.1.0/24",
-          "range_start": "00192.00168.1.44",
-          "range_end": "00192.00168.01.209",
-          "gateway": "192.168.10.1",
-          "reconciler_cron_expression": "30 4 * * *"
-        }
-      }`
-
-		confPath := filepath.Join(tmpDir, "whereabouts.conf")
-		Expect(os.WriteFile(confPath, []byte(conf), 0755)).To(Succeed())
-
-		ipamConfig, _, err := LoadIPAMConfig([]byte(conf), "", confPath)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(ipamConfig.IPRanges[0].Range).To(Equal("192.168.1.0/24"))
-		Expect(ipamConfig.IPRanges[0].RangeStart).To(Equal(net.ParseIP("192.168.1.44")))
-		Expect(ipamConfig.IPRanges[0].RangeEnd).To(Equal(net.ParseIP("192.168.1.209")))
-		Expect(ipamConfig.ReconcilerCronExpression).To(Equal("30 4 * * *"))
-	})
-
 	It("errors when an invalid range specified", func() {
 		invalidConf := `{
 			"cniVersion": "0.3.1",
@@ -397,6 +365,270 @@ var _ = Describe("Allocation operations", func() {
 			MatchError(
 				HavePrefix(
 					"LoadIPAMConfig - JSON Parsing Error: invalid character 'a' looking for beginning of object key string")))
+	})
+
+	// ── Gateway exclusion tests (#601) ──────────────────────────────────────
+	Context("gateway exclusion (exclude_gateway)", func() {
+		It("adds gateway to exclude ranges when exclude_gateway is true", func() {
+			conf := `{
+				"cniVersion": "0.3.1",
+				"name": "mynet",
+				"type": "ipvlan",
+				"master": "foo0",
+				"ipam": {
+					"type": "whereabouts",
+					"kubernetes": {"kubeconfig": "/etc/cni/net.d/whereabouts.kubeconfig"},
+					"range": "192.168.1.0/24",
+					"gateway": "192.168.1.1",
+					"exclude_gateway": true
+				}
+			}`
+			ipamConf, _, err := LoadIPAMConfig([]byte(conf), "")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ipamConf.IPRanges).To(HaveLen(1))
+			Expect(ipamConf.IPRanges[0].OmitRanges).To(ContainElement("192.168.1.1/32"))
+		})
+
+		It("does NOT add gateway to exclude ranges when exclude_gateway is false (default)", func() {
+			conf := `{
+				"cniVersion": "0.3.1",
+				"name": "mynet",
+				"type": "ipvlan",
+				"master": "foo0",
+				"ipam": {
+					"type": "whereabouts",
+					"kubernetes": {"kubeconfig": "/etc/cni/net.d/whereabouts.kubeconfig"},
+					"range": "192.168.1.0/24",
+					"gateway": "192.168.1.1"
+				}
+			}`
+			ipamConf, _, err := LoadIPAMConfig([]byte(conf), "")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ipamConf.IPRanges).To(HaveLen(1))
+			Expect(ipamConf.IPRanges[0].OmitRanges).To(BeEmpty())
+		})
+
+		It("uses /128 suffix for IPv6 gateway exclusion", func() {
+			conf := `{
+				"cniVersion": "0.3.1",
+				"name": "mynet",
+				"type": "ipvlan",
+				"master": "foo0",
+				"ipam": {
+					"type": "whereabouts",
+					"kubernetes": {"kubeconfig": "/etc/cni/net.d/whereabouts.kubeconfig"},
+					"range": "fd00::/120",
+					"gateway": "fd00::1",
+					"exclude_gateway": true
+				}
+			}`
+			ipamConf, _, err := LoadIPAMConfig([]byte(conf), "")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ipamConf.IPRanges[0].OmitRanges).To(ContainElement("fd00::1/128"))
+		})
+
+		It("works without gateway configured (L3 use case)", func() {
+			conf := `{
+				"cniVersion": "0.3.1",
+				"name": "mynet",
+				"type": "ipvlan",
+				"master": "foo0",
+				"ipam": {
+					"type": "whereabouts",
+					"kubernetes": {"kubeconfig": "/etc/cni/net.d/whereabouts.kubeconfig"},
+					"range": "192.168.1.0/24",
+					"exclude_gateway": true
+				}
+			}`
+			ipamConf, _, err := LoadIPAMConfig([]byte(conf), "")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ipamConf.IPRanges[0].OmitRanges).To(BeEmpty())
+		})
+
+		It("preserves existing exclude ranges alongside gateway", func() {
+			conf := `{
+				"cniVersion": "0.3.1",
+				"name": "mynet",
+				"type": "ipvlan",
+				"master": "foo0",
+				"ipam": {
+					"type": "whereabouts",
+					"kubernetes": {"kubeconfig": "/etc/cni/net.d/whereabouts.kubeconfig"},
+					"range": "192.168.1.0/24",
+					"gateway": "192.168.1.1",
+					"exclude_gateway": true,
+					"exclude": ["192.168.1.10/32", "192.168.1.20/32"]
+				}
+			}`
+			ipamConf, _, err := LoadIPAMConfig([]byte(conf), "")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ipamConf.IPRanges[0].OmitRanges).To(ContainElement("192.168.1.10/32"))
+			Expect(ipamConf.IPRanges[0].OmitRanges).To(ContainElement("192.168.1.20/32"))
+			Expect(ipamConf.IPRanges[0].OmitRanges).To(ContainElement("192.168.1.1/32"))
+		})
+	})
+
+	// ── L3 mode tests ───────────────────────────────────────────────────────
+	Context("L3 mode (enable_l3)", func() {
+		It("propagates enable_l3 from top-level to all IP ranges", func() {
+			conf := `{
+				"cniVersion": "0.3.1",
+				"name": "mynet",
+				"type": "ipvlan",
+				"master": "foo0",
+				"ipam": {
+					"type": "whereabouts",
+					"kubernetes": {"kubeconfig": "/etc/cni/net.d/whereabouts.kubeconfig"},
+					"enable_l3": true,
+					"ipRanges": [{
+						"range": "10.0.0.0/24"
+					}, {
+						"range": "10.0.1.0/24"
+					}]
+				}
+			}`
+			ipamConf, _, err := LoadIPAMConfig([]byte(conf), "")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ipamConf.IPRanges).To(HaveLen(2))
+			Expect(ipamConf.IPRanges[0].L3).To(BeTrue())
+			Expect(ipamConf.IPRanges[1].L3).To(BeTrue())
+		})
+
+		It("does not set L3 on ranges when enable_l3 is false (default)", func() {
+			conf := `{
+				"cniVersion": "0.3.1",
+				"name": "mynet",
+				"type": "ipvlan",
+				"master": "foo0",
+				"ipam": {
+					"type": "whereabouts",
+					"kubernetes": {"kubeconfig": "/etc/cni/net.d/whereabouts.kubeconfig"},
+					"range": "10.0.0.0/24"
+				}
+			}`
+			ipamConf, _, err := LoadIPAMConfig([]byte(conf), "")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ipamConf.IPRanges[0].L3).To(BeFalse())
+		})
+
+		It("allows per-range L3 setting for mixed L2/L3 setups", func() {
+			conf := `{
+				"cniVersion": "0.3.1",
+				"name": "mynet",
+				"type": "ipvlan",
+				"master": "foo0",
+				"ipam": {
+					"type": "whereabouts",
+					"kubernetes": {"kubeconfig": "/etc/cni/net.d/whereabouts.kubeconfig"},
+					"ipRanges": [{
+						"range": "10.0.0.0/24",
+						"enable_l3": true
+					}, {
+						"range": "10.0.1.0/24"
+					}]
+				}
+			}`
+			ipamConf, _, err := LoadIPAMConfig([]byte(conf), "")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ipamConf.IPRanges[0].L3).To(BeTrue())
+			Expect(ipamConf.IPRanges[1].L3).To(BeFalse())
+		})
+
+		It("L3 pools work without a gateway", func() {
+			conf := `{
+				"cniVersion": "0.3.1",
+				"name": "mynet",
+				"type": "ipvlan",
+				"master": "foo0",
+				"ipam": {
+					"type": "whereabouts",
+					"kubernetes": {"kubeconfig": "/etc/cni/net.d/whereabouts.kubeconfig"},
+					"enable_l3": true,
+					"range": "10.0.0.0/24"
+				}
+			}`
+			ipamConf, _, err := LoadIPAMConfig([]byte(conf), "")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ipamConf.Gateway).To(BeNil())
+			Expect(ipamConf.IPRanges[0].L3).To(BeTrue())
+		})
+	})
+
+	// ── Optimistic IPAM config tests (#510) ──────────────────────────────────
+	Context("optimistic IPAM config (optimistic_ipam)", func() {
+		It("parses optimistic_ipam field", func() {
+			conf := `{
+				"cniVersion": "0.3.1",
+				"name": "mynet",
+				"type": "ipvlan",
+				"master": "foo0",
+				"ipam": {
+					"type": "whereabouts",
+					"kubernetes": {"kubeconfig": "/etc/cni/net.d/whereabouts.kubeconfig"},
+					"range": "10.0.0.0/24",
+					"optimistic_ipam": true
+				}
+			}`
+			ipamConf, _, err := LoadIPAMConfig([]byte(conf), "")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ipamConf.OptimisticIPAM).To(BeTrue())
+		})
+
+		It("defaults optimistic_ipam to false", func() {
+			conf := `{
+				"cniVersion": "0.3.1",
+				"name": "mynet",
+				"type": "ipvlan",
+				"master": "foo0",
+				"ipam": {
+					"type": "whereabouts",
+					"kubernetes": {"kubeconfig": "/etc/cni/net.d/whereabouts.kubeconfig"},
+					"range": "10.0.0.0/24"
+				}
+			}`
+			ipamConf, _, err := LoadIPAMConfig([]byte(conf), "")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ipamConf.OptimisticIPAM).To(BeFalse())
+		})
+	})
+
+	// ── /32 and /31 config parsing tests (#573) ──────────────────────────────
+	Context("/32 and /31 config parsing (#573)", func() {
+		It("loads a /32 range configuration", func() {
+			conf := `{
+				"cniVersion": "0.3.1",
+				"name": "mynet",
+				"type": "ipvlan",
+				"master": "foo0",
+				"ipam": {
+					"type": "whereabouts",
+					"kubernetes": {"kubeconfig": "/etc/cni/net.d/whereabouts.kubeconfig"},
+					"range": "10.0.0.5/32"
+				}
+			}`
+			ipamConf, _, err := LoadIPAMConfig([]byte(conf), "")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ipamConf.IPRanges).To(HaveLen(1))
+			Expect(ipamConf.IPRanges[0].Range).To(Equal("10.0.0.5/32"))
+		})
+
+		It("loads a /31 range configuration", func() {
+			conf := `{
+				"cniVersion": "0.3.1",
+				"name": "mynet",
+				"type": "ipvlan",
+				"master": "foo0",
+				"ipam": {
+					"type": "whereabouts",
+					"kubernetes": {"kubeconfig": "/etc/cni/net.d/whereabouts.kubeconfig"},
+					"range": "10.0.0.4/31"
+				}
+			}`
+			ipamConf, _, err := LoadIPAMConfig([]byte(conf), "")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ipamConf.IPRanges).To(HaveLen(1))
+			Expect(ipamConf.IPRanges[0].Range).To(Equal("10.0.0.4/31"))
+		})
 	})
 })
 

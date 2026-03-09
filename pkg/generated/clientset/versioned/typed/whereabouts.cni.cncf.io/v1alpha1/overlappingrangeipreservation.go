@@ -20,7 +20,8 @@ package v1alpha1
 import (
 	context "context"
 
-	whereaboutscnicncfiov1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
+	whereaboutscnicncfiov1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/api/whereabouts.cni.cncf.io/v1alpha1"
+	applyconfigurationwhereaboutscnicncfiov1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/applyconfiguration/whereabouts.cni.cncf.io/v1alpha1"
 	scheme "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/clientset/versioned/scheme"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
@@ -38,24 +39,29 @@ type OverlappingRangeIPReservationsGetter interface {
 type OverlappingRangeIPReservationInterface interface {
 	Create(ctx context.Context, overlappingRangeIPReservation *whereaboutscnicncfiov1alpha1.OverlappingRangeIPReservation, opts v1.CreateOptions) (*whereaboutscnicncfiov1alpha1.OverlappingRangeIPReservation, error)
 	Update(ctx context.Context, overlappingRangeIPReservation *whereaboutscnicncfiov1alpha1.OverlappingRangeIPReservation, opts v1.UpdateOptions) (*whereaboutscnicncfiov1alpha1.OverlappingRangeIPReservation, error)
+	// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
+	UpdateStatus(ctx context.Context, overlappingRangeIPReservation *whereaboutscnicncfiov1alpha1.OverlappingRangeIPReservation, opts v1.UpdateOptions) (*whereaboutscnicncfiov1alpha1.OverlappingRangeIPReservation, error)
 	Delete(ctx context.Context, name string, opts v1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error
 	Get(ctx context.Context, name string, opts v1.GetOptions) (*whereaboutscnicncfiov1alpha1.OverlappingRangeIPReservation, error)
 	List(ctx context.Context, opts v1.ListOptions) (*whereaboutscnicncfiov1alpha1.OverlappingRangeIPReservationList, error)
 	Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error)
 	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *whereaboutscnicncfiov1alpha1.OverlappingRangeIPReservation, err error)
+	Apply(ctx context.Context, overlappingRangeIPReservation *applyconfigurationwhereaboutscnicncfiov1alpha1.OverlappingRangeIPReservationApplyConfiguration, opts v1.ApplyOptions) (result *whereaboutscnicncfiov1alpha1.OverlappingRangeIPReservation, err error)
+	// Add a +genclient:noStatus comment above the type to avoid generating ApplyStatus().
+	ApplyStatus(ctx context.Context, overlappingRangeIPReservation *applyconfigurationwhereaboutscnicncfiov1alpha1.OverlappingRangeIPReservationApplyConfiguration, opts v1.ApplyOptions) (result *whereaboutscnicncfiov1alpha1.OverlappingRangeIPReservation, err error)
 	OverlappingRangeIPReservationExpansion
 }
 
 // overlappingRangeIPReservations implements OverlappingRangeIPReservationInterface
 type overlappingRangeIPReservations struct {
-	*gentype.ClientWithList[*whereaboutscnicncfiov1alpha1.OverlappingRangeIPReservation, *whereaboutscnicncfiov1alpha1.OverlappingRangeIPReservationList]
+	*gentype.ClientWithListAndApply[*whereaboutscnicncfiov1alpha1.OverlappingRangeIPReservation, *whereaboutscnicncfiov1alpha1.OverlappingRangeIPReservationList, *applyconfigurationwhereaboutscnicncfiov1alpha1.OverlappingRangeIPReservationApplyConfiguration]
 }
 
 // newOverlappingRangeIPReservations returns a OverlappingRangeIPReservations
 func newOverlappingRangeIPReservations(c *WhereaboutsV1alpha1Client, namespace string) *overlappingRangeIPReservations {
 	return &overlappingRangeIPReservations{
-		gentype.NewClientWithList[*whereaboutscnicncfiov1alpha1.OverlappingRangeIPReservation, *whereaboutscnicncfiov1alpha1.OverlappingRangeIPReservationList](
+		gentype.NewClientWithListAndApply[*whereaboutscnicncfiov1alpha1.OverlappingRangeIPReservation, *whereaboutscnicncfiov1alpha1.OverlappingRangeIPReservationList, *applyconfigurationwhereaboutscnicncfiov1alpha1.OverlappingRangeIPReservationApplyConfiguration](
 			"overlappingrangeipreservations",
 			c.RESTClient(),
 			scheme.ParameterCodec,

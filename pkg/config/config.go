@@ -1,15 +1,19 @@
-// Package config includes configuration utilities for whereabouts
+// Package config includes configuration utilities for whereabouts.
 package config
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 
 	cnitypes "github.com/containernetworking/cni/pkg/types"
+	current "github.com/containernetworking/cni/pkg/types/100"
+	cniversion "github.com/containernetworking/cni/pkg/version"
 	"github.com/imdario/mergo"
 
 	netutils "k8s.io/utils/net"
@@ -18,7 +22,7 @@ import (
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 )
 
-// canonicalizeIP makes sure a provided ip is in standard form
+// canonicalizeIP makes sure a provided ip is in standard form.
 func canonicalizeIP(ip *net.IP) error {
 	if ip.To4() != nil {
 		*ip = ip.To4()
@@ -30,14 +34,21 @@ func canonicalizeIP(ip *net.IP) error {
 	return fmt.Errorf("IP %s not v4 nor v6", *ip)
 }
 
+// maxConfigBytes limits the size of the IPAM configuration JSON to prevent
+// excessive memory allocation from malformed or malicious input. 1 MiB is
+// far larger than any reasonable configuration but caps potential abuse.
+const maxConfigBytes = 1 << 20 // 1 MiB
+
 // LoadIPAMConfig creates IPAMConfig using json encoded configuration provided
 // as `bytes`. At the moment values provided in envArgs are ignored so there
-// is no possibility to overload the json configuration using envArgs
+// is no possibility to overload the json configuration using envArgs.
 func LoadIPAMConfig(bytes []byte, envArgs string, extraConfigPaths ...string) (*types.IPAMConfig, string, error) {
-
+	if len(bytes) > maxConfigBytes {
+		return nil, "", fmt.Errorf("IPAM configuration too large (%d bytes, max %d)", len(bytes), maxConfigBytes)
+	}
 	var n types.Net
 	if err := json.Unmarshal(bytes, &n); err != nil {
-		return nil, "", fmt.Errorf("LoadIPAMConfig - JSON Parsing Error: %s / bytes: %s", err, bytes)
+		return nil, "", fmt.Errorf("LoadIPAMConfig - JSON Parsing Error: %w / bytes: %s", err, bytes)
 	}
 
 	if n.IPAM == nil {
@@ -48,21 +59,25 @@ func LoadIPAMConfig(bytes []byte, envArgs string, extraConfigPaths ...string) (*
 
 	args := types.IPAMEnvArgs{}
 	if err := cnitypes.LoadArgs(envArgs, &args); err != nil {
-		return nil, "", fmt.Errorf("LoadArgs - CNI Args Parsing Error: %s", err)
+		return nil, "", fmt.Errorf("LoadArgs - CNI Args Parsing Error: %w", err)
 	}
 	n.IPAM.PodName = string(args.K8S_POD_NAME)
 	n.IPAM.PodNamespace = string(args.K8S_POD_NAMESPACE)
 
 	flatipam, foundflatfile, err := GetFlatIPAM(false, n.IPAM, extraConfigPaths...)
 	if err != nil {
-		return nil, "", err
+		// Config file not found is non-fatal — inline IPAM config may be sufficient.
+		var notFoundErr *FileNotFoundError
+		if !errors.As(err, &notFoundErr) {
+			return nil, "", err
+		}
 	}
 
 	// Now let's try to merge the configurations...
 	// NB: Don't try to do any initialization before this point or it won't account for merged flat file.
-	var OverlappingRanges bool = n.IPAM.OverlappingRanges
+	var OverlappingRanges = n.IPAM.OverlappingRanges
 	if err := mergo.Merge(&n, flatipam); err != nil {
-		logging.Errorf("Merge error with flat file: %s", err)
+		return nil, "", logging.Errorf("merge error with flat file: %w", err)
 	}
 	n.IPAM.OverlappingRanges = OverlappingRanges
 
@@ -79,7 +94,6 @@ func LoadIPAMConfig(bytes []byte, envArgs string, extraConfigPaths ...string) (*
 	}
 
 	if n.IPAM.Range != "" {
-
 		oldRange := types.RangeConfiguration{
 			OmitRanges: n.IPAM.OmitRanges,
 			Range:      n.IPAM.Range,
@@ -98,7 +112,7 @@ func LoadIPAMConfig(bytes []byte, envArgs string, extraConfigPaths ...string) (*
 			}
 			lastip, ipNet, err := netutils.ParseCIDRSloppy(r[1])
 			if err != nil {
-				return nil, "", fmt.Errorf("invalid CIDR (do you have the 'range' parameter set for Whereabouts?) '%s': %s", r[1], err)
+				return nil, "", fmt.Errorf("invalid CIDR (do you have the 'range' parameter set for Whereabouts?) '%s': %w", r[1], err)
 			}
 			if !ipNet.Contains(firstip) {
 				return nil, "", fmt.Errorf("invalid range start for CIDR %s: %s", ipNet.String(), firstip)
@@ -110,7 +124,7 @@ func LoadIPAMConfig(bytes []byte, envArgs string, extraConfigPaths ...string) (*
 			firstip, ipNet, err := netutils.ParseCIDRSloppy(n.IPAM.IPRanges[idx].Range)
 			if err != nil {
 				logging.Debugf("invalid cidr error on range %v, within ranges %v", n.IPAM.IPRanges[idx].Range, n.IPAM.IPRanges)
-				return nil, "", fmt.Errorf("invalid CIDR %s: %s", n.IPAM.IPRanges[idx].Range, err)
+				return nil, "", fmt.Errorf("invalid CIDR %s: %w", n.IPAM.IPRanges[idx].Range, err)
 			}
 			n.IPAM.IPRanges[idx].Range = ipNet.String()
 			if n.IPAM.IPRanges[idx].RangeStart == nil {
@@ -120,10 +134,25 @@ func LoadIPAMConfig(bytes []byte, envArgs string, extraConfigPaths ...string) (*
 		}
 	}
 
+	for i := range n.IPAM.OmitRanges {
+		_, _, err := netutils.ParseCIDRSloppy(n.IPAM.OmitRanges[i])
+		if err != nil {
+			return nil, "", fmt.Errorf("invalid CIDR in exclude list %s: %w", n.IPAM.OmitRanges[i], err)
+		}
+	}
+
 	n.IPAM.OmitRanges = nil
 	n.IPAM.Range = ""
 	n.IPAM.RangeStart = nil
 	n.IPAM.RangeEnd = nil
+
+	// Propagate enable_l3 from the top-level IPAM config to every IP range.
+	// Individual ranges may also set enable_l3 directly for mixed L2/L3 setups.
+	if n.IPAM.EnableL3 {
+		for idx := range n.IPAM.IPRanges {
+			n.IPAM.IPRanges[idx].L3 = true
+		}
+	}
 
 	if n.IPAM.Kubernetes.KubeConfigPath == "" {
 		return nil, "", storageError()
@@ -136,11 +165,22 @@ func LoadIPAMConfig(bytes []byte, envArgs string, extraConfigPaths ...string) (*
 		}
 		n.IPAM.Gateway = gwip
 	}
-	for i := range n.IPAM.OmitRanges {
-		_, _, err := netutils.ParseCIDRSloppy(n.IPAM.OmitRanges[i])
-		if err != nil {
-			return nil, "", fmt.Errorf("invalid CIDR in exclude list %s: %s", n.IPAM.OmitRanges[i], err)
+
+	// When exclude_gateway is enabled and a gateway IP is configured, add it
+	// as a /32 (or /128 for IPv6) exclusion to every IP range so the gateway
+	// address is never allocated to a pod. This is useful for L2 networks
+	// where the gateway must remain free. For L3-only use cases (BGP routing,
+	// no gateway), this option should remain disabled (the default).
+	if n.IPAM.ExcludeGateway && n.IPAM.Gateway != nil {
+		suffix := "/32"
+		if n.IPAM.Gateway.To4() == nil {
+			suffix = "/128"
 		}
+		gatewayExclude := n.IPAM.Gateway.String() + suffix
+		for idx := range n.IPAM.IPRanges {
+			n.IPAM.IPRanges[idx].OmitRanges = append(n.IPAM.IPRanges[idx].OmitRanges, gatewayExclude)
+		}
+		logging.Debugf("Gateway %s excluded from allocation in all IP ranges", n.IPAM.Gateway)
 	}
 
 	if err := configureStatic(&n, args); err != nil {
@@ -167,17 +207,10 @@ func LoadIPAMConfig(bytes []byte, envArgs string, extraConfigPaths ...string) (*
 
 func pathExists(path string) bool {
 	_, err := os.Stat(path)
-	if err == nil {
-		return true
-	}
-	if os.IsNotExist(err) {
-		return false
-	}
-	return true
+	return err == nil
 }
 
 func configureStatic(n *types.Net, args types.IPAMEnvArgs) error {
-
 	// Validate all ranges
 	numV4 := 0
 	numV6 := 0
@@ -185,13 +218,13 @@ func configureStatic(n *types.Net, args types.IPAMEnvArgs) error {
 	for i := range n.IPAM.Addresses {
 		ip, addr, err := netutils.ParseCIDRSloppy(n.IPAM.Addresses[i].AddressStr)
 		if err != nil {
-			return fmt.Errorf("invalid CIDR in addresses %s: %s", n.IPAM.Addresses[i].AddressStr, err)
+			return fmt.Errorf("invalid CIDR in addresses %s: %w", n.IPAM.Addresses[i].AddressStr, err)
 		}
 		n.IPAM.Addresses[i].Address = *addr
 		n.IPAM.Addresses[i].Address.IP = ip
 
 		if err := canonicalizeIP(&n.IPAM.Addresses[i].Address.IP); err != nil {
-			return fmt.Errorf("invalid address %d: %s", i, err)
+			return fmt.Errorf("invalid address %d: %w", i, err)
 		}
 
 		if n.IPAM.Addresses[i].Address.IP.To4() != nil {
@@ -220,18 +253,21 @@ func configureStatic(n *types.Net, args types.IPAMEnvArgs) error {
 	}
 
 	return nil
-
 }
 
-func GetFlatIPAM(isControlLoop bool, IPAM *types.IPAMConfig, extraConfigPaths ...string) (types.Net, string, error) {
+func GetFlatIPAM(isControlLoop bool, ipamConfig *types.IPAMConfig, extraConfigPaths ...string) (types.Net, string, error) {
 	// Once we have our basics, let's look for our (optional) configuration file
 	confdirs := []string{"/etc/kubernetes/cni/net.d/whereabouts.d/whereabouts.conf", "/etc/cni/net.d/whereabouts.d/whereabouts.conf", "/host/etc/cni/net.d/whereabouts.d/whereabouts.conf"}
 	confdirs = append(confdirs, extraConfigPaths...)
 	// We prefix the optional configuration path (so we look there first)
 
-	if !isControlLoop && IPAM != nil {
-		if IPAM.ConfigurationPath != "" {
-			confdirs = append([]string{IPAM.ConfigurationPath}, confdirs...)
+	if !isControlLoop && ipamConfig != nil {
+		if ipamConfig.ConfigurationPath != "" {
+			cleanPath := filepath.Clean(ipamConfig.ConfigurationPath)
+			if strings.Contains(cleanPath, "..") {
+				return types.Net{}, "", fmt.Errorf("configuration_path %q contains path traversal", ipamConfig.ConfigurationPath)
+			}
+			confdirs = append([]string{cleanPath}, confdirs...)
 		}
 	}
 
@@ -239,40 +275,40 @@ func GetFlatIPAM(isControlLoop bool, IPAM *types.IPAMConfig, extraConfigPaths ..
 	flatipam := types.Net{}
 	foundflatfile := ""
 	for _, confpath := range confdirs {
-		if pathExists(confpath) {
-			jsonFile, err := os.Open(confpath)
-			if err != nil {
-				return flatipam, foundflatfile, fmt.Errorf("error opening flat configuration file @ %s with: %s", confpath, err)
-			}
-
-			defer jsonFile.Close()
-
-			jsonBytes, err := io.ReadAll(jsonFile)
-			if err != nil {
-				return flatipam, foundflatfile, fmt.Errorf("LoadIPAMConfig Flatfile (%s) - io.ReadAll error: %s", confpath, err)
-			}
-
-			if err := json.Unmarshal(jsonBytes, &flatipam.IPAM); err != nil {
-				return flatipam, foundflatfile, fmt.Errorf("LoadIPAMConfig Flatfile (%s) - JSON Parsing Error: %s / bytes: %s", confpath, err, jsonBytes)
-			}
-
-			foundflatfile = confpath
-			return flatipam, foundflatfile, nil
+		if !pathExists(confpath) {
+			continue
 		}
+
+		jsonFile, err := os.Open(confpath)
+		if err != nil {
+			return flatipam, foundflatfile, fmt.Errorf("error opening flat configuration file @ %s with: %w", confpath, err)
+		}
+
+		jsonBytes, err := io.ReadAll(jsonFile)
+		jsonFile.Close()
+		if err != nil {
+			return flatipam, foundflatfile, fmt.Errorf("LoadIPAMConfig Flatfile (%s) - io.ReadAll error: %w", confpath, err)
+		}
+
+		if err := json.Unmarshal(jsonBytes, &flatipam.IPAM); err != nil {
+			return flatipam, foundflatfile, fmt.Errorf("LoadIPAMConfig Flatfile (%s) - JSON Parsing Error: %w / bytes: %s", confpath, err, jsonBytes)
+		}
+
+		foundflatfile = confpath
+		return flatipam, foundflatfile, nil
 	}
 
-	return flatipam, foundflatfile, NewConfigFileNotFoundError()
+	return flatipam, foundflatfile, NewFileNotFoundError()
 }
 
-func handleEnvArgs(n *types.Net, numV6 int, numV4 int, args types.IPAMEnvArgs) (int, int, error) {
-
+func handleEnvArgs(n *types.Net, numV6 int, numV4 int, args types.IPAMEnvArgs) (v6Count, v4Count int, err error) {
 	if args.IP != "" {
 		for _, item := range strings.Split(string(args.IP), ",") {
 			ipstr := strings.TrimSpace(item)
 
 			ip, subnet, err := netutils.ParseCIDRSloppy(ipstr)
 			if err != nil {
-				return numV6, numV4, fmt.Errorf("invalid CIDR %s: %s", ipstr, err)
+				return numV6, numV4, fmt.Errorf("invalid CIDR %s: %w", ipstr, err)
 			}
 
 			addr := types.Address{Address: net.IPNet{IP: ip, Mask: subnet.Mask}}
@@ -303,10 +339,12 @@ func handleEnvArgs(n *types.Net, numV6 int, numV4 int, args types.IPAMEnvArgs) (
 	}
 
 	return numV6, numV4, nil
-
 }
 
 func LoadIPAMConfiguration(bytes []byte, envArgs string, extraConfigPaths ...string) (*types.IPAMConfig, error) {
+	if len(bytes) > maxConfigBytes {
+		return nil, fmt.Errorf("IPAM configuration too large (%d bytes, max %d)", len(bytes), maxConfigBytes)
+	}
 	pluginConfig, err := loadPluginConfig(bytes)
 	if err != nil {
 		return nil, err
@@ -368,19 +406,59 @@ func NewInvalidPluginError(ipamType string) *InvalidPluginError {
 }
 
 func (e *InvalidPluginError) Error() string {
-	return fmt.Sprintf("only interested in networks whose IPAM type is 'whereabouts'. This one was: %s", e.ipamType)
+	return fmt.Sprintf("IPAM type must be 'whereabouts', but got '%s' \u2014 check your CNI configuration", e.ipamType)
 }
 
-type ConfigFileNotFoundError struct{}
+type FileNotFoundError struct{}
 
-func NewConfigFileNotFoundError() *ConfigFileNotFoundError {
-	return &ConfigFileNotFoundError{}
+func NewFileNotFoundError() *FileNotFoundError {
+	return &FileNotFoundError{}
 }
 
-func (e *ConfigFileNotFoundError) Error() string {
+func (e *FileNotFoundError) Error() string {
 	return "config file not found"
 }
 
 func storageError() error {
-	return fmt.Errorf("you have not configured the storage engine (looks like you're using an invalid `kubernetes.kubeconfig` parameter in your config)")
+	return fmt.Errorf("kubernetes.kubeconfig path is required but not set \u2014 provide it in the IPAM config or in the whereabouts.conf flat file (see doc/extended-configuration.md)")
+}
+
+// ParsePrevResult extracts and converts the prevResult field from raw CNI
+// stdin bytes. Returns (nil, nil) when no prevResult is present — callers
+// should treat a nil result as "no previous result available.".
+func ParsePrevResult(stdinData []byte) (*current.Result, error) {
+	var raw struct {
+		RawPrevResult map[string]interface{} `json:"prevResult,omitempty"`
+	}
+	if err := json.Unmarshal(stdinData, &raw); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal prevResult: %w", err)
+	}
+	if raw.RawPrevResult == nil {
+		return nil, nil
+	}
+
+	resultBytes, err := json.Marshal(raw.RawPrevResult)
+	if err != nil {
+		return nil, fmt.Errorf("failed to re-marshal prevResult: %w", err)
+	}
+
+	res, err := current.NewResult(resultBytes)
+	if err != nil {
+		// prevResult may be in an older CNI version format — try conversion.
+		rawResult, parseErr := cniversion.NewResult(raw.RawPrevResult["cniVersion"].(string), resultBytes)
+		if parseErr != nil {
+			return nil, fmt.Errorf("failed to parse prevResult: %w (original: %v)", parseErr, err)
+		}
+		converted, convertErr := current.NewResultFromResult(rawResult)
+		if convertErr != nil {
+			return nil, fmt.Errorf("failed to convert prevResult to current version: %w", convertErr)
+		}
+		return converted, nil
+	}
+
+	typedResult, ok := res.(*current.Result)
+	if !ok {
+		return nil, fmt.Errorf("prevResult is not a *current.Result")
+	}
+	return typedResult, nil
 }

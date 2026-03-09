@@ -7,9 +7,15 @@ metadata:
 data:
   install_cni.sh: |
     cd /tmp
-    wget https://github.com/containernetworking/plugins/releases/download/v1.1.1/cni-plugins-linux-amd64-v1.1.1.tgz
+    ARCH=$(uname -m)
+    case "$ARCH" in
+      x86_64)  ARCH="amd64" ;;
+      aarch64) ARCH="arm64" ;;
+    esac
+    CNI_VERSION="v1.6.2"
+    wget "https://github.com/containernetworking/plugins/releases/download/${CNI_VERSION}/cni-plugins-linux-${ARCH}-${CNI_VERSION}.tgz"
     cd /host/opt/cni/bin
-    tar xvfzp /tmp/cni-plugins-linux-amd64-v1.1.1.tgz
+    tar xvfzp "/tmp/cni-plugins-linux-${ARCH}-${CNI_VERSION}.tgz"
     sleep infinite
 ---
 apiVersion: apps/v1
@@ -29,8 +35,7 @@ spec:
         name: cni-plugins
     spec:
       hostNetwork: true
-      nodeSelector:
-        kubernetes.io/arch: amd64
+      nodeSelector: {}
       tolerations:
       - operator: Exists
         effect: NoSchedule
