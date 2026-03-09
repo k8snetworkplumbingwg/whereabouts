@@ -10,18 +10,25 @@ import (
 // These variables are set at build-time.
 var (
 	// Must follow the rules in https://semver.org/
-	// Does not include git / build information
+	// Does not include git / build information.
 	Version = ""
-	// Empty if git not available
+	// Empty if git not available.
 	GitSHA = ""
-	// Can be "dirty", "clean" or empty (if git not available)
+	// Can be "dirty", "clean" or empty (if git not available).
 	GitTreeState = ""
 	// Can be "unreleased" or "released"; if it is "unreleased" then we add build information to
-	// the version in GetFullVersion
+	// the version in GetFullVersion.
 	ReleaseStatus = "unreleased"
 )
 
+// GetVersion parses the build-time Version string (expected format: "vMAJOR.MINOR.PATCH")
+// into a semver.Version. Returns a zero-value Version if parsing fails.
+// Panics if Version is empty — callers should use GetFullVersion() for safe
+// display purposes.
 func GetVersion() semver.Version {
+	if Version == "" {
+		return semver.Version{}
+	}
 	v, _ := semver.Parse(Version[1:])
 	return v
 }
@@ -51,7 +58,7 @@ func GetFullVersion() string {
 
 // GetFullVersionWithRuntimeInfo returns the same version string as GetFullVersion but appends
 // "<GOOS>/<GOARCH>", where GOOS is the running program's operating system target (e.g. darwin,
-// linux) and GOARCH is the the running program's architecture target (e.g. amd64).
+// linux) and GOARCH is the running program's architecture target (e.g. amd64).
 func GetFullVersionWithRuntimeInfo() string {
 	return fmt.Sprintf("%s %s/%s", GetFullVersion(), runtime.GOOS, runtime.GOARCH)
 }

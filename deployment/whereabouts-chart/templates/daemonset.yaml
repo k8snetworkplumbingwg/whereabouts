@@ -1,4 +1,3 @@
-# Dont'forget to update doc/crds/daemonset-install.yaml as well
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -40,13 +39,7 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: [ "/bin/sh" ]
-          args:
-            - -c
-            - |
-              SLEEP=false source /install-cni.sh
-              /token-watcher.sh &
-              /ip-control-loop -log-level debug
+          command: ["/install-cni"]
           env:
           - name: NODENAME
             valueFrom:

@@ -16,7 +16,7 @@ vendor/*
 .idea
 kind/
 
-bin/
+/bin/
 /github.com/
 
 .idea/
@@ -25,4 +25,11 @@ bin/
 CLAUDE.local.md
 ./claude
 
+# Local environment files
 e2e/.env
+
+# Build artifacts
+/operator
+/whereabouts
+/whereabouts-operator
+install-cni

@@ -1,0 +1,62 @@
+{{- if .Values.operator.enabled }}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: {{ include "whereabouts.fullname" . }}-webhooks
+  labels:
+    {{- include "whereabouts.labels" . | nindent 4 }}
+  annotations:
+    cert-controller.cert-rotation/inject-ca-from: {{ .Values.namespaceOverride | default .Release.Namespace }}/{{ include "whereabouts.fullname" . }}-webhook-cert
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: {{ include "whereabouts.fullname" . }}-webhook
+      namespace: {{ .Values.namespaceOverride | default .Release.Namespace }}
+      path: /validate-whereabouts-cni-cncf-io-v1alpha1-ippool
+  failurePolicy: {{ .Values.webhook.failurePolicy | default "Fail" }}
+  matchPolicy: Equivalent
+  name: vippool.whereabouts.cni.cncf.io
+  {{- include "whereabouts.webhookBypassCondition" . | nindent 2 }}
+  rules:
+  - apiGroups: [whereabouts.cni.cncf.io]
+    apiVersions: [v1alpha1]
+    operations: [CREATE, UPDATE]
+    resources: [ippools]
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: {{ include "whereabouts.fullname" . }}-webhook
+      namespace: {{ .Values.namespaceOverride | default .Release.Namespace }}
+      path: /validate-whereabouts-cni-cncf-io-v1alpha1-nodeslicepool
+  failurePolicy: {{ .Values.webhook.failurePolicy | default "Fail" }}
+  matchPolicy: Equivalent
+  name: vnodeslicepool.whereabouts.cni.cncf.io
+  {{- include "whereabouts.webhookBypassCondition" . | nindent 2 }}
+  rules:
+  - apiGroups: [whereabouts.cni.cncf.io]
+    apiVersions: [v1alpha1]
+    operations: [CREATE, UPDATE]
+    resources: [nodeslicepools]
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: {{ include "whereabouts.fullname" . }}-webhook
+      namespace: {{ .Values.namespaceOverride | default .Release.Namespace }}
+      path: /validate-whereabouts-cni-cncf-io-v1alpha1-overlappingrangeipreservation
+  failurePolicy: {{ .Values.webhook.failurePolicy | default "Fail" }}
+  matchPolicy: Equivalent
+  name: voverlappingrangeipreservation.whereabouts.cni.cncf.io
+  {{- include "whereabouts.webhookBypassCondition" . | nindent 2 }}
+  rules:
+  - apiGroups: [whereabouts.cni.cncf.io]
+    apiVersions: [v1alpha1]
+    operations: [CREATE, UPDATE]
+    resources: [overlappingrangeipreservations]
+  sideEffects: None
+{{- end }}

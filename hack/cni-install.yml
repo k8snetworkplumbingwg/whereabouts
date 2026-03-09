@@ -10,14 +10,16 @@ data:
     # Install the correct CNI plugin binaries for the node architecture.
     ARCH="$(uname -m)"
     case "$ARCH" in
-      x86_64|amd64) CNI_TGZ="cni-plugins-linux-amd64-v1.1.1.tgz" ;;
-      aarch64|arm64) CNI_TGZ="cni-plugins-linux-arm64-v1.1.1.tgz" ;;
+      x86_64|amd64) ARCH="amd64" ;;
+      aarch64|arm64) ARCH="arm64" ;;
       *)
         echo "unsupported architecture: ${ARCH}" >&2
         exit 1
         ;;
     esac
-    wget "https://github.com/containernetworking/plugins/releases/download/v1.1.1/${CNI_TGZ}"
+    CNI_VERSION="v1.6.2"
+    CNI_TGZ="cni-plugins-linux-${ARCH}-${CNI_VERSION}.tgz"
+    wget "https://github.com/containernetworking/plugins/releases/download/${CNI_VERSION}/${CNI_TGZ}"
     cd /host/opt/cni/bin
     tar xvfzp "/tmp/${CNI_TGZ}"
     sleep infinite

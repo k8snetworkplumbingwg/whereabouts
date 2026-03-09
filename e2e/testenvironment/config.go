@@ -4,7 +4,7 @@ import (
 	"os"
 	"strconv"
 
-	core "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 )
 
 type Configuration struct {
@@ -75,7 +75,7 @@ func thrashIter() (int, error) {
 	return strconv.Atoi(numThrashIter)
 }
 
-func (v Configuration) MaxReplicas(allPods []core.Pod) int32 {
+func (v Configuration) MaxReplicas(allPods []corev1.Pod) int32 {
 	const maxPodsPerNode = 110
 	return int32(
 		(v.numComputeNodes*maxPodsPerNode - (len(allPods))) * v.fillPercentCapacity / 100)

@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: controller-manager
+  namespace: system
+  labels:
+    control-plane: controller-manager
+    app.kubernetes.io/name: whereabouts
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+  template:
+    metadata:
+      labels:
+        control-plane: controller-manager
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+    spec:
+      serviceAccountName: whereabouts-operator
+      terminationGracePeriodSeconds: 10
+      containers:
+      - name: manager
+        image: controller:latest
+        command:
+        - /whereabouts-operator
+        args:
+        - controller
+        - --leader-elect=true
+        - --metrics-bind-address=:8080
+        - --health-probe-bind-address=:8081
+        - --reconcile-interval=30s
+        - --webhook-port=9443
+        - --cert-dir=/var/run/webhook-certs
+        - --namespace=$(WHEREABOUTS_NAMESPACE)
+        env:
+        - name: WHEREABOUTS_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        ports:
+        - containerPort: 8080
+          name: metrics
+          protocol: TCP
+        - containerPort: 8081
+          name: healthz
+          protocol: TCP
+        - containerPort: 9443
+          name: webhook
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        volumeMounts:
+        - name: webhook-certs
+          mountPath: /var/run/webhook-certs
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 65532
+          runAsGroup: 65532
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+      volumes:
+      - name: webhook-certs
+        secret:
+          secretName: whereabouts-webhook-cert
+          # optional: true is required because cert-controller creates and
+          # populates the secret after the pod starts. The ensureSecret
+          # function in certrotator.go bootstraps an empty secret, but the
+          # pod must be schedulable first.
+          optional: true

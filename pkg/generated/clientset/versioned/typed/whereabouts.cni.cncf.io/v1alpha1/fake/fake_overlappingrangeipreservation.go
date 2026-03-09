@@ -18,20 +18,21 @@ limitations under the License.
 package fake
 
 import (
-	v1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
-	whereaboutscnicncfiov1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/clientset/versioned/typed/whereabouts.cni.cncf.io/v1alpha1"
+	v1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/api/whereabouts.cni.cncf.io/v1alpha1"
+	whereaboutscnicncfiov1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/applyconfiguration/whereabouts.cni.cncf.io/v1alpha1"
+	typedwhereaboutscnicncfiov1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/clientset/versioned/typed/whereabouts.cni.cncf.io/v1alpha1"
 	gentype "k8s.io/client-go/gentype"
 )
 
 // fakeOverlappingRangeIPReservations implements OverlappingRangeIPReservationInterface
 type fakeOverlappingRangeIPReservations struct {
-	*gentype.FakeClientWithList[*v1alpha1.OverlappingRangeIPReservation, *v1alpha1.OverlappingRangeIPReservationList]
+	*gentype.FakeClientWithListAndApply[*v1alpha1.OverlappingRangeIPReservation, *v1alpha1.OverlappingRangeIPReservationList, *whereaboutscnicncfiov1alpha1.OverlappingRangeIPReservationApplyConfiguration]
 	Fake *FakeWhereaboutsV1alpha1
 }
 
-func newFakeOverlappingRangeIPReservations(fake *FakeWhereaboutsV1alpha1, namespace string) whereaboutscnicncfiov1alpha1.OverlappingRangeIPReservationInterface {
+func newFakeOverlappingRangeIPReservations(fake *FakeWhereaboutsV1alpha1, namespace string) typedwhereaboutscnicncfiov1alpha1.OverlappingRangeIPReservationInterface {
 	return &fakeOverlappingRangeIPReservations{
-		gentype.NewFakeClientWithList[*v1alpha1.OverlappingRangeIPReservation, *v1alpha1.OverlappingRangeIPReservationList](
+		gentype.NewFakeClientWithListAndApply[*v1alpha1.OverlappingRangeIPReservation, *v1alpha1.OverlappingRangeIPReservationList, *whereaboutscnicncfiov1alpha1.OverlappingRangeIPReservationApplyConfiguration](
 			fake.Fake,
 			namespace,
 			v1alpha1.SchemeGroupVersion.WithResource("overlappingrangeipreservations"),

@@ -1,3 +1,6 @@
+// Package allocate implements the IP address assignment algorithm for
+// whereabouts. It finds the lowest available IP within a configured range
+// while respecting exclusion CIDRs and existing reservations.
 package allocate
 
 import (
@@ -18,15 +21,21 @@ type AssignmentError struct {
 }
 
 func (a AssignmentError) Error() string {
-	return fmt.Sprintf("Could not allocate IP in range: ip: %v / - %v / range: %s / excludeRanges: %v",
+	return fmt.Sprintf("Could not allocate IP in range: ip: %v - %v / range: %s / excludeRanges: %v -- "+
+		"the pool may be exhausted; consider expanding the range, checking for orphaned allocations "+
+		"(kubectl get ippools -A), or adding additional ranges via ipRanges",
 		a.firstIP, a.lastIP, a.ipnet.String(), a.excludeRanges)
 }
 
 // AssignIP assigns an IP using a range and a reserve list.
+// If ipamConf.PreferredIP is set and available within the range, it is
+// assigned directly. Otherwise, the lowest available IP is assigned.
 func AssignIP(ipamConf types.RangeConfiguration, reservelist []types.IPReservation, containerID, podRef, ifName string) (net.IPNet, []types.IPReservation, error) {
-
 	// Setup the basics here.
-	_, ipnet, _ := net.ParseCIDR(ipamConf.Range)
+	_, ipnet, err := net.ParseCIDR(ipamConf.Range)
+	if err != nil {
+		return net.IPNet{}, nil, fmt.Errorf("invalid CIDR %q in IPAM config: %w", ipamConf.Range, err)
+	}
 
 	// Verify if podRef and ifName have already an allocation.
 	for i, r := range reservelist {
@@ -41,7 +50,47 @@ func AssignIP(ipamConf types.RangeConfiguration, reservelist []types.IPReservati
 		}
 	}
 
-	newip, updatedreservelist, err := IterateForAssignment(*ipnet, ipamConf.RangeStart, ipamConf.RangeEnd, reservelist, ipamConf.OmitRanges, containerID, podRef, ifName)
+	// Try preferred IP first if one is specified and available.
+	if ipamConf.PreferredIP != nil && ipnet.Contains(ipamConf.PreferredIP) {
+		reserved := false
+		for _, r := range reservelist {
+			if r.IP.Equal(ipamConf.PreferredIP) {
+				reserved = true
+				break
+			}
+		}
+		if !reserved {
+			// Verify not in exclude ranges.
+			excluded := false
+			for _, er := range ipamConf.OmitRanges {
+				_, subnet, parseErr := net.ParseCIDR(er)
+				if parseErr != nil {
+					// Also try parsing as a plain IP.
+					ip := net.ParseIP(er)
+					if ip != nil && ip.Equal(ipamConf.PreferredIP) {
+						excluded = true
+						break
+					}
+					continue
+				}
+				if subnet.Contains(ipamConf.PreferredIP) {
+					excluded = true
+					break
+				}
+			}
+			if !excluded {
+				logging.Debugf("Assigning preferred IP: %q - container ID %q - podRef: %q - ifName: %q",
+					ipamConf.PreferredIP, containerID, podRef, ifName)
+				reservelist = append(reservelist, types.IPReservation{
+					IP: ipamConf.PreferredIP, ContainerID: containerID, PodRef: podRef, IfName: ifName,
+				})
+				return net.IPNet{IP: ipamConf.PreferredIP, Mask: ipnet.Mask}, reservelist, nil
+			}
+		}
+		logging.Debugf("Preferred IP %s not available, falling back to lowest-available", ipamConf.PreferredIP)
+	}
+
+	newip, updatedreservelist, err := IterateForAssignment(*ipnet, ipamConf.RangeStart, ipamConf.RangeEnd, reservelist, ipamConf.OmitRanges, containerID, podRef, ifName, ipamConf.L3)
 	if err != nil {
 		return net.IPNet{}, nil, err
 	}
@@ -77,21 +126,39 @@ func removeIdxFromSlice(s []types.IPReservation, i int) []types.IPReservation {
 	return s[:len(s)-1]
 }
 
-// IterateForAssignment iterates given an IP/IPNet and a list of reserved IPs and exluded subnets.
-// Valid IPs are contained within the ipnet, excluding the network and broadcast address.
-// If rangeStart is specified, it is respected if it lies within the ipnet.
-// If rangeEnd is specified, it is respected if it lies within the ipnet and if it is >= rangeStart.
+// IterateForAssignment iterates given an IP/IPNet and a list of reserved IPs and excluded subnets.
+// When l3 is false (default, L2 mode): valid IPs exclude the network and broadcast address.
+// When l3 is true (L3/routed mode): all IPs in the subnet are considered valid, including
+// the network address and broadcast address, since there is no broadcast domain in L3.
+// If rangeStart is specified, it is respected if it lies within the subnet.
+// If rangeEnd is specified, it is respected if it lies within the subnet and if it is >= rangeStart.
 // reserveList holds a list of reserved IPs.
 // excludeRanges holds a list of subnets to be excluded (meaning the full subnet, including the network and broadcast IP).
-func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, reserveList []types.IPReservation, excludeRanges []string, containerID, podRef, ifName string) (net.IP, []types.IPReservation, error) {
-	// Get the valid range, delimited by the ipnet's first and last usable IP as well as the rangeStart and rangeEnd.
-	firstIP, lastIP, err := iphelpers.GetIPRange(ipnet, rangeStart, rangeEnd)
-	if err != nil {
-		logging.Errorf("GetIPRange request failed with: %v", err)
-		return net.IP{}, reserveList, err
+func IterateForAssignment(ipnet net.IPNet, rangeStart net.IP, rangeEnd net.IP, reserveList []types.IPReservation, excludeRanges []string, containerID, podRef, ifName string, l3 bool) (net.IP, []types.IPReservation, error) {
+	var firstIP, lastIP net.IP
+	var err error
+
+	if l3 {
+		// L3/routed mode: all IPs in the subnet are usable (no network/broadcast exclusion).
+		firstIP = iphelpers.NetworkIP(ipnet)
+		lastIP = iphelpers.SubnetBroadcastIP(ipnet)
+		// Respect explicit rangeStart/rangeEnd if set.
+		if rangeStart != nil && ipnet.Contains(rangeStart) && iphelpers.CompareIPs(rangeStart, firstIP) >= 0 {
+			firstIP = rangeStart
+		}
+		if rangeEnd != nil && ipnet.Contains(rangeEnd) && iphelpers.CompareIPs(rangeEnd, firstIP) >= 0 && iphelpers.CompareIPs(rangeEnd, lastIP) <= 0 {
+			lastIP = rangeEnd
+		}
+	} else {
+		// L2 mode: exclude network and broadcast addresses.
+		firstIP, lastIP, err = iphelpers.GetIPRange(ipnet, rangeStart, rangeEnd)
+		if err != nil {
+			logging.Errorf("GetIPRange request failed with: %w", err)
+			return net.IP{}, reserveList, err
+		}
 	}
-	logging.Debugf("IterateForAssignment input >> range_start: %v | range_end: %v | ipnet: %v | first IP: %v | last IP: %v",
-		rangeStart, rangeEnd, ipnet.String(), firstIP, lastIP)
+	logging.Debugf("IterateForAssignment input >> range_start: %v | range_end: %v | ipnet: %v | first IP: %v | last IP: %v | l3: %v",
+		rangeStart, rangeEnd, ipnet.String(), firstIP, lastIP, l3)
 
 	// Build reserved map.
 	reserved := make(map[string]bool)

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Whereabouts is an IP Address Management (IPAM) CNI plugin for Kubernetes that assigns IP addresses cluster-wide. Unlike host-local which only works per-node, Whereabouts provides cluster-wide IP assignment by tracking allocations in either Kubernetes Custom Resources (CRDs) or etcd.
+Whereabouts is an IP Address Management (IPAM) CNI plugin for Kubernetes that assigns IP addresses cluster-wide. Unlike host-local which only works per-node, Whereabouts provides cluster-wide IP assignment by tracking allocations in Kubernetes Custom Resources (CRDs).
 
 The plugin assigns IPs from a specified range (CIDR notation), always allocating the lowest available address. It supports both IPv4 and IPv6, and is commonly used with Multus CNI for multi-network configurations.
 
@@ -13,7 +13,7 @@ The plugin assigns IPs from a specified range (CIDR notation), always allocating
 ### Building
 ```bash
 # Build the CNI plugin binary
-./hack/build-go.sh
+make build
 
 # Build Docker image
 make docker-build
@@ -75,11 +75,32 @@ make kind COMPUTE_NODES=3
 
 ### Core Components
 
-**CNI Plugin Entry Point** (`cmd/whereabouts.go`)
+**CNI Plugin Entry Point** (`cmd/whereabouts/main.go`)
 - Implements the CNI specification interface (ADD, DEL, CHECK, VERSION commands)
 - `cmdAddFunc`: Allocates an IP address when a pod interface is created
 - `cmdDelFunc`: Releases an IP address when a pod interface is deleted
 - Loads IPAM configuration from stdin and creates a Kubernetes IPAM client
+
+**Operator** (`cmd/operator/`)
+- Built on controller-runtime v0.23 with Cobra
+- `controller` subcommand: leader-elected Deployment running reconcilers + webhook server + cert rotation
+- All replicas serve webhooks; only the leader runs reconcilers
+- Replaces the old `ip-control-loop` and `node-slice-controller` binaries
+
+**Reconcilers** (`internal/controller/`)
+- `IPPoolReconciler`: Watches IPPool CRDs, removes orphaned allocations by checking podRef against live pods. Uses JSON Patch for atomic updates. Handles DisruptionTarget eviction, pending pods (RequeueAfter), IPv6 normalization (net.IP.Equal). Behavior gated by feature flags: `--cleanup-terminating-pods`, `--cleanup-disrupted-pods`, `--verify-network-status`.
+- `NodeSliceReconciler`: Watches NADs (primary) + Nodes (secondary), manages NodeSlicePool CRDs. Uses SSA for status updates. Parses IPAM config from NAD spec.config JSON.
+- `OverlappingRangeReconciler`: Watches OverlappingRangeIPReservation CRDs, deletes orphaned reservations by checking podRef against live pods. Shares `--cleanup-terminating-pods` and `--cleanup-disrupted-pods` flags with IPPoolReconciler.
+
+**Validating Webhooks** (`internal/webhook/`)
+- `IPPoolValidator`: Validates Range CIDR format, podRef "namespace/name" format in allocations
+- `NodeSlicePoolValidator`: Validates Range CIDR, SliceSize as integer 1-128
+- `OverlappingRangeValidator`: Validates podRef "namespace/name" format
+- Uses controller-runtime v0.23 typed `admission.Validator[T]` API
+- Deployment manifests include matchConditions CEL bypass for CNI ServiceAccount
+
+**Cert Rotation** (`internal/webhook/certrotator/`)
+- Wraps `open-policy-agent/cert-controller` rotator for automatic TLS certificate management
 
 **IP Allocation Logic** (`pkg/allocate/`)
 - `AssignIP`: Main allocation function that assigns IPs from a range
@@ -88,7 +109,7 @@ make kind COMPUTE_NODES=3
 - Respects exclude ranges and avoids IPs ending in `.0`
 
 **Storage Backend** (`pkg/storage/`)
-- Abstract interface for IP pool management (currently Kubernetes CRDs primary, etcd legacy)
+- Abstract interface for IP pool management (Kubernetes CRDs)
 - `Store` interface: GetIPPool, GetOverlappingRangeStore, Status, Close
 - `IPPool` interface: Allocations, Update
 - Kubernetes implementation in `pkg/storage/kubernetes/` handles:
@@ -101,28 +122,18 @@ make kind COMPUTE_NODES=3
 - Supports both inline config and flat-file configuration (`/etc/cni/net.d/whereabouts.d/whereabouts.conf`)
 - Handles range specifications: single CIDR, range with start/end, ipRanges for multi-IP/dual-stack
 
-**IP Reconciler** (`pkg/reconciler/`)
-- Runs as a Kubernetes CronJob to clean up stranded IP allocations
-- Compares allocated IPs against running pods
-- Deallocates IPs for pods that no longer exist (handles node failures, force deletes)
-- Reconciler cron expression configurable via ConfigMap or environment variable
-
-**Controllers**
-- **IP Reconciliation Controller** (`cmd/controlloop/`): Watches pods and reconciles IP allocations
-- **Node Slice Controller** (`cmd/nodeslicecontroller/`): Experimental "Fast IPAM" feature that pre-allocates IP slices per node to reduce contention
-
 ### Custom Resource Definitions
 
-**IPPool** (`pkg/api/whereabouts.cni.cncf.io/v1alpha1/ippool_types.go`)
+**IPPool** (`api/whereabouts.cni.cncf.io/v1alpha1/ippool_types.go`)
 - Stores IP allocations for a specific range
 - Key format: `<namespace>-<network-name>-<normalized-range>`
 - Contains array of IPReservation entries with IP, PodRef, ContainerID, IfName
 
-**OverlappingRangeIPReservation** (`pkg/api/whereabouts.cni.cncf.io/v1alpha1/overlappingrangeipreservation_types.go`)
+**OverlappingRangeIPReservation** (`api/whereabouts.cni.cncf.io/v1alpha1/overlappingrangeipreservation_types.go`)
 - Ensures IP uniqueness across overlapping ranges when `enable_overlapping_ranges: true`
 - Prevents same IP from being allocated in different ranges that overlap
 
-**NodeSlicePool** (`pkg/api/whereabouts.cni.cncf.io/v1alpha1/nodeslicepool_types.go`)
+**NodeSlicePool** (`api/whereabouts.cni.cncf.io/v1alpha1/nodeslicepool_types.go`)
 - Experimental: Tracks node-specific IP slice allocations for Fast IPAM
 - Enabled by setting `node_slice_size` in IPAM config
 
@@ -152,20 +163,28 @@ make kind COMPUTE_NODES=3
 
 ### Key Packages
 
+- `cmd/operator`: Cobra-based operator entry point (single `controller` subcommand: reconcilers + webhooks)
+- `internal/controller`: controller-runtime reconcilers (IPPool, NodeSlice, OverlappingRange)
+- `internal/webhook`: Validating webhook handlers + cert-controller wrapper
 - `pkg/allocate`: IP assignment algorithms, iteration logic
 - `pkg/iphelpers`: IP address arithmetic, range calculations, CIDR parsing
-- `pkg/storage/kubernetes`: Kubernetes CRD-based storage implementation
+- `pkg/storage/kubernetes`: Kubernetes CRD-based storage implementation (used by CNI binary)
 - `pkg/types`: Core data structures (RangeConfiguration, IPReservation, IPAMConfig)
 - `pkg/config`: Configuration parsing and validation
-- `pkg/reconciler`: Cleanup and reconciliation logic
-- `pkg/controlloop`: Kubernetes controllers (pod watcher, node slice management)
 - `pkg/generated`: Auto-generated Kubernetes clientsets, informers, listers
+
+### Binaries
+
+- `whereabouts`: CNI plugin binary (called by container runtime via Multus)
+- `whereabouts-operator`: Operator binary — `controller` subcommand runs reconcilers + webhook server
+- `install-cni`: DaemonSet entry-point — copies CNI binary to host, generates kubeconfig/conf, watches token rotation
 
 ## Testing Strategy
 
-**Unit Tests**: Ginkgo/Gomega framework used extensively
+**Unit Tests**: Ginkgo v2 / Gomega framework used extensively
 - Test files colocated with implementation: `*_test.go`
 - Use fake Kubernetes clients for testing without cluster
+- controller-runtime `envtest` used for reconciler and webhook tests
 - Run with `make test` which includes `go vet` and `staticcheck`
 
 **E2E Tests**: Located in `e2e/` directory
@@ -183,8 +202,7 @@ make kind COMPUTE_NODES=3
 
 ### Fast IPAM (Experimental)
 - Enabled by adding `node_slice_size` field to IPAM config
-- Requires running the node slice controller: `doc/crds/node-slice-controller.yaml`
-- Controller and daemonset must run in same namespace as NetworkAttachmentDefinitions
+- Managed by the operator's NodeSliceReconciler (deployed via `make deploy` / kustomize)
 - Pre-allocates IP slices per node to reduce allocation contention in large clusters
 
 ### Configuration Hierarchy
@@ -198,8 +216,26 @@ The plugin checks for existing allocations by `podRef` and `ifName` before alloc
 
 ### Storage Backend Considerations
 - Default and recommended: Kubernetes CRDs (no additional infrastructure)
-- Legacy: etcd (deprecated, requires separate etcd cluster)
-- Overlapping range protection only works with Kubernetes backend
+- Overlapping range protection uses OverlappingRangeIPReservation CRDs (enabled by default)
 
 ### Network Names
 Use `network_name` parameter to allow multiple independent allocations from the same CIDR in multi-tenant scenarios. This creates separate IPPool CRs per network name.
+
+### IPAM Features
+- **L3/Routed Mode** (`enable_l3`): All IPs in the subnet allocatable (no network/broadcast exclusion). For BGP-routed networks, /31 point-to-point links, /32 loopbacks.
+- **Gateway IP Exclusion** (`exclude_gateway`): Automatically adds the gateway IP as a /32 (or /128) exclusion. Opt-in, default `false`.
+- **Optimistic IPAM** (`optimistic_ipam`): Bypasses leader election, relies on Kubernetes optimistic concurrency (resource version checks). Lower latency at scale (600+ pods).
+- **Preferred/Sticky IP**: Pod annotation `whereabouts.cni.cncf.io/preferred-ip` assigns a specific IP if available, falls back to lowest-available.
+- **Small Subnets**: /32, /31, /127, /128 supported (single-host allocation, RFC 3021 point-to-point).
+
+### Operator Feature Flags
+Three flags gate aggressive reconciler behaviors:
+- `--cleanup-terminating-pods` (default `false`): Release IPs from pods with DeletionTimestamp set
+- `--cleanup-disrupted-pods` (default `true`): Release IPs from pods with DisruptionTarget condition
+- `--verify-network-status` (default `true`): Check Multus network-status annotation for IP presence
+
+### Webhook Architecture
+- Webhooks are served by all operator replicas (not just the leader)
+- TLS certificates managed automatically via `cert-controller` library
+- `matchConditions` CEL bypass for the CNI ServiceAccount's high-frequency CRD updates
+- `failurePolicy: Ignore` to avoid blocking CNI operations during webhook outages
