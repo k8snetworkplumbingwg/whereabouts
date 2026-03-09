@@ -15,3 +15,13 @@ func PodNetworkSelectionElements(networkNames ...string) map[string]string {
 		nettypes.NetworkAttachmentAnnot: strings.Join(networkNames, ","),
 	}
 }
+
+// PodNetworkSelectionWithAnnotations merges network selection annotations with
+// additional pod-level annotations (e.g. whereabouts.cni.cncf.io/preferred-ip).
+func PodNetworkSelectionWithAnnotations(extra map[string]string, networkNames ...string) map[string]string {
+	m := PodNetworkSelectionElements(networkNames...)
+	for k, v := range extra {
+		m[k] = v
+	}
+	return m
+}
