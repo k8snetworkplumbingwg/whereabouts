@@ -1,0 +1,9 @@
+# Example IPPool resource
+apiVersion: whereabouts.cni.cncf.io/v1alpha1
+kind: IPPool
+metadata:
+  name: example-ippool
+  namespace: kube-system
+spec:
+  range: "192.168.1.0/24"
+  allocations: {}

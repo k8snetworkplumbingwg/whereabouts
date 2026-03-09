@@ -1,0 +1,18 @@
+# Prometheus ServiceMonitor for whereabouts operator metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: controller-manager-metrics-monitor
+  namespace: system
+  labels:
+    control-plane: controller-manager
+    app.kubernetes.io/name: whereabouts
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  endpoints:
+  - path: /metrics
+    port: metrics
+    scheme: http
+  selector:
+    matchLabels:
+      control-plane: controller-manager

@@ -2,55 +2,26 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: {{ include "whereabouts.serviceAccountName" . }}
+  labels:
+    {{- include "whereabouts.labels" . | nindent 4 }}
 rules:
-- apiGroups:
-  - whereabouts.cni.cncf.io
-  resources:
-  - ippools
-  - overlappingrangeipreservations
-  - nodeslicepools
-  verbs:
-  - get
-  - list
-  - watch
-  - create
-  - update
-  - patch
-  - delete
-- apiGroups:
-  - coordination.k8s.io
-  resources:
-  - leases
-  verbs:
-  - '*'
+# CNI plugin needs CRUD on IPPool and OverlappingRangeIPReservation for allocation/deallocation
+- apiGroups: [whereabouts.cni.cncf.io]
+  resources: [ippools, overlappingrangeipreservations]
+  verbs: [get, list, watch, create, update, patch, delete]
+# CNI plugin reads NodeSlicePool for Fast IPAM
+- apiGroups: [whereabouts.cni.cncf.io]
+  resources: [nodeslicepools]
+  verbs: [get, list, watch]
+# Optimistic locking via leases
+- apiGroups: [coordination.k8s.io]
+  resources: [leases]
+  verbs: [get, create, update, delete]
+# Preferred/sticky IP: CNI reads pod annotations to determine preferred IP
 - apiGroups: [""]
-  resources:
-  - pods
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups: [""]
-  resources:
-  - nodes
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups: ["k8s.cni.cncf.io"]
-  resources:
-  - network-attachment-definitions
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - ""
-  - events.k8s.io
-  resources:
-    - events
-  verbs:
-  - create
-  - patch
-  - update
-  - get
+  resources: [pods]
+  verbs: [get]
+# Events for allocation logging
+- apiGroups: ["", events.k8s.io]
+  resources: [events]
+  verbs: [create, patch, update, get]
