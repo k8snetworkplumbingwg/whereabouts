@@ -21,8 +21,9 @@ func NewNodeSliceConsistencyCheck(ipPools []storage.IPPool, podList []corev1.Pod
 
 func (pc *NodeSliceChecker) MissingIPs() []string {
 	var mismatchedIPs []string
-	for _, pod := range pc.podList {
-		podIPs, err := retrievers.SecondaryIfaceIPValue(&pod, "net1")
+	for i := range pc.podList {
+		pod := &pc.podList[i]
+		podIPs, err := retrievers.SecondaryIfaceIPValue(pod, "net1")
 		if err != nil {
 			return []string{}
 		}
@@ -52,8 +53,9 @@ func (pc *NodeSliceChecker) StaleIPs() []string {
 		for _, allocation := range pool.Allocations() {
 			reservedIP := allocation.IP.String()
 			found := false
-			for _, pod := range pc.podList {
-				podIPs, err := retrievers.SecondaryIfaceIPValue(&pod, "net1")
+			for i := range pc.podList {
+				pod := &pc.podList[i]
+				podIPs, err := retrievers.SecondaryIfaceIPValue(pod, "net1")
 				podIP := podIPs[len(podIPs)-1]
 				if err != nil {
 					continue

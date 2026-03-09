@@ -29,8 +29,12 @@ podAnnotations: {}
 podSecurityContext: {}
   # fsGroup: 2000
 
+# The CNI DaemonSet requires privileged root access to interact with the host
+# network stack and write CNI binaries to the host filesystem (e.g. /opt/cni/bin).
+# This is intentional and currently cannot be run as non-root.
 securityContext:
   privileged: true
+  runAsUser: 0
 
 resources:
   requests:
@@ -55,6 +59,34 @@ cniConf:
   confDir: /etc/cni/net.d
   binDir: /opt/cni/bin
 
-nodeSliceController:
+operator:
   enabled: true
+  replicas: 2
+  # Optional operator-specific scheduling constraints.
+  # If empty, the chart falls back to top-level nodeSelector/tolerations.
+  nodeSelector: {}
+  tolerations: []
   priorityClassName: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+  # topologySpreadConstraints for HA zone distribution (optional)
+  # Example:
+  # topologySpreadConstraints:
+  # - maxSkew: 1
+  #   topologyKey: topology.kubernetes.io/zone
+  #   whenUnsatisfiable: ScheduleAnyway
+  #   labelSelector:
+  #     matchLabels:
+  #       app: whereabouts-operator
+  topologySpreadConstraints: []
+
+webhook:
+  # failurePolicy for the ValidatingWebhookConfiguration (Fail or Ignore).
+  failurePolicy: Fail
+  # ServiceAccount used by the CNI plugin — bypass webhooks for this SA
+  cniServiceAccountName: whereabouts

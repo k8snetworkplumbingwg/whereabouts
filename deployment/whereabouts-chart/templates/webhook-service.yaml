@@ -1,0 +1,17 @@
+{{- if .Values.operator.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "whereabouts.fullname" . }}-webhook
+  {{- include "whereabouts.namespace" . | nindent 2 }}
+  labels:
+    {{- include "whereabouts.labels" . | nindent 4 }}
+spec:
+  selector:
+    app: {{ include "whereabouts.fullname" . }}-operator
+  ports:
+  - port: 443
+    targetPort: 9443
+    protocol: TCP
+    name: webhook
+{{- end }}

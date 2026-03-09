@@ -21,7 +21,7 @@ import (
 	context "context"
 	time "time"
 
-	apiwhereaboutscnicncfiov1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
+	apiwhereaboutscnicncfiov1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/api/whereabouts.cni.cncf.io/v1alpha1"
 	versioned "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/clientset/versioned"
 	internalinterfaces "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/informers/externalversions/internalinterfaces"
 	whereaboutscnicncfiov1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/listers/whereabouts.cni.cncf.io/v1alpha1"
@@ -56,7 +56,7 @@ func NewIPPoolInformer(client versioned.Interface, namespace string, resyncPerio
 // one. This reduces memory footprint and number of connections to the server.
 func NewFilteredIPPoolInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
 	return cache.NewSharedIndexInformer(
-		&cache.ListWatch{
+		cache.ToListWatcherWithWatchListSemantics(&cache.ListWatch{
 			ListFunc: func(options v1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
@@ -81,7 +81,7 @@ func NewFilteredIPPoolInformer(client versioned.Interface, namespace string, res
 				}
 				return client.WhereaboutsV1alpha1().IPPools(namespace).Watch(ctx, options)
 			},
-		},
+		}, client),
 		&apiwhereaboutscnicncfiov1alpha1.IPPool{},
 		resyncPeriod,
 		indexers,

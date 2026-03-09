@@ -3,118 +3,182 @@ on:
   push:
     tags:
       - v*
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+
 env:
-  image-push-owner: 'k8snetworkplumbingwg'
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_PUSH_OWNER: telekom
+
 jobs:
-  push-amd64:
-    name: Image push/amd64
+  test:
+    name: Run tests before release
     runs-on: ubuntu-latest
     steps:
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v6
+      - name: Check out code
+        uses: actions/checkout@v6.0.2 # v6.0.2
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Container Registry
-        if: github.repository_owner == 'k8snetworkplumbingwg'
-        uses: docker/login-action@v3
+      - name: Install Go
+        uses: actions/setup-go@v6.3.0 # v6.3.0
         with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          go-version-file: go.mod
 
-      - name: Docker meta
-        id: docker_meta
-        uses: crazy-max/ghaction-docker-meta@v5
-        with:
-          images: ghcr.io/${{ github.repository }}
-          tag-latest: false
+      - name: Build and Test
+        run: make test
 
-      - name: Push container image
-        if: github.repository_owner == 'k8snetworkplumbingwg'
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: |
-            ${{ steps.docker_meta.outputs.tags }}-amd64
-          file: Dockerfile
-
-  push-arm64:
-    name: Image push/arm64
+  build-push:
+    name: Build / ${{ matrix.platform }}
+    needs: [test]
     runs-on: ubuntu-latest
+    if: github.repository_owner == 'telekom'
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [linux/amd64, linux/arm64]
     steps:
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v6
+      - name: Prepare platform pair
+        run: echo "PLATFORM_PAIR=${platform//\//-}" >> "$GITHUB_ENV"
+        env:
+          platform: ${{ matrix.platform }}
+
+      - name: Check out code
+        uses: actions/checkout@v6.0.2 # v6.0.2
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        if: matrix.platform != 'linux/amd64'
+        uses: docker/setup-qemu-action@v3.7.0 # v3.7.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4.0.0 # v3.12.0
 
       - name: Login to Container Registry
-        if: github.repository_owner == 'k8snetworkplumbingwg'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v3.7.0 # v3.7.0
         with:
-          registry: ghcr.io
+          registry: ${{ env.REGISTRY }}
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Docker meta
-        id: docker_meta
-        uses: crazy-max/ghaction-docker-meta@v5
+        id: meta
+        uses: docker/metadata-action@v5.10.0 # v5.10.0
         with:
-          images: ghcr.io/${{ github.repository }}
-          tag-latest: false
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          flavor: |
+            latest=false
 
-      - name: Push container image
-        if: github.repository_owner == 'k8snetworkplumbingwg'
-        uses: docker/build-push-action@v6
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v7.0.0 # v6.19.2
         with:
           context: .
-          push: true
-          tags: |
-            ${{ steps.docker_meta.outputs.tags }}-arm64
           file: Dockerfile
-          platforms: linux/arm64
+          platforms: ${{ matrix.platform }}
+          push: true
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,"name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}",push-by-digest=true,name-canonical=true
 
-  push-multi-arch:
-    name: Image push multi-arch
+      - name: Export digest
+        run: |
+          mkdir -p ${{ runner.temp }}/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v7.0.0 # v7.0.0
+        with:
+          name: digests-${{ env.PLATFORM_PAIR }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  assemble:
+    name: Assemble Multi-Arch Manifest
     runs-on: ubuntu-latest
+    needs: build-push
+    outputs:
+      digest: ${{ steps.inspect.outputs.digest }}
+      image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
     steps:
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v6
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Download digests
+        uses: actions/download-artifact@v8.0.0 # v8.0.0
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-*
+          merge-multiple: true
 
       - name: Login to Container Registry
-        if: github.repository_owner == 'k8snetworkplumbingwg'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v3.7.0 # v3.7.0
         with:
-          registry: ghcr.io
+          registry: ${{ env.REGISTRY }}
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Docker meta
-        id: docker_meta
-        uses: crazy-max/ghaction-docker-meta@v5
-        with:
-          images: ghcr.io/${{ github.repository }}
-          tag-latest: false
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4.0.0 # v3.12.0
 
-      - name: Push container image
-        if: github.repository_owner == 'k8snetworkplumbingwg'
-        uses: docker/build-push-action@v6
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5.10.0 # v5.10.0
         with:
-          context: .
-          push: true
-          tags: |
-            ${{ steps.docker_meta.outputs.tags }}
-          file: Dockerfile
-          platforms: linux/amd64, linux/arm64
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          flavor: |
+            latest=false
+
+      - name: Create and push multi-arch manifest
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("--tag " + .) | join(" ")' <<< '${{ steps.meta.outputs.json }}') \
+            $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' *)
+
+      - name: Inspect manifest
+        id: inspect
+        run: |
+          tag=$(jq -cr '.tags[0]' <<< '${{ steps.meta.outputs.json }}')
+          digest=$(docker buildx imagetools inspect "${tag}" | awk '/^Digest:/ {print $2; exit}')
+          if [ -z "${digest}" ]; then
+            echo "Failed to extract manifest digest for ${tag}" >&2
+            exit 1
+          fi
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+
+  sign:
+    name: Sign & Attest
+    runs-on: ubuntu-latest
+    needs: assemble
+    steps:
+      - name: Login to Container Registry
+        uses: docker/login-action@v3.7.0 # v3.7.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v4.0.0 # v4.0.0
+
+      - name: Sign image with Cosign (keyless)
+        run: cosign sign --yes "${{ needs.assemble.outputs.image }}@${{ needs.assemble.outputs.digest }}"
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0.23.0 # v0.23.0
+        with:
+          image: ${{ needs.assemble.outputs.image }}@${{ needs.assemble.outputs.digest }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+          upload-release-assets: false
+
+      - name: Attest SBOM with Cosign
+        run: cosign attest --yes --predicate sbom.spdx.json --type spdxjson "${{ needs.assemble.outputs.image }}@${{ needs.assemble.outputs.digest }}"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v4.1.0 # v4.1.0
+        with:
+          subject-name: ${{ needs.assemble.outputs.image }}
+          subject-digest: ${{ needs.assemble.outputs.digest }}
+          push-to-registry: true

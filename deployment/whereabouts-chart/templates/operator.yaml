@@ -1,0 +1,103 @@
+{{- if .Values.operator.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "whereabouts.fullname" . }}-operator
+  {{- include "whereabouts.namespace" . | nindent 2 }}
+  labels:
+    {{- include "whereabouts.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.operator.replicas }}
+  selector:
+    matchLabels:
+      app: {{ include "whereabouts.fullname" . }}-operator
+  template:
+    metadata:
+      labels:
+        app: {{ include "whereabouts.fullname" . }}-operator
+        control-plane: {{ .Values.operator.controlPlaneLabel | default "controller-manager" }}
+    spec:
+      {{- with .Values.operator.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      serviceAccountName: {{ include "whereabouts.fullname" . }}-operator
+      containers:
+      - name: controller
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command:
+        - /whereabouts-operator
+        args:
+        - controller
+        - --leader-elect=true
+        # Explicit namespace for the leader election lease — matches the Helm release
+        # namespace rather than relying on controller-runtime's auto-detection.
+        - --leader-elect-namespace={{ .Values.namespaceOverride | default .Release.Namespace }}
+        - --metrics-bind-address=:8080
+        - --health-probe-bind-address=:8081
+        - --reconcile-interval=30s
+        - --webhook-port=9443
+        - --cert-dir=/var/run/webhook-certs
+        - --webhook-secret-name={{ include "whereabouts.fullname" . }}-webhook-cert
+        - --webhook-service-name={{ include "whereabouts.fullname" . }}-webhook
+        - --webhook-config-name={{ include "whereabouts.fullname" . }}-webhooks
+        - --namespace={{ .Values.namespaceOverride | default .Release.Namespace }}
+        ports:
+        - containerPort: 8080
+          name: metrics
+          protocol: TCP
+        - containerPort: 8081
+          name: healthz
+          protocol: TCP
+        - containerPort: 9443
+          name: webhook
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          {{- toYaml .Values.operator.resources | nindent 10 }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 65532
+          runAsGroup: 65532
+          capabilities:
+            drop: [ALL]
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+        - name: webhook-certs
+          mountPath: /var/run/webhook-certs
+      volumes:
+      - name: webhook-certs
+        secret:
+          secretName: {{ include "whereabouts.fullname" . }}-webhook-cert
+          # Keep optional=true to avoid startup deadlock when the secret does
+          # not exist yet. The operator process bootstraps it via ensureSecret,
+          # cert-controller rotates contents, and readiness is gated via
+          # webhookSetup.ReadyCheck() before traffic is served.
+          optional: true
+      {{- with .Values.operator.nodeSelector | default .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.operator.tolerations | default .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.operator.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

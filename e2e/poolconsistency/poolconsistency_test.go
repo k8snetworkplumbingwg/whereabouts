@@ -7,8 +7,7 @@ import (
 	"net"
 	"testing"
 
-	. "github.com/onsi/ginkgo"
-	"github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	corev1 "k8s.io/api/core/v1"
@@ -36,11 +35,11 @@ var _ = Describe("IP Pool consistency checker", func() {
 				pool = NewMockedPool()
 			})
 
-			table.DescribeTable("does not have stale IPs", func(podList []corev1.Pod) {
+			DescribeTable("does not have stale IPs", func(podList []corev1.Pod) {
 				Expect(NewPoolConsistencyCheck(pool, podList).StaleIPs()).To(BeEmpty())
 			},
-				table.Entry("without any live pod", []corev1.Pod{}),
-				table.Entry("independently of live pods", []corev1.Pod{
+				Entry("without any live pod", []corev1.Pod{}),
+				Entry("independently of live pods", []corev1.Pod{
 					newPod("1", "2", "111.111.111.111"),
 				}))
 		})
@@ -75,11 +74,11 @@ var _ = Describe("IP Pool consistency checker", func() {
 
 			var podList []corev1.Pod
 
-			table.DescribeTable("does not have stale IPs", func(ipPool storage.IPPool) {
+			DescribeTable("does not have stale IPs", func(ipPool storage.IPPool) {
 				Expect(NewPoolConsistencyCheck(ipPool, podList).MissingIPs()).To(BeEmpty())
 			},
-				table.Entry("with an empty IPPool", NewMockedPool()),
-				table.Entry("even when the IPPool features allocations", NewMockedPool(
+				Entry("with an empty IPPool", NewMockedPool()),
+				Entry("even when the IPPool features allocations", NewMockedPool(
 					types.IPReservation{IP: net.ParseIP(ip)})))
 		})
 
@@ -129,7 +128,7 @@ func (mp *mockedPool) Update(context.Context, []types.IPReservation) error {
 }
 
 func newPod(name string, namespace string, ips ...string) corev1.Pod {
-	var ifaceStatus []k8snetplumbersv1.NetworkStatus
+	ifaceStatus := make([]k8snetplumbersv1.NetworkStatus, 0, len(ips))
 	for i, ip := range ips {
 		ifaceStatus = append(ifaceStatus, k8snetplumbersv1.NetworkStatus{
 			Name:      fmt.Sprintf("net%d", i+1),
@@ -138,7 +137,10 @@ func newPod(name string, namespace string, ips ...string) corev1.Pod {
 		})
 	}
 
-	serializedIfaceStatus, _ := json.Marshal(&ifaceStatus)
+	serializedIfaceStatus, err := json.Marshal(&ifaceStatus)
+	if err != nil {
+		panic(fmt.Sprintf("failed to marshal iface status: %v", err))
+	}
 	return corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        name,

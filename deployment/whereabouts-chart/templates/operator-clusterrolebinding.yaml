@@ -1,0 +1,16 @@
+{{- if .Values.operator.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "whereabouts.fullname" . }}-operator
+  labels:
+    {{- include "whereabouts.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "whereabouts.fullname" . }}-operator
+subjects:
+- kind: ServiceAccount
+  name: {{ include "whereabouts.fullname" . }}-operator
+  namespace: {{ .Values.namespaceOverride | default .Release.Namespace }}
+{{- end }}

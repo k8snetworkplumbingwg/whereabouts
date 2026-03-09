@@ -72,3 +72,15 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+CEL matchCondition expression to bypass webhook validation for the CNI
+plugin and operator ServiceAccounts. Used in ValidatingWebhookConfiguration.
+*/}}
+{{- define "whereabouts.webhookBypassCondition" -}}
+matchConditions:
+- name: bypass-cni-plugin
+  expression: >-
+    !(request.userInfo.username == "system:serviceaccount:{{ .Values.namespaceOverride | default .Release.Namespace }}:{{ .Values.webhook.cniServiceAccountName | default "whereabouts" }}")
+    && !(request.userInfo.username == "system:serviceaccount:{{ .Values.namespaceOverride | default .Release.Namespace }}:{{ include "whereabouts.fullname" . }}-operator")
+{{- end }}

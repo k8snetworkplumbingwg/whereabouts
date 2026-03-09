@@ -20,7 +20,8 @@ package v1alpha1
 import (
 	context "context"
 
-	whereaboutscnicncfiov1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
+	whereaboutscnicncfiov1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/api/whereabouts.cni.cncf.io/v1alpha1"
+	applyconfigurationwhereaboutscnicncfiov1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/applyconfiguration/whereabouts.cni.cncf.io/v1alpha1"
 	scheme "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/clientset/versioned/scheme"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
@@ -46,18 +47,21 @@ type NodeSlicePoolInterface interface {
 	List(ctx context.Context, opts v1.ListOptions) (*whereaboutscnicncfiov1alpha1.NodeSlicePoolList, error)
 	Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error)
 	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *whereaboutscnicncfiov1alpha1.NodeSlicePool, err error)
+	Apply(ctx context.Context, nodeSlicePool *applyconfigurationwhereaboutscnicncfiov1alpha1.NodeSlicePoolApplyConfiguration, opts v1.ApplyOptions) (result *whereaboutscnicncfiov1alpha1.NodeSlicePool, err error)
+	// Add a +genclient:noStatus comment above the type to avoid generating ApplyStatus().
+	ApplyStatus(ctx context.Context, nodeSlicePool *applyconfigurationwhereaboutscnicncfiov1alpha1.NodeSlicePoolApplyConfiguration, opts v1.ApplyOptions) (result *whereaboutscnicncfiov1alpha1.NodeSlicePool, err error)
 	NodeSlicePoolExpansion
 }
 
 // nodeSlicePools implements NodeSlicePoolInterface
 type nodeSlicePools struct {
-	*gentype.ClientWithList[*whereaboutscnicncfiov1alpha1.NodeSlicePool, *whereaboutscnicncfiov1alpha1.NodeSlicePoolList]
+	*gentype.ClientWithListAndApply[*whereaboutscnicncfiov1alpha1.NodeSlicePool, *whereaboutscnicncfiov1alpha1.NodeSlicePoolList, *applyconfigurationwhereaboutscnicncfiov1alpha1.NodeSlicePoolApplyConfiguration]
 }
 
 // newNodeSlicePools returns a NodeSlicePools
 func newNodeSlicePools(c *WhereaboutsV1alpha1Client, namespace string) *nodeSlicePools {
 	return &nodeSlicePools{
-		gentype.NewClientWithList[*whereaboutscnicncfiov1alpha1.NodeSlicePool, *whereaboutscnicncfiov1alpha1.NodeSlicePoolList](
+		gentype.NewClientWithListAndApply[*whereaboutscnicncfiov1alpha1.NodeSlicePool, *whereaboutscnicncfiov1alpha1.NodeSlicePoolList, *applyconfigurationwhereaboutscnicncfiov1alpha1.NodeSlicePoolApplyConfiguration](
 			"nodeslicepools",
 			c.RESTClient(),
 			scheme.ParameterCodec,

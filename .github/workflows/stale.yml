@@ -12,7 +12,7 @@ jobs:
       issues: write
       pull-requests: write
     steps:
-      - uses: actions/stale@v10
+      - uses: actions/stale@v10.2.0 # v10.2.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           

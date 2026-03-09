@@ -1,5 +1,9 @@
 name: "Push helm chart on release"
 
+permissions:
+  contents: read
+  packages: write
+
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository }}
 
@@ -8,16 +12,32 @@ on:
     tags:
       - v*
 jobs:
+  test:
+    name: Run tests before release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6.0.2 # v6.0.2
+
+      - name: Install Go
+        uses: actions/setup-go@v6.3.0 # v6.3.0
+        with:
+          go-version-file: go.mod
+
+      - name: Build and Test
+        run: make test
+
   package-and-push-helm-chart:
-    runs-on: ubuntu-22.04
+    needs: [test]
+    runs-on: ubuntu-latest
     steps:
       - name: install helm
-        uses: azure/setup-helm@v4.3.1
+        uses: azure/setup-helm@v4.3.1 # v4.3.1
         with:
           version: latest
 
       - name: Check out the repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@v6.0.2 # v6.0.2
       
       - name: update chart
         env:
