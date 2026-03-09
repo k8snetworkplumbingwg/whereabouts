@@ -7,39 +7,38 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 )
 
-// WaitForStatefulSetGone ...
+// WaitForStatefulSetGone waits until the named StatefulSet and its pods are deleted.
 func WaitForStatefulSetGone(ctx context.Context, cs *kubernetes.Clientset, namespace, serviceName string, labelSelector string, timeout time.Duration) error {
 	return wait.PollUntilContextTimeout(ctx, time.Second, timeout, true, isStatefulSetGone(ctx, cs, serviceName, namespace, labelSelector))
 }
 
 func isStatefulSetGone(ctx context.Context, cs *kubernetes.Clientset, serviceName string, namespace string, labelSelector string) wait.ConditionWithContextFunc {
 	return func(context.Context) (done bool, err error) {
-		statefulSet, err := cs.AppsV1().StatefulSets(namespace).Get(ctx, serviceName, metav1.GetOptions{})
-		if err != nil && !k8serrors.IsNotFound(err) {
-			return false, fmt.Errorf("something weird happened with the stateful set whose status is: [%s]. Errors: %w", statefulSet.Status.String(), err)
+		_, err = cs.AppsV1().StatefulSets(namespace).Get(ctx, serviceName, metav1.GetOptions{})
+		if apierrors.IsNotFound(err) {
+			// StatefulSet fully deleted — verify associated pods are also gone.
+			associatedPods, listErr := cs.CoreV1().Pods(namespace).List(ctx, selectViaLabels(labelSelector))
+			if listErr != nil {
+				return false, listErr
+			}
+			return areAssociatedPodsGone(associatedPods), nil
 		}
-
-		associatedPods, err := cs.CoreV1().Pods(namespace).List(ctx, selectViaLabels(labelSelector))
 		if err != nil {
-			return false, err
+			return false, fmt.Errorf("failed to get stateful set %q: %w", serviceName, err)
 		}
-
-		return isStatefulSetEmpty(statefulSet) && areAssociatedPodsGone(associatedPods), nil
+		// StatefulSet still exists (possibly with DeletionTimestamp) — keep waiting.
+		return false, nil
 	}
 }
 
 func selectViaLabels(labelSelector string) metav1.ListOptions {
 	return metav1.ListOptions{LabelSelector: labelSelector}
-}
-
-func isStatefulSetEmpty(statefulSet *appsv1.StatefulSet) bool {
-	return statefulSet.Status.CurrentReplicas == int32(0)
 }
 
 func areAssociatedPodsGone(pods *corev1.PodList) bool {

@@ -1,0 +1,13 @@
+# Default kustomization — combines all components for deployment.
+# This project uses OPA cert-controller for TLS rotation instead of cert-manager.
+# Webhook TLS is managed by the controller's embedded certrotator.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: kube-system
+namePrefix: whereabouts-
+resources:
+- ../crd
+- ../rbac
+- ../manager
+- ../webhook
+- ../daemonset

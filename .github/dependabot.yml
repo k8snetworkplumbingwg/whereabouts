@@ -4,21 +4,40 @@ updates:
   - package-ecosystem: gomod
     directory: /
     schedule:
-      interval: daily
+      interval: weekly
     groups:
       k8s:
         patterns: [ "k8s.io/*", "sigs.k8s.io/*" ]
         update-types: [ "major", "minor", "patch" ]
+      containernetworking:
+        patterns: [ "github.com/containernetworking/*" ]
       other-go-modules:
         patterns: [ "*" ]
-        exclude-patterns: 
+        exclude-patterns:
           - "k8s.io/*"
           - "sigs.k8s.io/*"
+          - "github.com/containernetworking/*"
+    labels:
+      - "dependencies"
+      - "go"
   - package-ecosystem: docker
     directory: /
     schedule:
-      interval: daily
+      interval: weekly
+    labels:
+      - "dependencies"
+      - "docker"
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: daily
+      interval: weekly
+    labels:
+      - "dependencies"
+      - "ci"
+  - package-ecosystem: github-actions
+    directory: /.github/workflows
+    schedule:
+      interval: weekly
+    labels:
+      - "dependencies"
+      - "ci"
