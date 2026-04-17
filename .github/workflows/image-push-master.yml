@@ -18,7 +18,7 @@ jobs:
 
       - name: Login to Container Registry
         if: github.repository_owner == 'k8snetworkplumbingwg'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -48,7 +48,7 @@ jobs:
 
       - name: Login to Container Registry
         if: github.repository_owner == 'k8snetworkplumbingwg'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -78,7 +78,7 @@ jobs:
 
       - name: Login to Container Registry
         if: github.repository_owner == 'k8snetworkplumbingwg'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
