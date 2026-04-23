@@ -77,7 +77,7 @@ var _ = Describe("Whereabouts functionality", func() {
 			clientInfo, err = wbtestclient.NewClientInfo(config)
 			Expect(err).NotTo(HaveOccurred())
 
-			netAttachDef = util.MacvlanNetworkWithWhereaboutsIPAMNetwork(testNetworkName, testNamespace, ipv4TestRange, []string{}, wbstorage.UnnamedNetwork, true)
+			netAttachDef = util.MacvlanNetworkWithWhereaboutsIPAMNetwork(testNetworkName, testNamespace, ipv4TestRange, []string{}, wbstorage.UnnamedNetwork, true, false)
 
 			By("creating a NetworkAttachmentDefinition for whereabouts")
 			_, err = clientInfo.AddNetAttachDef(netAttachDef)
@@ -179,7 +179,7 @@ var _ = Describe("Whereabouts functionality", func() {
 						testDualStackNetworkName,
 						testNamespace,
 						"",
-						testIPRangesDualStack, wbstorage.UnnamedNetwork, true)
+						testIPRangesDualStack, wbstorage.UnnamedNetwork, true, false)
 
 					By("creating DualStack NetworkAttachmentDefinition for whereabouts")
 					_, err = clientInfo.AddNetAttachDef(netAttachDefDualStack)
@@ -221,7 +221,7 @@ var _ = Describe("Whereabouts functionality", func() {
 						testDualStackNetworkName,
 						testNamespace,
 						ipv4TestRange,
-						testIPRangesDualStack, wbstorage.UnnamedNetwork, true)
+						testIPRangesDualStack, wbstorage.UnnamedNetwork, true, false)
 
 					By("creating DualStack NetworkAttachmentDefinition for whereabouts")
 					_, err = clientInfo.AddNetAttachDef(netAttachDefDualStack)
@@ -445,7 +445,7 @@ var _ = Describe("Whereabouts functionality", func() {
 				BeforeEach(func() {
 					var err error
 					tinyNetwork, err = clientInfo.AddNetAttachDef(
-						util.MacvlanNetworkWithWhereaboutsIPAMNetwork(networkName, namespace, rangeWithTwoIPs, []string{}, wbstorage.UnnamedNetwork, true))
+						util.MacvlanNetworkWithWhereaboutsIPAMNetwork(networkName, namespace, rangeWithTwoIPs, []string{}, wbstorage.UnnamedNetwork, true, false))
 					Expect(err).NotTo(HaveOccurred())
 
 					_, err = clientInfo.ProvisionStatefulSet(statefulSetName, namespace, serviceName, replicaNumber, networkName)
@@ -666,7 +666,7 @@ var _ = Describe("Whereabouts functionality", func() {
 					enableOverlappingRanges), func() {
 					BeforeEach(func() {
 						netAttachDef2 = util.MacvlanNetworkWithWhereaboutsIPAMNetwork(testNetwork2Name, testNamespace,
-							ipv4TestRangeOverlapping, []string{}, "", enableOverlappingRanges)
+							ipv4TestRangeOverlapping, []string{}, "", enableOverlappingRanges, false)
 
 						By("creating a second NetworkAttachmentDefinition for whereabouts")
 						_, err := clientInfo.AddNetAttachDef(netAttachDef2)
@@ -754,9 +754,9 @@ var _ = Describe("Whereabouts functionality", func() {
 				)
 
 				netAttachDef2 = util.MacvlanNetworkWithWhereaboutsIPAMNetwork(testNetwork2Name, testNamespace,
-					ipv4TestRange, []string{}, namedNetworkName, true)
+					ipv4TestRange, []string{}, namedNetworkName, true, false)
 				netAttachDef3 = util.MacvlanNetworkWithWhereaboutsIPAMNetwork(testNetwork3Name, testNamespace,
-					ipv4TestRangeOverlapping, []string{}, namedNetworkName, true)
+					ipv4TestRangeOverlapping, []string{}, namedNetworkName, true, false)
 
 				By("creating a second NetworkAttachmentDefinition for whereabouts")
 				_, err = clientInfo.AddNetAttachDef(netAttachDef2)
@@ -890,6 +890,130 @@ var _ = Describe("Whereabouts functionality", func() {
 		})
 
 	})
+	Context("Test setup for multiple pools", func() {
+		const (
+			testNamespace           = "default"
+			testNetworkName         = "wa-nad-multiple"
+			testNetworkSingleIPName = "wa-nad-multiple-single-ip"
+		)
+		var (
+			ipv4TestRanges = []string{
+				"10.10.0.0/16",
+				"10.11.0.0/16",
+			}
+		)
+
+		var (
+			clientInfo                         *wbtestclient.ClientInfo
+			netAttachDef, netAttachDefSingleIP *nettypes.NetworkAttachmentDefinition
+			pod                                *core.Pod
+		)
+
+		BeforeEach(func() {
+			var (
+				config *rest.Config
+				err    error
+			)
+
+			config, err = util.ClusterConfig()
+			Expect(err).NotTo(HaveOccurred())
+
+			clientInfo, err = wbtestclient.NewClientInfo(config)
+			Expect(err).NotTo(HaveOccurred())
+
+			netAttachDef = util.MacvlanNetworkWithWhereaboutsIPAMNetwork(testNetworkName, testNamespace, "", ipv4TestRanges, wbstorage.UnnamedNetwork, true, false)
+
+			By("creating a NetworkAttachmentDefinition for whereabouts (defualt)")
+			_, err = clientInfo.AddNetAttachDef(netAttachDef)
+			Expect(err).NotTo(HaveOccurred())
+
+			netAttachDefSingleIP = util.MacvlanNetworkWithWhereaboutsIPAMNetwork(testNetworkSingleIPName, testNamespace, "", ipv4TestRanges, wbstorage.UnnamedNetwork, true, true)
+
+			By("creating a NetworkAttachmentDefinition for whereabouts (single-ip)")
+			_, err = clientInfo.AddNetAttachDef(netAttachDefSingleIP)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		AfterEach(func() {
+			Expect(clientInfo.DelNetAttachDef(netAttachDef)).To(Succeed())
+			Expect(clientInfo.DelNetAttachDef(netAttachDefSingleIP)).To(Succeed())
+		})
+
+		Context("Single pod tests", func() {
+			singlePodName := "whereabouts-multiple-pools"
+			var err error
+
+			AfterEach(func() {
+				By("deleting pod with whereabouts net-attach-def")
+				_ = clientInfo.DeletePod(pod)
+			})
+
+			It("allocates a single pod with a single interface (default behaviour)", func() {
+				singlePodName := singlePodName + "-default"
+
+				By("creating a pod with whereabouts net-attach-def")
+				pod, err = clientInfo.ProvisionPod(
+					singlePodName,
+					testNamespace,
+					util.PodTierLabel(singlePodName),
+					entities.PodNetworkSelectionElements(testNetworkName),
+				)
+				Expect(err).NotTo(HaveOccurred())
+
+				By("checking pod IP is within whereabouts IPAM range")
+				secondaryIfaceIPs, err := retrievers.SecondaryIfaceIPValue(pod, "net1")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(secondaryIfaceIPs).To(HaveLen(len(ipv4TestRanges)))
+
+				for idx := 0; idx < len(ipv4TestRanges); idx++ {
+					Expect(inRange(ipv4TestRanges[idx], secondaryIfaceIPs[idx])).To(Succeed())
+
+					By("verifying allocation")
+					verifyAllocations(clientInfo, ipv4TestRanges[idx], secondaryIfaceIPs[idx], testNamespace, pod.Name, "net1")
+				}
+
+				By("deleting pod")
+				err = clientInfo.DeletePod(pod)
+				Expect(err).NotTo(HaveOccurred())
+
+				for idx := 0; idx < len(ipv4TestRanges); idx++ {
+					By("checking that the IP allocation is removed")
+					verifyNoAllocationsForPodRef(clientInfo, ipv4TestRanges[idx], testNamespace, pod.Name, secondaryIfaceIPs)
+				}
+			})
+
+			It("allocates a single pod with a single interface (singleIP option)", func() {
+				singlePodName := singlePodName + "-single-ip"
+
+				By("creating a pod with whereabouts net-attach-def")
+				pod, err = clientInfo.ProvisionPod(
+					singlePodName,
+					testNamespace,
+					util.PodTierLabel(singlePodName),
+					entities.PodNetworkSelectionElements(testNetworkSingleIPName),
+				)
+				Expect(err).NotTo(HaveOccurred())
+
+				By("checking pod IP is within whereabouts IPAM range")
+				secondaryIfaceIPs, err := retrievers.SecondaryIfaceIPValue(pod, "net1")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(secondaryIfaceIPs).To(HaveLen(1))
+
+				Expect(inRange(ipv4TestRanges[0], secondaryIfaceIPs[0])).To(Succeed())
+
+				By("verifying allocation")
+				verifyAllocations(clientInfo, ipv4TestRanges[0], secondaryIfaceIPs[0], testNamespace, pod.Name, "net1")
+
+				By("deleting pod")
+				err = clientInfo.DeletePod(pod)
+				Expect(err).NotTo(HaveOccurred())
+
+				By("checking that the IP allocation is removed")
+				verifyNoAllocationsForPodRef(clientInfo, ipv4TestRanges[0], testNamespace, pod.Name, secondaryIfaceIPs)
+			})
+		})
+	})
+
 })
 
 func verifyNoAllocationsForPodRef(clientInfo *wbtestclient.ClientInfo, ipv4TestRange, testNamespace, podName string, secondaryIfaceIPs []string) {
