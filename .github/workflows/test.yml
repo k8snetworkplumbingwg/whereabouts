@@ -17,15 +17,15 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
     - name: Checkout code
-      uses: actions/checkout@v6
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
     - name: Install Go
-      uses: actions/setup-go@v6
+      uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
       with:
         go-version-file: go.mod
 
     - name: Run Revive Action by building from repository
-      uses: morphy2k/revive-action@v2.7.8
+      uses: morphy2k/revive-action@bd8016177e3722fe0aad85e22507805641be5bb1 # v2.7.8
 
     - name: Install dependencies
       run: make update-deps
@@ -50,7 +50,7 @@ jobs:
       run: sudo PATH=${PATH}:./bin ./hack/test-go.sh
 
     - name: Send coverage
-      uses: shogo82148/actions-goveralls@v1
+      uses: shogo82148/actions-goveralls@25f5320d970fb565100cf1993ada29be1bb196a1 # v1
       with:
         path-to-profile: coverage.out
         flag-name: Go-${{ matrix.go }}
@@ -64,10 +64,10 @@ jobs:
       NUMBER_OF_COMPUTE_NODES: 5
     steps:
       - name: Checkout code into the Go module directory
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Set up Go version
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
         with:
           go-version-file: go.mod
 
@@ -94,10 +94,10 @@ jobs:
       NUMBER_OF_COMPUTE_NODES: 5
     steps:
       - name: Checkout code into the Go module directory
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Set up Go version
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
         with:
           go-version-file: go.mod
 
