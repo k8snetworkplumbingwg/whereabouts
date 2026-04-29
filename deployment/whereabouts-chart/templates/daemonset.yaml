@@ -48,6 +48,10 @@ spec:
               /token-watcher.sh &
               /ip-control-loop -log-level debug
           env:
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
           - name: NODENAME
             valueFrom:
               fieldRef:

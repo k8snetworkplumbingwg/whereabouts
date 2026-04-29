@@ -125,6 +125,10 @@ spec:
             /ip-control-loop -log-level debug
         image: ghcr.io/k8snetworkplumbingwg/whereabouts:latest
         env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
         - name: NODENAME
           valueFrom:
             fieldRef:
