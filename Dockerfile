@@ -9,6 +9,7 @@ FROM alpine:3.23.4
 LABEL org.opencontainers.image.source=https://github.com/k8snetworkplumbingwg/whereabouts
 COPY --from=0 /go/src/github.com/k8snetworkplumbingwg/whereabouts/bin/whereabouts .
 COPY --from=0 /go/src/github.com/k8snetworkplumbingwg/whereabouts/bin/ip-control-loop .
+COPY --from=0 /go/src/github.com/k8snetworkplumbingwg/whereabouts/bin/ip-reconciler .
 COPY --from=0 /go/src/github.com/k8snetworkplumbingwg/whereabouts/bin/node-slice-controller .
 COPY script/install-cni.sh .
 COPY script/lib.sh .
