@@ -64,8 +64,6 @@ spec:
             mountPath: /host/opt/cni/bin
           - name: cni-net-dir
             mountPath: /host/etc/cni/net.d
-          - name: cron-scheduler-configmap
-            mountPath: /cron-schedule
       volumes:
         - name: cnibin
           hostPath:
@@ -73,13 +71,6 @@ spec:
         - name: cni-net-dir
           hostPath:
             path: {{ .Values.cniConf.confDir }}
-        - name: cron-scheduler-configmap
-          configMap:
-            name: {{ include "whereabouts.fullname" . }}-config
-            defaultMode: 0744
-            items:
-            - key: "cron-expression"
-              path: "config"
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
