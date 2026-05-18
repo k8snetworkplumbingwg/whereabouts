@@ -522,7 +522,13 @@ func (c *Controller) checkForMultiNadMismatch(name, namespace string) error {
 	for _, additionalNad := range nadList {
 		additionalIpamConf, err := ipamConfiguration(additionalNad, "")
 		if err != nil {
-			return err
+			// Other net-attach-defs in the cluster may use a different IPAM
+			// (e.g. host-local, static) or be meta-only with no `ipam` key.
+			// Such NADs are irrelevant to whereabouts node-slice reconciliation
+			// and must not block sync of valid whereabouts NADs.
+			klog.V(4).Infof("skipping net-attach-def %s/%s in multi-NAD check: %s",
+				additionalNad.Namespace, additionalNad.Name, err.Error())
+			continue
 		}
 
 		if len(additionalIpamConf.IPRanges) == 0 {
