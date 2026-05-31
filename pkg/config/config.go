@@ -41,7 +41,7 @@ func LoadIPAMConfig(bytes []byte, envArgs string, extraConfigPaths ...string) (*
 	}
 
 	if n.IPAM == nil {
-		return nil, "", fmt.Errorf("IPAM config missing 'ipam' key")
+		return nil, "", NewMissingIPAMConfigError()
 	} else if !isNetworkRelevant(n.IPAM) {
 		return nil, "", NewInvalidPluginError(n.IPAM.Type)
 	}
@@ -357,6 +357,16 @@ func loadPluginConfig(bytes []byte) (*cnitypes.NetConf, error) {
 func isNetworkRelevant(ipamConfig *types.IPAMConfig) bool {
 	const relevantIPAMType = "whereabouts"
 	return ipamConfig.Type == relevantIPAMType
+}
+
+type MissingIPAMConfigError struct{}
+
+func NewMissingIPAMConfigError() *MissingIPAMConfigError {
+	return &MissingIPAMConfigError{}
+}
+
+func (e *MissingIPAMConfigError) Error() string {
+	return "IPAM config missing 'ipam' key"
 }
 
 type InvalidPluginError struct {
