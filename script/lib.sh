@@ -97,7 +97,7 @@ function generateWhereaboutsConf {
   # (see getNodeName in pkg/storage/kubernetes/ipam.go). We strip the
   # leading /host so the path is correct from the on-host CNI invocation.
   local WHEREABOUTS_CONF_DIR_LITERAL
-  WHEREABOUTS_CONF_DIR_LITERAL=$(dirname "$WHEREABOUTS_KUBECONFIG_LITERAL")
+  WHEREABOUTS_CONF_DIR_LITERAL="${WHEREABOUTS_KUBECONFIG_LITERAL%/*}"
 
   touch $WHEREABOUTS_CONF_FILE
   chmod ${KUBECONFIG_MODE:-600} $WHEREABOUTS_CONF_FILE
