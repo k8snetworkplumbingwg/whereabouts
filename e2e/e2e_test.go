@@ -890,6 +890,46 @@ var _ = Describe("Whereabouts functionality", func() {
 		})
 
 	})
+
+	Context("Reconciler conformance", func() {
+		const (
+			reconcilerDeploymentName = "whereabouts-reconciler"
+			reconcilerNamespace      = "kube-system"
+			reconcilerReadyTimeout   = 60 * time.Second
+		)
+
+		var clientInfo *wbtestclient.ClientInfo
+
+		BeforeEach(func() {
+			config, err := util.ClusterConfig()
+			Expect(err).NotTo(HaveOccurred())
+
+			clientInfo, err = wbtestclient.NewClientInfo(config)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("verifies that the whereabouts-reconciler deployment is available", func() {
+			By("waiting for the whereabouts-reconciler deployment to have an available replica")
+			Expect(wbtestclient.WaitForDeploymentAvailable(
+				context.TODO(),
+				clientInfo.Client,
+				reconcilerNamespace,
+				reconcilerDeploymentName,
+				reconcilerReadyTimeout,
+			)).To(Succeed())
+
+			By("verifying the whereabouts-reconciler pod is running")
+			podList, err := wbtestclient.ListPods(
+				context.TODO(),
+				clientInfo.Client,
+				reconcilerNamespace,
+				"app=whereabouts-reconciler",
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(podList.Items).NotTo(BeEmpty(), "expected at least one whereabouts-reconciler pod")
+			Expect(podList.Items[0].Status.Phase).To(Equal(core.PodRunning))
+		})
+	})
 })
 
 func verifyNoAllocationsForPodRef(clientInfo *wbtestclient.ClientInfo, ipv4TestRange, testNamespace, podName string, secondaryIfaceIPs []string) {

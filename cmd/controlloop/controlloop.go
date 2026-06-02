@@ -5,10 +5,8 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"time"
+	"syscall"
 
-	"github.com/fsnotify/fsnotify"
-	"github.com/go-co-op/gocron/v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -23,21 +21,16 @@ import (
 	wbclient "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/clientset/versioned"
 	wbinformers "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/informers/externalversions"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
-	"github.com/k8snetworkplumbingwg/whereabouts/pkg/reconciler"
 )
 
 const (
-	allNamespaces               = ""
-	controllerName              = "pod-ip-controlloop"
-	reconcilerCronConfiguration = "/cron-schedule/config"
+	allNamespaces  = ""
+	controllerName = "pod-ip-controlloop"
 )
 
 const (
 	_ int = iota
 	couldNotCreateController
-	cronSchedulerCreationError
-	fileWatcherError
-	couldNotCreateConfigWatcherError
 )
 
 const (
@@ -46,16 +39,15 @@ const (
 
 func main() {
 	logLevel := flag.String("log-level", defaultLogLevel, "Specify the pod controller application logging level")
-	if logLevel != nil && logging.GetLoggingLevel().String() != *logLevel {
+	flag.Parse()
+	if logging.GetLoggingLevel().String() != *logLevel {
 		logging.SetLogLevel(*logLevel)
 	}
 	logging.SetLogStderr(true)
 
 	stopChan := make(chan struct{})
-	errorChan := make(chan error)
 	defer close(stopChan)
-	defer close(errorChan)
-	handleSignals(stopChan, os.Interrupt)
+	handleSignals(stopChan, os.Interrupt, syscall.SIGTERM)
 
 	networkController, err := newPodController(stopChan)
 	if err != nil {
@@ -66,53 +58,8 @@ func main() {
 	networkController.Start(stopChan)
 	defer networkController.Shutdown()
 
-	s, err := gocron.NewScheduler(gocron.WithLocation(time.UTC))
-	if err != nil {
-		os.Exit(cronSchedulerCreationError)
-	}
-
-	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		_ = logging.Errorf("error creating configuration watcher: %v", err)
-		os.Exit(fileWatcherError)
-	}
-	defer watcher.Close()
-
-	reconcilerConfigWatcher, err := reconciler.NewConfigWatcher(
-		reconcilerCronConfiguration,
-		s,
-		watcher,
-		func() {
-			reconciler.ReconcileIPs(errorChan)
-		},
-	)
-	if err != nil {
-		os.Exit(couldNotCreateConfigWatcherError)
-	}
-	s.Start()
-
-	const reconcilerConfigMntFile = "/cron-schedule/..data"
-	p := func(e fsnotify.Event) bool {
-		return e.Name == reconcilerConfigMntFile && e.Op&fsnotify.Create == fsnotify.Create
-	}
-	reconcilerConfigWatcher.SyncConfiguration(p)
-
-	for {
-		select {
-		case <-stopChan:
-			logging.Verbosef("shutting down network controller")
-			if err := s.Shutdown(); err != nil {
-				_ = logging.Errorf("error shutting : %v", err)
-			}
-			return
-		case err := <-errorChan:
-			if err == nil {
-				logging.Verbosef("reconciler success")
-			} else {
-				logging.Verbosef("reconciler failure: %s", err)
-			}
-		}
-	}
+	<-stopChan
+	logging.Verbosef("shutting down network controller")
 }
 
 func handleSignals(stopChannel chan struct{}, signals ...os.Signal) {
