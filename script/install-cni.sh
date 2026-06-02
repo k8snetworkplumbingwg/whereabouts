@@ -25,6 +25,10 @@ export LAST_KUBE_CA_FILE_MD5SUM="$(get_ca_file_md5sum)"
 generateWhereaboutsConf
 # ---------------- End generate a whereabouts conf
 
+# ----------------- Persist node name for on-host CNI invocations
+generateNodeNameFile
+# ---------------- End persist node name
+
 
 # copy whereabouts to the cni bin dir
 cp -f /whereabouts $CNI_BIN_DIR
