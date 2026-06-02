@@ -1,6 +1,7 @@
 package config
 
 import (
+	nativeerrors "errors"
 	"fmt"
 	"net"
 	"os"
@@ -213,6 +214,19 @@ var _ = Describe("Allocation operations", func() {
 
 		_, _, err := LoadIPAMConfig([]byte(conf), "")
 		Expect(err).To(MatchError(&InvalidPluginError{ipamType: wrongPluginType}))
+	})
+
+	It("throws a typed error when passed a config with no IPAM", func() {
+		conf := `{
+      "cniVersion": "0.3.1",
+      "name": "mynet",
+      "type": "bridge"
+      }`
+
+		_, _, err := LoadIPAMConfig([]byte(conf), "")
+		var missingIPAMConfigErr *MissingIPAMConfigError
+		Expect(nativeerrors.As(err, &missingIPAMConfigErr)).To(BeTrue())
+		Expect(err).To(MatchError("IPAM config missing 'ipam' key"))
 	})
 
 	It("allows for leading zeroes in the range in start/end range format", func() {

@@ -116,6 +116,52 @@ func newNad(name string, networkName string, networkRange string, sliceSize stri
 	}
 }
 
+func newHostLocalNad(name string) *k8snetplumbersv1.NetworkAttachmentDefinition {
+	return &k8snetplumbersv1.NetworkAttachmentDefinition{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: k8snetplumbersv1.SchemeGroupVersion.String(),
+			Kind:       "NetworkAttachmentDefinition",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: metav1.NamespaceDefault,
+		},
+		Spec: k8snetplumbersv1.NetworkAttachmentDefinitionSpec{
+			Config: `
+				{
+					"cniVersion": "0.3.1",
+					"name": "host-local-test",
+					"type": "macvlan",
+					"ipam": {
+						"type": "host-local",
+						"subnet": "10.0.0.0/24"
+					}
+				}`,
+		},
+	}
+}
+
+func newNoIPAMNad(name string) *k8snetplumbersv1.NetworkAttachmentDefinition {
+	return &k8snetplumbersv1.NetworkAttachmentDefinition{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: k8snetplumbersv1.SchemeGroupVersion.String(),
+			Kind:       "NetworkAttachmentDefinition",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: metav1.NamespaceDefault,
+		},
+		Spec: k8snetplumbersv1.NetworkAttachmentDefinitionSpec{
+			Config: `
+				{
+					"cniVersion": "0.3.1",
+					"name": "no-ipam-test",
+					"type": "bridge"
+				}`,
+		},
+	}
+}
+
 func getOwnerRefs(nads []*k8snetplumbersv1.NetworkAttachmentDefinition) []metav1.OwnerReference {
 	if len(nads) == 1 {
 		return []metav1.OwnerReference{
@@ -448,6 +494,26 @@ func TestCreatesNodeSlicePoolsWithNodes(t *testing.T) {
 	f.kubeobjects = append(f.kubeobjects, node1, node2)
 	f.nadObjects = append(f.nadObjects, nad)
 	f.expectNodeSlicePoolCreateAction(nodeSlicePool)
+
+	f.run(context.TODO(), getKey(nad, t))
+}
+
+func TestSkipsHostLocalNAD(t *testing.T) {
+	f := newFixture(t)
+	nad := newHostLocalNad("host-local-test")
+
+	f.nadLister = append(f.nadLister, nad)
+	f.nadObjects = append(f.nadObjects, nad)
+
+	f.run(context.TODO(), getKey(nad, t))
+}
+
+func TestSkipsNADWithoutIPAM(t *testing.T) {
+	f := newFixture(t)
+	nad := newNoIPAMNad("no-ipam-test")
+
+	f.nadLister = append(f.nadLister, nad)
+	f.nadObjects = append(f.nadObjects, nad)
 
 	f.run(context.TODO(), getKey(nad, t))
 }

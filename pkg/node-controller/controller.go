@@ -338,6 +338,10 @@ func (c *Controller) syncHandler(ctx context.Context, key string) error {
 	//nad does exist so did it change node_slice_range or slice_size
 	ipamConf, err := ipamConfiguration(nad, "")
 	if err != nil {
+		if isNotWhereaboutsIPAMConfig(err) {
+			logger.V(4).Info("skipping non-whereabouts net-attach-def", "error", err)
+			return nil
+		}
 		return err
 	}
 
@@ -507,6 +511,10 @@ func (c *Controller) checkForMultiNadMismatch(name, namespace string) error {
 	}
 	ipamConf, err := ipamConfiguration(nad, "")
 	if err != nil {
+		if isNotWhereaboutsIPAMConfig(err) {
+			klog.V(4).Infof("skipping net-attach-def %s/%s in multi-NAD check: %s", namespace, name, err.Error())
+			return nil
+		}
 		return err
 	}
 
@@ -522,7 +530,13 @@ func (c *Controller) checkForMultiNadMismatch(name, namespace string) error {
 	for _, additionalNad := range nadList {
 		additionalIpamConf, err := ipamConfiguration(additionalNad, "")
 		if err != nil {
-			return err
+			// Other net-attach-defs in the cluster may use a different IPAM
+			// (e.g. host-local, static) or be meta-only with no `ipam` key.
+			// Such NADs are irrelevant to whereabouts node-slice reconciliation
+			// and must not block sync of valid whereabouts NADs.
+			klog.V(4).Infof("skipping net-attach-def %s/%s in multi-NAD check: %s",
+				additionalNad.Namespace, additionalNad.Name, err.Error())
+			continue
 		}
 
 		if len(additionalIpamConf.IPRanges) == 0 {
@@ -558,6 +572,12 @@ func getSliceName(ipamConf *types.IPAMConfig) string {
 		sliceName = ipamConf.NetworkName
 	}
 	return sliceName
+}
+
+func isNotWhereaboutsIPAMConfig(err error) bool {
+	var invalidPluginErr *config.InvalidPluginError
+	var missingIPAMConfigErr *config.MissingIPAMConfigError
+	return nativeerrors.As(err, &invalidPluginErr) || nativeerrors.As(err, &missingIPAMConfigErr)
 }
 
 // since multiple nads can share a nodeslicepool we need to set multiple owner refs but only
