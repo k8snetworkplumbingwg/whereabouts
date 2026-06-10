@@ -11,6 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/util/retry"
 
 	nettypes "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 	netclient "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/client/clientset/versioned/typed/k8s.cni.cncf.io/v1"
@@ -200,17 +201,22 @@ func (c *ClientInfo) DeleteStatefulSet(namespace string, serviceName string, lab
 }
 
 func (c *ClientInfo) ScaleStatefulSet(statefulSetName string, namespace string, deltaInstance int) error {
-	statefulSet, err := c.Client.AppsV1().StatefulSets(namespace).Get(context.TODO(), statefulSetName, metav1.GetOptions{})
-	if err != nil {
-		return err
-	}
-	newReplicas := *statefulSet.Spec.Replicas + int32(deltaInstance)
-	statefulSet.Spec.Replicas = &newReplicas
+	ctx := context.Background()
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		statefulSet, err := c.Client.AppsV1().StatefulSets(namespace).Get(ctx, statefulSetName, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+		replicas := int32(1)
+		if statefulSet.Spec.Replicas != nil {
+			replicas = *statefulSet.Spec.Replicas
+		}
+		newReplicas := replicas + int32(deltaInstance)
+		statefulSet.Spec.Replicas = &newReplicas
 
-	if _, err := c.Client.AppsV1().StatefulSets(namespace).Update(context.TODO(), statefulSet, metav1.UpdateOptions{}); err != nil {
+		_, err = c.Client.AppsV1().StatefulSets(namespace).Update(ctx, statefulSet, metav1.UpdateOptions{})
 		return err
-	}
-	return nil
+	})
 }
 
 func deleteRightNowAndBlockUntilAssociatedPodsAreGone() metav1.DeleteOptions {
