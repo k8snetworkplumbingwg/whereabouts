@@ -207,7 +207,11 @@ func (c *ClientInfo) ScaleStatefulSet(statefulSetName string, namespace string, 
 		if err != nil {
 			return err
 		}
-		newReplicas := *statefulSet.Spec.Replicas + int32(deltaInstance)
+		replicas := int32(1)
+		if statefulSet.Spec.Replicas != nil {
+			replicas = *statefulSet.Spec.Replicas
+		}
+		newReplicas := replicas + int32(deltaInstance)
 		statefulSet.Spec.Replicas = &newReplicas
 
 		_, err = c.Client.AppsV1().StatefulSets(namespace).Update(ctx, statefulSet, metav1.UpdateOptions{})
