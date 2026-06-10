@@ -4,7 +4,7 @@
 set -eox pipefail
 
 GO=${GO:-go}
-SKIP_STATIC_CHECK=$false
+SKIP_STATIC_CHECK=false
 #parse args
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -24,14 +24,14 @@ ${GO} vet --tags=test ./cmd/... ./pkg/...
 
 BASEDIR=$(pwd)
 
-if [ $SKIP_STATIC_CHECK ]
+if [ "$SKIP_STATIC_CHECK" = true ]
 then
     echo "Skipped golang staticcheck"
 else
   echo "Installing golang staticcheck ..."
-  GOBIN=${BASEDIR}/bin go install honnef.co/go/tools/cmd/staticcheck@latest
+  GOBIN="${BASEDIR}/bin" go install honnef.co/go/tools/cmd/staticcheck@latest
   echo "Running golang staticcheck ..."
-  ${BASEDIR}/bin/staticcheck --tags=test -checks=all,-SA1019,-ST1000,-ST1003,-ST1020,-ST1023 ./...
+  "${BASEDIR}/bin/staticcheck" --tags=test -checks=all,-SA1019,-ST1000,-ST1003,-ST1020,-ST1023 ./...
 fi
 
 echo "Running go tests..."
