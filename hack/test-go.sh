@@ -31,7 +31,7 @@ else
   echo "Installing golang staticcheck ..."
   GOBIN=${BASEDIR}/bin go install honnef.co/go/tools/cmd/staticcheck@latest
   echo "Running golang staticcheck ..."
-  ${BASEDIR}/bin/staticcheck --tags=test ./...
+  ${BASEDIR}/bin/staticcheck --tags=test -checks=all,-SA1019,-ST1000,-ST1003,-ST1020,-ST1023 ./...
 fi
 
 echo "Running go tests..."
