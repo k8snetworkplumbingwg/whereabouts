@@ -905,3 +905,57 @@ var _ = Describe("allocationKeyToIP", func() {
 		Expect(ip).To(BeNil())
 	})
 })
+
+var _ = Describe("computePoolStats overlapping counts", func() {
+	It("should not double-count overlapping reservations for same IP but different networks", func() {
+		scheme := newTestScheme()
+		
+		pool1 := &whereaboutsv1alpha1.IPPool{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "pool-1",
+				Namespace: "default",
+			},
+			Spec: whereaboutsv1alpha1.IPPoolSpec{
+				Range: "10.0.0.0/24",
+				Allocations: map[string]whereaboutsv1alpha1.IPAllocation{
+					"1": {PodRef: "default/pod1"}, // 10.0.0.1
+				},
+			},
+		}
+
+		res1 := &whereaboutsv1alpha1.OverlappingRangeIPReservation{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "10-0-0-1-net1",
+				Namespace: "default",
+			},
+			Spec: whereaboutsv1alpha1.OverlappingRangeIPReservationSpec{
+				ContainerID: "pod1",
+				PodRef:      "default/pod1",
+			},
+		}
+
+		res2 := &whereaboutsv1alpha1.OverlappingRangeIPReservation{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "10-0-0-1-net2",
+				Namespace: "default",
+			},
+			Spec: whereaboutsv1alpha1.OverlappingRangeIPReservationSpec{
+				ContainerID: "pod2",
+				PodRef:      "default/pod2",
+			},
+		}
+
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(pool1, res1, res2).
+			Build()
+
+		reconciler := &IPPoolReconciler{
+			client:   fakeClient,
+			
+		}
+
+		reconciler.computePoolStats(context.Background(), pool1, 0, 0)
+		Expect(pool1.Status.OverlappingReservations).To(Equal(int32(1)))
+	})
+})

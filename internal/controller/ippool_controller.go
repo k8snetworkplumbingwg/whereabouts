@@ -116,10 +116,15 @@ func (r *IPPoolReconciler) computePoolStats(ctx context.Context, pool *whereabou
 	}
 
 	var count int32
+	seenIPs := make(map[string]struct{})
 	for i := range reservations.Items {
 		res := &reservations.Items[i]
 		resIP := denormalizeIPName(res.Name)
 		if resIP == nil {
+			continue
+		}
+		resIPStr := resIP.String()
+		if _, ok := seenIPs[resIPStr]; ok {
 			continue
 		}
 		// Check if this reservation's IP matches any allocation in the pool.
@@ -127,6 +132,7 @@ func (r *IPPoolReconciler) computePoolStats(ctx context.Context, pool *whereabou
 			poolIP := allocationKeyToIP(pool, key)
 			if poolIP != nil && poolIP.Equal(resIP) {
 				count++
+				seenIPs[resIPStr] = struct{}{}
 				break
 			}
 		}
