@@ -23,6 +23,9 @@ spec:
         name: {{ include "whereabouts.fullname" . }}-reconciler
         {{- include "whereabouts.selectorLabels" . | nindent 8 }}
     spec:
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
       serviceAccountName: {{ include "whereabouts.serviceAccountName" . }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
