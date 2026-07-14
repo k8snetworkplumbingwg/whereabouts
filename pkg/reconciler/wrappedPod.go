@@ -47,7 +47,7 @@ func indexPods(livePodList []v1.Pod, whereaboutsPodNames map[string]void) map[st
 			continue
 		}
 
-		if isPodMarkedForDeletion(pod.Status.Conditions) {
+		if isPodMarkedForDeletion(&pod) {
 			logging.Debugf("Pod %s is marked for deletion; skipping", podRef)
 			continue
 		}
@@ -60,13 +60,15 @@ func indexPods(livePodList []v1.Pod, whereaboutsPodNames map[string]void) map[st
 	return podMap
 }
 
-func isPodMarkedForDeletion(conditions []v1.PodCondition) bool {
-	for _, c := range conditions {
+func isPodMarkedForDeletion(pod *v1.Pod) bool {
+	for _, c := range pod.Status.Conditions {
 		if c.Type == v1.DisruptionTarget && c.Status == v1.ConditionTrue && c.Reason == "DeletionByTaintManager" {
 			return true
 		}
 	}
-	return false
+
+	// If a Pod ran to completion, like a Job, consider it dead
+	return pod.Status.Phase == v1.PodFailed || pod.Status.Phase == v1.PodSucceeded
 }
 
 func getFlatIPSet(pod v1.Pod) (map[string]void, error) {
