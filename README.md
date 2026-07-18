@@ -222,7 +222,7 @@ spec:
 ```
 
 This setup enables the fast IPAM feature to optimize IP allocation for nodes, improving network performance in clusters with high pod density. 
-Please note, you must run a whereabouts controller for this to work. Manifest can be found in deploy/manifests/deployment-node-slice-controller.yaml. 
+Please note, you must run a whereabouts controller for this to work. Manifest can be found in deploy/manifests/node-slice-controller.yaml. 
 You must run your whereabouts daemonset, whereabouts controller in the same namespaces as your network-attachment-definitions. 
 The field in the example `node_slice_size` determines how large of a CIDR to allocate per node and the existence of the field is what triggers
 `Fast IPAM` mode.

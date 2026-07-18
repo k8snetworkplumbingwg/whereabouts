@@ -1,4 +1,4 @@
-.PHONY: build clean docker-build generate-api install-tools test test-skip-static kind update-deps chart-prepare-release chart-push-release
+.PHONY: build clean docker-build generate-api install-tools test test-skip-static kind update-deps chart-prepare-release chart-push-release yamllint
 
 CURPATH=$(PWD)
 BIN_DIR=$(CURPATH)/bin
@@ -38,6 +38,9 @@ kind:
 update-deps:
 	go mod tidy
 	go mod verify
+
+yamllint:
+	yamllint .
 
 $(BIN_DIR):
 	@mkdir -p $(BIN_DIR)

@@ -1,26 +1,44 @@
-# Dont'forget to update deploy/manifests/deployment-node-slice-controller.yaml as well
+---
+# Don't forget to update deploy/manifests/node-slicenode-slicenode-slice-node-slice-controller.yaml as well
 {{- if .Values.nodeSliceController.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "whereabouts.fullname" . }}-controller
-  {{- include "whereabouts.namespace" . | nindent 2 }}
+  name: whereabouts-node-slice-controller
+  namespace: {{ include "whereabouts.namespace" . }}
+  labels:
+    name: whereabouts-controller
+    {{- include "whereabouts.labels" . | nindent 4 }}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: {{ include "whereabouts.fullname" . }}-controller
+      app: whereabouts-controller
+      {{- include "whereabouts.selectorLabels" . | nindent 6 }}
   template:
     metadata:
+    {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
       labels:
-        app: {{ include "whereabouts.fullname" . }}-controller
+        app: whereabouts-controller
+        {{- include "whereabouts.selectorLabels" . | nindent 8 }}
     spec:
+      serviceAccount: {{ include "whereabouts.serviceAccountName" . }}
+      serviceAccountName: {{ include "whereabouts.serviceAccountName" . }}
       {{- with .Values.nodeSliceController.priorityClassName }}
       priorityClassName: {{ . }}
       {{- end }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
-        - command:
-            - /node-slice-controller
+        - name: whereabouts-node-slice-controller
+          image: {{ print .Values.image.registry "/" .Values.image.repository ":" (.Values.image.tag | default .Chart.AppVersion) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/node-slice-controller"]
           env:
             - name: NODENAME
               valueFrom:
@@ -32,62 +50,39 @@ spec:
                 fieldRef:
                   apiVersion: v1
                   fieldPath: metadata.namespace
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
-          name: whereabouts
           resources:
-            {{- toYaml .Values.resources | nindent 12 }}
-          terminationMessagePath: /dev/termination-log
-          terminationMessagePolicy: File
+            {{- toYaml .Values.nodeSliceController.resources | nindent 12 }}
           volumeMounts:
             - mountPath: /host/opt/cni/bin
-              name: cnibin
+              name: cni-bin
             - mountPath: /host/etc/cni/net.d
               name: cni-net-dir
             - mountPath: /cron-schedule
               name: cron-scheduler-configmap
-            - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
-              name: kube-api-access-6kd6k
-              readOnly: true
-      preemptionPolicy: PreemptLowerPriority
-      priority: 0
-      restartPolicy: Always
-      schedulerName: default-scheduler
-      securityContext: {}
-      serviceAccount: {{ include "whereabouts.serviceAccountName" . }}
-      serviceAccountName: {{ include "whereabouts.serviceAccountName" . }}
-      terminationGracePeriodSeconds: 30
       volumes:
-        - hostPath:
+        - name: cni-bin
+          hostPath:
             path: /opt/cni/bin
-            type: ""
-          name: cnibin
-        - hostPath:
+        - name: cni-net-dir
+          hostPath:
             path: /etc/cni/net.d
-            type: ""
-          name: cni-net-dir
-        - configMap:
-            defaultMode: 484
+        - name: cron-scheduler-configmap
+          configMap:
+            name: whereabouts-config
             items:
               - key: cron-expression
                 path: config
-            name: {{ include "whereabouts.fullname" . }}-config
-          name: cron-scheduler-configmap
-        - name: kube-api-access-6kd6k
-          projected:
-            defaultMode: 420
-            sources:
-              - serviceAccountToken:
-                  expirationSeconds: 3607
-                  path: token
-              - configMap:
-                  items:
-                    - key: ca.crt
-                      path: ca.crt
-                  name: kube-root-ca.crt
-              - downwardAPI:
-                  items:
-                    - fieldRef:
-                        apiVersion: v1
-                        fieldPath: metadata.namespace
-                      path: namespace
+            defaultMode: 0744
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
 {{- end}}

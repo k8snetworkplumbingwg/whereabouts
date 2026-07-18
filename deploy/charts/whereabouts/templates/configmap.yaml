@@ -2,10 +2,9 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "whereabouts.fullname" . }}-config
-  {{- include "whereabouts.namespace" . | nindent 2 }}
-  annotations:
-    kubernetes.io/description: |
-      Configmap containing user customizable cronjob schedule
+  name: whereabouts-config
+  namespace: {{ include "whereabouts.namespace" . }}
+  labels:
+    {{- include "whereabouts.labels" . | nindent 4 }}
 data:
-  cron-expression: "30 4 * * *" # Default schedule is once per day at 4:30am. Users may configure this value to their liking.
+  cron-expression: {{ quote .Values.cronExpression }}

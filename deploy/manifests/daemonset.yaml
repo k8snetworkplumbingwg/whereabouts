@@ -1,15 +1,5 @@
-# Dont'forget to update deploy/charts/whereabouts/templates/daemonset.yaml as well
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: whereabouts-config
-  namespace: kube-system
-  annotations:
-    kubectl.io/description: |
-      Configmap containing user customizable cronjob schedule
-data:
-  cron-expression: "30 4 * * *" # Default schedule is once per day at 4:30am. Users may configure this value to their liking.
 ---
+# Don't forget to update deploy/charts/whereabouts/templates/daemonset.yaml as well
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -21,7 +11,7 @@ metadata:
 spec:
   selector:
     matchLabels:
-      name: whereabouts
+      app: whereabouts
   updateStrategy:
     type: RollingUpdate
   template:
@@ -32,48 +22,50 @@ spec:
         name: whereabouts
     spec:
       hostNetwork: true
+      serviceAccount: whereabouts
       serviceAccountName: whereabouts
-      tolerations:
-      - operator: Exists
-        effect: NoSchedule
       containers:
-      - name: whereabouts
-        command: [ "/bin/sh" ]
-        args:
-          - -c
-          - |
-            SLEEP=false source /install-cni.sh
-            /token-watcher.sh &
-            /ip-control-loop -log-level debug
-        image: ghcr.io/k8snetworkplumbingwg/whereabouts:latest
-        env:
-        - name: NODENAME
-          valueFrom:
-            fieldRef:
-              apiVersion: v1
-              fieldPath: spec.nodeName
-        - name: WHEREABOUTS_NAMESPACE
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.namespace
-        resources:
-          requests:
-            cpu: "100m"
-            memory: "100Mi"
-          limits:
-            cpu: "100m"
-            memory: "200Mi"
-        securityContext:
-          privileged: true
-        volumeMounts:
-        - name: cnibin
-          mountPath: /host/opt/cni/bin
-        - name: cni-net-dir
-          mountPath: /host/etc/cni/net.d
+        - name: whereabouts
+          image: ghcr.io/k8snetworkplumbingwg/whereabouts:latest
+          imagePullPolicy: Always
+          command: ["/bin/sh"]
+          args:
+            - -c
+            - |
+              SLEEP=false source /install-cni.sh
+              /token-watcher.sh &
+              /ip-control-loop -log-level debug
+          env:
+            - name: NODENAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+            - name: WHEREABOUTS_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          resources:
+            requests:
+              cpu: 100m
+              memory: 100Mi
+            limits:
+              cpu: 100m
+              memory: 200Mi
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: cni-bin
+              mountPath: /host/opt/cni/bin
+            - name: cni-net-dir
+              mountPath: /host/etc/cni/net.d
       volumes:
-        - name: cnibin
+        - name: cni-bin
           hostPath:
             path: /opt/cni/bin
         - name: cni-net-dir
           hostPath:
             path: /etc/cni/net.d
+      tolerations:
+        - operator: Exists
+          effect: NoSchedule

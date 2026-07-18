@@ -5,7 +5,7 @@ metadata:
   labels:
     app: scale-deployment
 spec:
-  replicas: 10 #use this to modify the number of pods spun up by the scale-test script 
+  replicas: 10  # use this to modify the number of pods spun up by the scale-test script
   selector:
     matchLabels:
       app: scale-pod
@@ -17,9 +17,9 @@ spec:
         app: scale-pod
     spec:
       containers:
-      - name: scale
-        image: nicolaka/netshoot
-        command:
-          - sleep
-          - "3600"
-        imagePullPolicy: IfNotPresent
+        - name: scale
+          image: nicolaka/netshoot
+          command:
+            - sleep
+            - "3600"
+          imagePullPolicy: IfNotPresent

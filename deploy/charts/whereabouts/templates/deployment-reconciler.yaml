@@ -1,17 +1,19 @@
-# Don't forget to update deploy/manifests/deployment-reconciler.yaml as well
+---
+# Don't forget to update deploy/manifests/reconciler-deployment.yaml as well
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "whereabouts.fullname" . }}-reconciler
-  {{- include "whereabouts.namespace" . | nindent 2 }}
+  name: whereabouts-reconciler
+  namespace: {{ include "whereabouts.namespace" . }}
   labels:
+    name: whereabouts-reconciler
     {{- include "whereabouts.labels" . | nindent 4 }}
 spec:
   # replicas must not be set to more than 1; there is no leader election, so running multiple replicas would cause duplicate reconciliation.
   replicas: 1
   selector:
     matchLabels:
-      name: {{ include "whereabouts.fullname" . }}-reconciler
+      app: whereabouts-reconciler
       {{- include "whereabouts.selectorLabels" . | nindent 6 }}
   template:
     metadata:
@@ -20,37 +22,54 @@ spec:
         {{- toYaml . | nindent 8 }}
     {{- end }}
       labels:
-        name: {{ include "whereabouts.fullname" . }}-reconciler
+        app: whereabouts-reconciler
         {{- include "whereabouts.selectorLabels" . | nindent 8 }}
     spec:
+      serviceAccount: {{ include "whereabouts.serviceAccountName" . }}
       serviceAccountName: {{ include "whereabouts.serviceAccountName" . }}
+      {{- with .Values.reconciler.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
-        - name: reconciler
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        - name: whereabouts-reconciler
+          image: {{ print .Values.image.registry "/" .Values.image.repository ":" (.Values.image.tag | default .Chart.AppVersion) }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: [ "/ip-reconciler" ]
+          command: ["/ip-reconciler"]
           args:
             - -log-level
             - {{ .Values.reconciler.logLevel }}
           env:
-          - name: WHEREABOUTS_NAMESPACE
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.namespace
+            - name: WHEREABOUTS_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
           resources:
             {{- toYaml .Values.reconciler.resources | nindent 12 }}
           volumeMounts:
-          - name: cron-scheduler-configmap
-            mountPath: /cron-schedule
+            - mountPath: /cron-schedule
+              name: cron-scheduler-configmap
       volumes:
         - name: cron-scheduler-configmap
           configMap:
-            name: {{ include "whereabouts.fullname" . }}-config
-            defaultMode: 0744
+            name: whereabouts-config
             items:
-            - key: "cron-expression"
-              path: "config"
+              - key: cron-expression
+                path: config
+            defaultMode: 0744
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

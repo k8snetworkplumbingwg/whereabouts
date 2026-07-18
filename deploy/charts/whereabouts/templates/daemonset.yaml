@@ -1,15 +1,17 @@
-# Dont'forget to update deploy/manifests/daemonset.yaml as well
+---
+# Don't forget to update deploy/manifests/daemonset.yaml as well
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: {{ include "whereabouts.fullname" . }}
-  {{- include "whereabouts.namespace" . | nindent 2 }}
+  name: whereabouts
+  namespace: {{ include "whereabouts.namespace" . }}
   labels:
+    name: whereabouts
     {{- include "whereabouts.labels" . | nindent 4 }}
 spec:
   selector:
     matchLabels:
-      name: whereabouts
+      app: whereabouts
       {{- include "whereabouts.selectorLabels" . | nindent 6 }}
   updateStrategy:
     type: {{ .Values.updateStrategy }}
@@ -20,10 +22,11 @@ spec:
         {{- toYaml . | nindent 8 }}
     {{- end }}
       labels:
-        name: whereabouts
+        app: whereabouts
         {{- include "whereabouts.selectorLabels" . | nindent 8 }}
     spec:
       hostNetwork: true
+      serviceAccount: {{ include "whereabouts.serviceAccountName" . }}
       serviceAccountName: {{ include "whereabouts.serviceAccountName" . }}
       {{- with .Values.priorityClassName }}
       priorityClassName: {{ . }}
@@ -35,12 +38,10 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
-        - name: {{ .Chart.Name }}
-          securityContext:
-            {{- toYaml .Values.securityContext | nindent 12 }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        - name: whereabouts
+          image: {{ print .Values.image.registry "/" .Values.image.repository ":" (.Values.image.tag | default .Chart.AppVersion) }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: [ "/bin/sh" ]
+          command: ["/bin/sh"]
           args:
             - -c
             - |
@@ -48,24 +49,27 @@ spec:
               /token-watcher.sh &
               /ip-control-loop -log-level debug
           env:
-          - name: NODENAME
-            valueFrom:
-              fieldRef:
-                apiVersion: v1
-                fieldPath: spec.nodeName
-          - name: WHEREABOUTS_NAMESPACE
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.namespace
+            - name: NODENAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+            - name: WHEREABOUTS_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
           volumeMounts:
-          - name: cnibin
-            mountPath: /host/opt/cni/bin
-          - name: cni-net-dir
-            mountPath: /host/etc/cni/net.d
+            - name: cni-bin
+              mountPath: /host/opt/cni/bin
+            - name: cni-net-dir
+              mountPath: /host/etc/cni/net.d
       volumes:
-        - name: cnibin
+        - name: cni-bin
           hostPath:
             path: {{ .Values.cniConf.binDir }}
         - name: cni-net-dir

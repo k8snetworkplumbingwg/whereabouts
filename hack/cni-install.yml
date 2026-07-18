@@ -32,26 +32,26 @@ spec:
       nodeSelector:
         kubernetes.io/arch: amd64
       tolerations:
-      - operator: Exists
-        effect: NoSchedule
+        - operator: Exists
+          effect: NoSchedule
       containers:
-      - name: install-cni-plugins
-        image: alpine
-        command: ["/bin/sh", "/scripts/install_cni.sh"]
-        resources:
-          requests:
-            cpu: "100m"
-            memory: "50Mi"
-          limits:
-            cpu: "100m"
-            memory: "50Mi"
-        securityContext:
-          privileged: true
-        volumeMounts:
-        - name: cni-bin
-          mountPath: /host/opt/cni/bin
-        - name: scripts
-          mountPath: /scripts
+        - name: install-cni-plugins
+          image: alpine
+          command: ["/bin/sh", "/scripts/install_cni.sh"]
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "50Mi"
+            limits:
+              cpu: "100m"
+              memory: "50Mi"
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: cni-bin
+              mountPath: /host/opt/cni/bin
+            - name: scripts
+              mountPath: /scripts
       volumes:
         - name: cni-bin
           hostPath:
@@ -60,5 +60,5 @@ spec:
           configMap:
             name: cni-install-sh
             items:
-            - key: install_cni.sh
-              path: install_cni.sh
+              - key: install_cni.sh
+                path: install_cni.sh

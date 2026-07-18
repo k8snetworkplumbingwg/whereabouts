@@ -1,4 +1,13 @@
-# Don't forget to update deploy/charts/whereabouts/templates/deployment-reconciler.yaml as well
+---
+# Don't forget to update deployment/whereabouts-chart/templates/reconciler.yaml as well
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: whereabouts-config
+  namespace: kube-system
+data:
+  cron-expression: "30 4 * * *"  # Default schedule is each day at 4:30am. Users may change this value to their liking.
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -8,11 +17,12 @@ metadata:
     tier: node
     app: whereabouts-reconciler
 spec:
-  # replicas must not be set to more than 1; there is no leader election, so running multiple replicas would cause duplicate reconciliation.
+  # replicas must not be set to more than 1
+  # there is no leader election, so running multiple replicas would cause duplicate reconciliation.
   replicas: 1
   selector:
     matchLabels:
-      name: whereabouts-reconciler
+      app: whereabouts-reconciler
   template:
     metadata:
       labels:
@@ -20,34 +30,37 @@ spec:
         app: whereabouts-reconciler
         name: whereabouts-reconciler
     spec:
+      serviceAccount: whereabouts
       serviceAccountName: whereabouts
       containers:
-      - name: whereabouts-reconciler
-        command: [ "/ip-reconciler" ]
-        args:
-          - -log-level
-          - debug
-        image: ghcr.io/k8snetworkplumbingwg/whereabouts:latest
-        env:
-        - name: WHEREABOUTS_NAMESPACE
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.namespace
-        resources:
-          requests:
-            cpu: "100m"
-            memory: "50Mi"
-          limits:
-            cpu: "100m"
-            memory: "50Mi"
-        volumeMounts:
-        - name: cron-scheduler-configmap
-          mountPath: /cron-schedule
+        - name: whereabouts-reconciler
+          image: ghcr.io/k8snetworkplumbingwg/whereabouts:latest
+          imagePullPolicy: Always
+          command: ["/ip-reconciler"]
+          args:
+            - -log-level
+            - debug
+          env:
+            - name: WHEREABOUTS_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+          resources:
+            requests:
+              cpu: 100m
+              memory: 50Mi
+            limits:
+              cpu: 100m
+              memory: 50Mi
+          volumeMounts:
+            - mountPath: /cron-schedule
+              name: cron-scheduler-configmap
       volumes:
-      - name: cron-scheduler-configmap
-        configMap:
-          name: whereabouts-config
-          defaultMode: 0744
-          items:
-          - key: "cron-expression"
-            path: "config"
+        - name: cron-scheduler-configmap
+          configMap:
+            name: whereabouts-config
+            items:
+              - key: cron-expression
+                path: config
+            defaultMode: 0744

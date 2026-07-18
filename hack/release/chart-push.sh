@@ -11,7 +11,7 @@ GITHUB_TAG=${GITHUB_TAG:-}
 BASE=${PWD}
 HELM_CHART=${BASE}/deploy/charts/whereabouts
 HELM_CHART_VERSION=${GITHUB_TAG#"v"}
-HELM_CHART_TARBALL="whereabouts-chart-${HELM_CHART_VERSION}.tgz"
+HELM_CHART_TARBALL="whereabouts-${HELM_CHART_VERSION}.tgz"
 
 # make sure helm is installed
 set +e

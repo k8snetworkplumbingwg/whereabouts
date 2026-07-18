@@ -1,10 +1,13 @@
-# Dont'forget to update deploy/charts/whereabouts/templates/deployment-node-slice-controller.yaml as well
+---
+# Don't forget to update deploy/charts/whereabouts/templates/node-slice-controller.yaml as well
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: whereabouts-controller
+  name: whereabouts-node-slice-controller
   namespace: kube-system
 spec:
+  # replicas must not be set to more than 1; there is no leader election, so running
+  # multiple replicas would cause duplicate reconciliation.
   replicas: 1
   selector:
     matchLabels:
@@ -14,9 +17,13 @@ spec:
       labels:
         app: whereabouts-controller
     spec:
+      serviceAccount: whereabouts
+      serviceAccountName: whereabouts
       containers:
-        - command:
-            - /node-slice-controller
+        - name: whereabouts-node-slice-controller
+          image: ghcr.io/k8snetworkplumbingwg/whereabouts:latest
+          imagePullPolicy: Always
+          command: ["/node-slice-controller"]
           env:
             - name: NODENAME
               valueFrom:
@@ -28,66 +35,31 @@ spec:
                 fieldRef:
                   apiVersion: v1
                   fieldPath: metadata.namespace
-          image: ghcr.io/k8snetworkplumbingwg/whereabouts:latest
-          name: whereabouts
           resources:
-            limits:
-              cpu: 100m
-              memory: 200Mi
             requests:
               cpu: 100m
               memory: 100Mi
-          terminationMessagePath: /dev/termination-log
-          terminationMessagePolicy: File
+            limits:
+              cpu: 100m
+              memory: 200Mi
           volumeMounts:
             - mountPath: /host/opt/cni/bin
-              name: cnibin
+              name: cni-bin
             - mountPath: /host/etc/cni/net.d
               name: cni-net-dir
             - mountPath: /cron-schedule
               name: cron-scheduler-configmap
-            - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
-              name: kube-api-access-6kd6k
-              readOnly: true
-      preemptionPolicy: PreemptLowerPriority
-      priority: 0
-      restartPolicy: Always
-      schedulerName: default-scheduler
-      securityContext: {}
-      serviceAccount: whereabouts
-      serviceAccountName: whereabouts
-      terminationGracePeriodSeconds: 30
       volumes:
-        - hostPath:
+        - name: cni-bin
+          hostPath:
             path: /opt/cni/bin
-            type: ""
-          name: cnibin
-        - hostPath:
+        - name: cni-net-dir
+          hostPath:
             path: /etc/cni/net.d
-            type: ""
-          name: cni-net-dir
-        - configMap:
-            defaultMode: 484
+        - name: cron-scheduler-configmap
+          configMap:
+            name: whereabouts-config
             items:
               - key: cron-expression
                 path: config
-            name: whereabouts-config
-          name: cron-scheduler-configmap
-        - name: kube-api-access-6kd6k
-          projected:
-            defaultMode: 420
-            sources:
-              - serviceAccountToken:
-                  expirationSeconds: 3607
-                  path: token
-              - configMap:
-                  items:
-                    - key: ca.crt
-                      path: ca.crt
-                  name: kube-root-ca.crt
-              - downwardAPI:
-                  items:
-                    - fieldRef:
-                        apiVersion: v1
-                        fieldPath: metadata.namespace
-                      path: namespace
+            defaultMode: 0744

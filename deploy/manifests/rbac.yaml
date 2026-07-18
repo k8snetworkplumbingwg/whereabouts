@@ -1,4 +1,5 @@
-# Dont'forget to update deploy/charts/whereabouts/templates/rbac.yaml as well
+---
+# Dont'forget to update deployment/whereabouts-chart/templates/daemonset.yaml as well
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -6,7 +7,6 @@ metadata:
   namespace: kube-system
 ---
 kind: ClusterRoleBinding
-apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: whereabouts
 roleRef:
@@ -14,63 +14,66 @@ roleRef:
   kind: ClusterRole
   name: whereabouts-cni
 subjects:
-- kind: ServiceAccount
-  name: whereabouts
-  namespace: kube-system
+  - kind: ServiceAccount
+    name: whereabouts
+    namespace: kube-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: whereabouts-cni
 rules:
-- apiGroups:
-  - whereabouts.cni.cncf.io
-  resources:
-  - ippools
-  - overlappingrangeipreservations
-  - nodeslicepools
-  verbs:
-  - get
-  - list
-  - watch
-  - create
-  - update
-  - patch
-  - delete
-- apiGroups:
-  - coordination.k8s.io
-  resources:
-  - leases
-  verbs:
-  - '*'
-- apiGroups: [""]
-  resources:
-  - pods
-  verbs:
-  - list
-  - watch
-  - get
-- apiGroups: [""]
-  resources:
-  - nodes
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups: ["k8s.cni.cncf.io"]
-  resources:
-    - network-attachment-definitions
-  verbs:
-    - get
-    - list
-    - watch
-- apiGroups:
-  - ""
-  - events.k8s.io
-  resources:
-    - events
-  verbs:
-  - create
-  - patch
-  - update
-  - get
+  - apiGroups:
+      - whereabouts.cni.cncf.io
+    resources:
+      - ippools
+      - overlappingrangeipreservations
+      - nodeslicepools
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - '*'
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - "k8s.cni.cncf.io"
+    resources:
+      - network-attachment-definitions
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+      - events.k8s.io
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+      - update
+      - get
