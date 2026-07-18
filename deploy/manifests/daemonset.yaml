@@ -1,89 +1,11 @@
-# Dont'forget to update deployment/whereabouts-chart/templates/daemonset.yaml as well
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: whereabouts
-  namespace: kube-system
----
-kind: ClusterRoleBinding
-apiVersion: rbac.authorization.k8s.io/v1
-metadata:
-  name: whereabouts
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: whereabouts-cni
-subjects:
-- kind: ServiceAccount
-  name: whereabouts
-  namespace: kube-system
-
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: whereabouts-cni
-rules:
-- apiGroups:
-  - whereabouts.cni.cncf.io
-  resources:
-  - ippools
-  - overlappingrangeipreservations
-  - nodeslicepools
-  verbs:
-  - get
-  - list
-  - watch
-  - create
-  - update
-  - patch
-  - delete
-- apiGroups:
-  - coordination.k8s.io
-  resources:
-  - leases
-  verbs:
-  - '*'
-- apiGroups: [""]
-  resources:
-  - pods
-  verbs:
-  - list
-  - watch
-  - get
-- apiGroups: [""]
-  resources:
-  - nodes
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups: ["k8s.cni.cncf.io"]
-  resources:
-    - network-attachment-definitions
-  verbs:
-    - get
-    - list
-    - watch
-- apiGroups:
-  - ""
-  - events.k8s.io
-  resources:
-    - events
-  verbs:
-  - create
-  - patch
-  - update
-  - get
-
----
+# Dont'forget to update deploy/charts/whereabouts/templates/daemonset.yaml as well
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: whereabouts-config
   namespace: kube-system
   annotations:
-    kubernetes.io/description: |
+    kubectl.io/description: |
       Configmap containing user customizable cronjob schedule
 data:
   cron-expression: "30 4 * * *" # Default schedule is once per day at 4:30am. Users may configure this value to their liking.

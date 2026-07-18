@@ -1,19 +1,23 @@
-# Dont'forget to update deployment/whereabouts-chart/templates/node-slice-controller.yaml as well
+# Dont'forget to update deploy/manifests/deployment-node-slice-controller.yaml as well
+{{- if .Values.nodeSliceController.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: whereabouts-controller
-  namespace: kube-system
+  name: {{ include "whereabouts.fullname" . }}-controller
+  {{- include "whereabouts.namespace" . | nindent 2 }}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: whereabouts-controller
+      app: {{ include "whereabouts.fullname" . }}-controller
   template:
     metadata:
       labels:
-        app: whereabouts-controller
+        app: {{ include "whereabouts.fullname" . }}-controller
     spec:
+      {{- with .Values.nodeSliceController.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
       containers:
         - command:
             - /node-slice-controller
@@ -28,15 +32,10 @@ spec:
                 fieldRef:
                   apiVersion: v1
                   fieldPath: metadata.namespace
-          image: ghcr.io/k8snetworkplumbingwg/whereabouts:latest
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           name: whereabouts
           resources:
-            limits:
-              cpu: 100m
-              memory: 200Mi
-            requests:
-              cpu: 100m
-              memory: 100Mi
+            {{- toYaml .Values.resources | nindent 12 }}
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
@@ -54,8 +53,8 @@ spec:
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext: {}
-      serviceAccount: whereabouts
-      serviceAccountName: whereabouts
+      serviceAccount: {{ include "whereabouts.serviceAccountName" . }}
+      serviceAccountName: {{ include "whereabouts.serviceAccountName" . }}
       terminationGracePeriodSeconds: 30
       volumes:
         - hostPath:
@@ -71,7 +70,7 @@ spec:
             items:
               - key: cron-expression
                 path: config
-            name: whereabouts-config
+            name: {{ include "whereabouts.fullname" . }}-config
           name: cron-scheduler-configmap
         - name: kube-api-access-6kd6k
           projected:
@@ -91,3 +90,4 @@ spec:
                         apiVersion: v1
                         fieldPath: metadata.namespace
                       path: namespace
+{{- end}}

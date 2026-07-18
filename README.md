@@ -43,10 +43,13 @@ You can install this plugin with a Daemonset, using:
 ```
 git clone https://github.com/k8snetworkplumbingwg/whereabouts && cd whereabouts
 kubectl apply \
-    -f doc/crds/daemonset-install.yaml \
-    -f doc/crds/whereabouts.cni.cncf.io_ippools.yaml \
-    -f doc/crds/whereabouts.cni.cncf.io_overlappingrangeipreservations.yaml \
-    -f doc/crds/reconciler-deployment.yaml
+    -f deploy/manifests/rbac.yaml \
+    -f deploy/manifests/daemonset.yaml \
+    -f deploy/crds/whereabouts.cni.cncf.io_ippools.yaml \
+    -f deploy/crds/whereabouts.cni.cncf.io_overlappingrangeipreservations.yaml \
+    -f deploy/manifests/rbac.yaml \
+    -f deploy/manifests/daemonset.yaml \
+    -f deploy/manifests/deployment-reconciler.yaml
 ```
 
 The daemonset installation requires Kubernetes Version 1.16 or later.
@@ -219,7 +222,7 @@ spec:
 ```
 
 This setup enables the fast IPAM feature to optimize IP allocation for nodes, improving network performance in clusters with high pod density. 
-Please note, you must run a whereabouts controller for this to work. Manifest can be found in doc/crds/node-slice-controller.yaml. 
+Please note, you must run a whereabouts controller for this to work. Manifest can be found in deploy/manifests/deployment-node-slice-controller.yaml. 
 You must run your whereabouts daemonset, whereabouts controller in the same namespaces as your network-attachment-definitions. 
 The field in the example `node_slice_size` determines how large of a CIDR to allocate per node and the existence of the field is what triggers
 `Fast IPAM` mode.

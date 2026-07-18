@@ -183,7 +183,7 @@ make kind COMPUTE_NODES=3
 
 ### Fast IPAM (Experimental)
 - Enabled by adding `node_slice_size` field to IPAM config
-- Requires running the node slice controller: `doc/crds/node-slice-controller.yaml`
+- Requires running the node slice controller: `deploy/manifests/deployment-node-slice-controller.yaml`
 - Controller and daemonset must run in same namespace as NetworkAttachmentDefinitions
 - Pre-allocates IP slices per node to reduce allocation contention in large clusters
 

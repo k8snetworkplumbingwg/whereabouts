@@ -1,4 +1,4 @@
-# Don't forget to update deployment/whereabouts-chart/templates/reconciler.yaml as well
+# Don't forget to update deploy/charts/whereabouts/templates/deployment-reconciler.yaml as well
 apiVersion: apps/v1
 kind: Deployment
 metadata:

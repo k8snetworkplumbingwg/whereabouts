@@ -1,4 +1,4 @@
-# Dont'forget to update doc/crds/daemonset-install.yaml as well
+# Dont'forget to update deploy/manifests/daemonset.yaml as well
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:

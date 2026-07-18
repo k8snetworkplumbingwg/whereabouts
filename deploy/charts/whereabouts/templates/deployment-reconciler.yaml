@@ -1,4 +1,4 @@
-# Don't forget to update doc/crds/reconciler-deployment.yaml as well
+# Don't forget to update deploy/manifests/deployment-reconciler.yaml as well
 apiVersion: apps/v1
 kind: Deployment
 metadata:
