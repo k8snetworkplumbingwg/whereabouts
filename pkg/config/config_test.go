@@ -443,3 +443,16 @@ func generateIPAMConfWithoutOverlappingRanges() string {
 		}
 	}`
 }
+
+var _ = Describe("LoadIPAMConfiguration with an empty plugin list", func() {
+	It("returns an error instead of panicking when the plugins list is empty, null, or missing", func() {
+		for _, conf := range []string{
+			`{"cniVersion":"0.3.1","name":"test","plugins":[]}`,
+			`{"cniVersion":"0.3.1","name":"test","plugins":null}`,
+			`{"cniVersion":"0.3.1","name":"test"}`,
+		} {
+			_, err := LoadIPAMConfiguration([]byte(conf), "")
+			Expect(err).To(HaveOccurred())
+		}
+	})
+})
