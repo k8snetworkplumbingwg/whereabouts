@@ -318,6 +318,9 @@ func LoadIPAMConfiguration(bytes []byte, envArgs string, extraConfigPaths ...str
 			return nil, err
 		}
 
+		if len(pluginConfigList.Plugins) == 0 {
+			return nil, fmt.Errorf("NetworkAttachmentDefinition config list contains no plugins")
+		}
 		pluginConfigList.Plugins[0].CNIVersion = pluginConfig.CNIVersion
 		firstPluginBytes, err := json.Marshal(pluginConfigList.Plugins[0])
 		if err != nil {
