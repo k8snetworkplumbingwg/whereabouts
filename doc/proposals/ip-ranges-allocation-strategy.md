@@ -76,6 +76,15 @@ initial supported values are:
 Values are case-sensitive. An explicitly configured empty string or any value
 other than those listed above is a configuration error.
 
+Parsing retains whether the field was present until the inline and flat-file
+configuration sources have been validated and merged. Each source is validated
+before merging, so an explicit empty or unsupported value is rejected rather
+than replaced by a value from the other source. A valid inline value takes
+precedence; the flat-file value is used only when the inline configuration
+omits the field. If both sources omit it, the result is normalized to `all`.
+After normalization, the runtime does not distinguish an explicit `all` from
+the default.
+
 For example, the following configuration treats two disjoint CIDRs as ordered
 capacity for a single attachment:
 
@@ -279,8 +288,9 @@ produce a duplicate allocation on retry or an orphan on deletion.
 
 After the API is accepted:
 
-1. Add the strategy type and `ipRangesAllocation` field to configuration
-   parsing, default omission to `all`, and reject unsupported values.
+1. Add the strategy type and a presence-aware `ipRangesAllocation` parser
+   representation. Validate each source before flat-file merging, apply the
+   precedence rules above, then normalize omission to `all`.
 2. Refactor the Kubernetes allocation path so `first_available` first searches
    each unique resolved pool for an existing Pod/interface allocation, then
    uses ordered fallback only for typed exhaustion errors and returns after one
@@ -305,6 +315,8 @@ Unit and end-to-end coverage will include:
 - fallback after typed exhaustion of an earlier range;
 - total exhaustion across all ranges;
 - rejection of empty, unknown, and incorrectly cased strategies;
+- inline and flat-file precedence, including rejection of invalid values in
+  either source and normalization of omission or explicit `all`;
 - retry returning an existing later-pool allocation after an earlier pool
   regains capacity;
 - retry restoring overlap protection after IPPool persistence succeeds but
