@@ -23,7 +23,7 @@ spec:
         name: {{ include "whereabouts.fullname" . }}-reconciler
         {{- include "whereabouts.selectorLabels" . | nindent 8 }}
     spec:
-      {{- with .Values.priorityClassName }}
+      {{- with .Values.reconciler.priorityClassName | default .Values.priorityClassName }}
       priorityClassName: {{ . }}
       {{- end }}
       serviceAccountName: {{ include "whereabouts.serviceAccountName" . }}
