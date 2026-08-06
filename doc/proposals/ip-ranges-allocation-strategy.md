@@ -55,8 +55,8 @@ separates that API decision from the implementation.
   lowest available address according to the existing range configuration.
 - Changing the existing standard or Fast IPAM lease selection and datastore
   concurrency models.
-- Implementing the feature in this proposal change. Implementation will follow
-  after maintainers agree on the API.
+- This proposal defines the allocation-strategy API only. Implementation will
+  follow after maintainers agree on it.
 
 <hr>
 
