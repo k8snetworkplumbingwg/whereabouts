@@ -6,6 +6,7 @@ Status: Draft
 
 - [Introduction](#introduction)
   - [Goals](#goals)
+  - [Use cases](#use-cases)
   - [Non-goals](#non-goals)
 - [Design](#design)
   - [Configuration](#configuration)
@@ -47,6 +48,29 @@ separates that API decision from the implementation.
   mixed-family behavior precisely.
 - Use an API that can be extended with additional allocation strategies later.
 
+### Use cases
+
+The primary use case is incremental expansion with disjoint address blocks. An
+operator might initially receive `10.1.2.8/29` from a larger `10.1.0.0/16`
+network. When that block is exhausted, the operator might receive
+`10.1.3.8/29`, which is not a contiguous extension of the original block. In a
+`first_available` configuration, the new block is appended to `ipRanges`;
+existing workloads keep their addresses, and new workloads receive one address
+from the first range with capacity. This is the use case described in
+[PR #649](https://github.com/k8snetworkplumbingwg/whereabouts/pull/649#issuecomment-3748492842).
+
+The same strategy also covers a logical single-address pool assembled from
+several ordered, disjoint ranges when the network is first configured. In both
+cases, every workload receives one address total and range order provides
+deterministic fallback.
+
+These use cases require creating a range sequence and, for `first_available`,
+appending capacity. They do not require changing the allocation strategy or
+mutating existing entries while they have live allocations. Reordering,
+editing, replacing, or removing existing ranges is unsupported until the
+network is drained. Dual-stack and multi-address attachments are separate use
+cases and retain the `all` strategy.
+
 ### Non-goals
 
 - Allocating CIDR network or broadcast endpoint addresses.
@@ -55,6 +79,8 @@ separates that API decision from the implementation.
   lowest available address according to the existing range configuration.
 - Changing the existing standard or Fast IPAM lease selection and datastore
   concurrency models.
+- Persisting configuration generations or introducing a new CRD to enforce
+  configuration-update admission.
 - This proposal defines the allocation-strategy API only. Implementation will
   follow after maintainers agree on it.
 
@@ -120,8 +146,11 @@ to `IPRanges`. Therefore, when both forms are present, `first_available` tries
 the legacy `range` first and then the explicit `ipRanges` entries in their JSON
 order.
 
-Reordering ranges changes allocation preference but does not move existing
-allocations between pools.
+The configured order must remain stable while the network has live
+allocations. For `first_available`, additional capacity may be appended, but
+existing entries must not be reordered or modified. The operational contract
+is specified in
+[Changing strategies and ranges](#changing-strategies-and-ranges).
 
 For `first_available`, Whereabouts resolves entries to their existing IPPool
 identifiers and visits each unique pool only once, at the position of its first
@@ -266,21 +295,34 @@ current pool's transient retries are resolved.
 
 ### Changing strategies and ranges
 
-Changing the strategy or reordering ranges affects new allocations only;
-Whereabouts does not migrate existing addresses between pools. If a workload
-already has matching reservations in more than one pool (for example, after
-changing from `all` to `first_available`), `first_available` returns the first
-match in configured order after refreshing every match's container ID and does
-not create another reservation. A later CNI DEL searches all configured pools
-as described above.
+The normalized allocation strategy and existing normalized range sequence are
+immutable while the network has live allocations. This means operators must
+not change between `all` and `first_available`, reorder ranges, edit an existing
+range, or remove or replace one. Such changes can alter an idempotent ADD
+result, make an existing reservation undiscoverable, or orphan it during DEL.
 
-Removing or replacing a range changes the identity of the pool that allocation
-and deallocation inspect. Whereabouts cannot discover an allocation in a pool
-that is no longer represented in the configuration. Operators must therefore
-append replacement capacity while retaining old ranges until their IPPools
-have drained; only then may the old entries be removed. Removing or replacing
-a range that still has live allocations is unsupported and can otherwise
-produce a duplicate allocation on retry or an orphan on deletion.
+For `first_available`, the only supported live update is appending one or more
+ranges. Existing entries and their order form an immutable prefix of the
+updated configuration. Appended ranges extend the pool for future allocations;
+they do not move existing allocations. The complete preflight search still
+returns a workload's existing allocation before attempting to allocate from
+any range.
+
+Configurations using `all` must be drained before appending a range as well as
+before any other range change. Under the existing `all` allocation loop, a
+retried ADD after an append would allocate an additional address from the new
+range and change the result for an existing workload.
+
+Old ranges remain configured until the entire network is drained. After all
+allocations have been released, operators may change the strategy or edit,
+replace, reorder, or remove ranges before creating new allocations.
+
+Whereabouts reads this configuration from CNI configuration, commonly embedded
+in a NetworkAttachmentDefinition, rather than from a dedicated CRD with update
+admission. Without persisting a configuration generation with reservations, it
+cannot compare the current configuration with a previous version and enforce
+this invariant. This proposal therefore defines the supported operational
+contract: configuration management must prevent unsupported live changes.
 
 <hr>
 
@@ -303,8 +345,9 @@ After the API is accepted:
 6. Preserve existing mode-specific lease selection, datastore retries, overlap
    handling, and the default multi-address path. Reject `first_available` with
    `node_slice_size` until Fast IPAM multiple-range semantics are designed.
-7. Document the user-facing option and safe range-draining procedure in the
-   extended configuration guide.
+7. Document the user-facing option, append-only `first_available` capacity
+   expansion, and the drain-before-reconfiguration contract in the extended
+   configuration guide.
 
 ## Test plan
 
@@ -329,8 +372,12 @@ Unit and end-to-end coverage will include:
   configured occurrence;
 - mixed IPv4/IPv6 ranges producing one address total with `first_available`;
 - legacy `range` alone and combined with `ipRanges`;
-- appending and reordering ranges while an existing allocation remains
-  discoverable, followed by removal only after the old pool drains;
+- appending a range under `first_available` while an existing allocation
+  remains discoverable, then allocating new workloads from the appended range
+  after earlier exhaustion;
+- changing the strategy or editing, replacing, reordering, or removing ranges
+  after the network has been fully drained;
+- appending a range under `all` only after the network has been fully drained;
 - rejection of `first_available` combined with `node_slice_size`.
 
 The implementation change will run `make test`. The documented kind-based E2E
@@ -376,4 +423,9 @@ implemented independently.
 - Proposed initial strategies: `all` and `first_available`.
 - Proposed default: `all` for backward compatibility.
 - Proposed API shape: an extensible string strategy instead of a boolean.
+- Proposed live-update contract: `first_available` permits append-only range
+  expansion; appending or otherwise changing ranges under `all`, and every
+  other strategy or range-sequence change, require a fully drained network.
+- Configuration immutability is an operational invariant because this proposal
+  does not add persisted configuration generations or update admission.
 - Implementation is intentionally deferred until the API is accepted.
