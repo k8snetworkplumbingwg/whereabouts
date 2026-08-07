@@ -170,10 +170,12 @@ selected by the existing IPAM mode:
 2. If no existing allocation is found, visit ranges in normalized order.
 3. Attempt allocation from the current range using the existing within-range
    address selection and overlapping-range checks.
-4. If the range reports typed exhaustion, continue to the next range.
+4. If allocation returns `allocate.AssignmentError`, detected with `errors.As`,
+   record that range's exhaustion context and continue to the next range.
 5. On the first successful allocation, persist it, return that one address,
    and stop visiting ranges.
-6. If every range is exhausted, return an exhaustion error and no address.
+6. If every unique pool is exhausted, return `AllRangesExhaustedError` and no
+   address.
 
 Fallback is only allowed for an error that specifically means the current
 range has no allocatable address. Parse, validation, API, authorization,
@@ -285,10 +287,21 @@ omit `ipRangesAllocation` or set it to `all`.
 ### Errors and concurrency
 
 Configuration parsing validates the strategy before any datastore operations.
-Exhaustion must be represented by a typed error so the range loop can
-distinguish expected capacity fallback from operational failure. If all ranges
-are exhausted, the returned error should identify total exhaustion and retain
-the per-range context needed for diagnostics.
+The existing `allocate.AssignmentError` is the sole per-range exhaustion signal.
+The allocator returns it only after scanning a valid range without finding an
+allocatable address. The range loop uses `errors.As` so a layer may add context
+with `%w` without losing the typed signal. Parse, validation, overlap, API,
+authorization, timeout, datastore, and conflict-after-retries errors do not wrap
+an `AssignmentError`; they propagate unchanged and abort fallback.
+
+If every unique pool returns `AssignmentError`, the range loop returns a new
+`AllRangesExhaustedError`. Its `Ranges []RangeExhaustion` field is ordered by
+traversal. Each entry contains `Index int` for the pool's first normalized
+configured occurrence, `Pool PoolIdentifier` for the resolved pool, and
+`Err allocate.AssignmentError` for that attempt. Its `Unwrap() []error` returns
+the `Err` values in the same order, preserving their diagnostic details. The
+aggregate type distinguishes total exhaustion from the per-range signal used
+internally for fallback.
 
 Standard IPAM continues to run the entire preflight search and
 allocation/deallocation operation under the current cluster-wide Whereabouts
@@ -360,8 +373,9 @@ After the API is accepted:
    precedence rules above, then normalize omission to `all`.
 2. Refactor the Kubernetes allocation path so `first_available` first searches
    each unique resolved pool for an existing Pod/interface allocation, then
-   uses ordered fallback only for typed exhaustion errors and returns after one
-   successful allocation.
+   uses `errors.As` to fall back only on `allocate.AssignmentError`, returns
+   after one successful allocation, and returns an ordered
+   `AllRangesExhaustedError` when every unique pool is exhausted.
 3. When overlap protection is enabled, verify all corresponding
    overlapping-range reservations before performing any preflight update.
    Recreate missing secondary records only after the validation pass finds no
@@ -383,8 +397,14 @@ Unit and end-to-end coverage will include:
 
 - omission and explicit `all` preserving one address per range;
 - allocation from the first range with capacity;
-- fallback after typed exhaustion of an earlier range;
-- total exhaustion across all ranges;
+- fallback when an earlier range returns a direct or contextually wrapped
+  `allocate.AssignmentError`;
+- an operational error in an earlier range being returned with the same error
+  identity and aborting allocation without visiting a later range;
+- total exhaustion returning `AllRangesExhaustedError` with ordered configured
+  indices, resolved pool identifiers, and underlying assignment errors, with
+  `Unwrap()` returning those exact errors in traversal order and `errors.As`
+  reaching the first underlying `allocate.AssignmentError`;
 - rejection of empty, unknown, and incorrectly cased strategies;
 - inline and flat-file precedence, including rejection of invalid values in
   either source and normalization of omission or explicit `all`;
