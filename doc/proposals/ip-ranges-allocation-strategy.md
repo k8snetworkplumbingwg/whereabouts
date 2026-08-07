@@ -183,9 +183,18 @@ and allocate from a lower-priority range unexpectedly.
 
 ### Idempotent retries
 
-CNI ADD can be retried after the first attempt has persisted an allocation but
-before its result reaches the caller. A retry must return the original
-allocation instead of creating another one.
+CNI ADD processing must be idempotent when the runtime invokes ADD again for
+the same Pod and interface. This can happen when an earlier ADD persisted an
+allocation but its result did not reach the runtime, leaving the outcome
+uncertain. It can also happen after a kubelet or CRI restart if the runtime
+creates a replacement sandbox and invokes ADD for the same Pod and interface
+without an intervening DEL. In the latter case, the `CNI_CONTAINERID` can
+differ, so this is not necessarily a repeated ADD for the exact
+`(CNI_CONTAINERID, CNI_IFNAME)` tuple that the CNI specification says a runtime
+should not issue. Neither case is specific to StatefulSets.
+
+A subsequent ADD must return the original allocation instead of creating
+another one.
 
 Before attempting any new allocation, `first_available` searches the pool
 record for every currently configured range for a reservation whose `podRef`
@@ -196,7 +205,8 @@ following sequence:
 1. The first range is exhausted, so a Pod receives an address from the second
    range.
 2. Capacity later becomes available in the first range.
-3. The Pod's CNI ADD is retried.
+3. The runtime invokes ADD again for the same Pod and interface because the
+   earlier result was uncertain or a replacement sandbox was created.
 
 Without a complete preflight search, step 3 would allocate a second address
 from the first range. With the search, Whereabouts returns the address already
