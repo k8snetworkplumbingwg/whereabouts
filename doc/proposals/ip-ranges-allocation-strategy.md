@@ -214,21 +214,28 @@ held in the second range and refreshes its container ID if needed, consistent
 with existing retry behavior within one pool.
 
 Failure to inspect any configured pool is an operational error; allocation
-must not proceed on incomplete knowledge. If inconsistent state contains more
-than one matching reservation, Whereabouts retryably refreshes the container
-ID on every match before returning the first match in configured order. If any
-refresh fails, ADD returns an operational error; a subsequent retry repeats the
-complete search and must not allocate another address. The inconsistency is
-reported in logs.
+must not proceed on incomplete knowledge. The complete search records every
+match before performing any updates. More than one match is inconsistent and
+is reported in logs.
 
-When overlap protection is enabled, each unique preflight match must also pass
-through the existing overlapping-range reservation verification and update
-path before ADD succeeds. This repairs the failure window in which the IPPool
-allocation was persisted but its `OverlappingRangeIPReservation` was not. A
-missing reservation is recreated for the matching Pod and interface; a
-reservation owned by another workload is an inconsistency error. API or update
-failures are operational errors, and the existing IPPool allocation is not
-returned until overlap protection has been reconciled.
+When overlap protection is enabled, a validation pass reads the corresponding
+`OverlappingRangeIPReservation` for every unique preflight match before any
+repair or container-ID refresh. This is a narrow repair of the existing
+two-record update, not general reconciliation, and it does not rebuild network
+state from Pods, network-status annotations, or the container runtime. If any
+overlapping-range reservation exists for a different Pod or interface,
+Whereabouts does not overwrite it or choose an authoritative owner; ADD leaves
+the conflicting records unchanged and returns an operational inconsistency
+error. Otherwise, a missing reservation is recreated from the matching IPPool
+reservation and the current ADD request before the address is returned. API
+failures are also operational errors. Broader recovery from conflicting or
+orphaned state belongs in a reconciler and is outside this proposal.
+
+After overlap validation and repair, Whereabouts retryably refreshes the
+container ID on every preflight match before returning the first match in
+configured order. If any refresh fails, ADD returns an operational error; a
+subsequent retry repeats the complete search and must not allocate another
+address.
 
 ### Deallocation
 
@@ -252,8 +259,10 @@ scoped by `network_name`:
   unavailable even if it appears in another configured range. Allocation
   continues within the current range, then falls back only if that range is
   exhausted.
-- A retry that finds an existing IPPool allocation verifies or restores its
-  corresponding overlapping-range reservation before returning the address.
+- A retry that finds an existing IPPool allocation verifies its corresponding
+  overlapping-range reservation and recreates it only when it is absent. A
+  reservation with a conflicting Pod or interface is left unchanged and causes
+  an operational error.
 - When overlap protection is disabled, `first_available` does not add a new
   cross-range uniqueness guarantee; the current collision behavior is
   preserved.
@@ -347,10 +356,12 @@ After the API is accepted:
    each unique resolved pool for an existing Pod/interface allocation, then
    uses ordered fallback only for typed exhaustion errors and returns after one
    successful allocation.
-3. When preflight finds multiple matches, retryably refresh every matching
-   container ID before returning the first configured match.
-4. Reconcile each unique matching overlapping-range reservation before a
-   preflight match can make ADD succeed.
+3. When overlap protection is enabled, verify all corresponding
+   overlapping-range reservations before performing any preflight update.
+   Recreate missing secondary records only after the validation pass finds no
+   ownership conflict; fail without modifying state when ownership conflicts.
+4. Retryably refresh every matching container ID, then return the first match
+   in configured order.
 5. Make deallocation search every pool and clean up every matching reservation.
 6. Preserve existing mode-specific lease selection, datastore retries, overlap
    handling, and the default multi-address path. Reject `first_available` with
@@ -374,6 +385,11 @@ Unit and end-to-end coverage will include:
   regains capacity;
 - retry restoring overlap protection after IPPool persistence succeeds but
   overlapping-range reservation persistence fails;
+- retry rejecting an overlapping-range reservation owned by a different Pod or
+  interface without overwriting either record;
+- multiple preflight matches where an earlier overlap reservation is missing
+  and a later one has conflicting ownership, returning an operational error
+  without recreating the missing record or refreshing any container ID;
 - retryably refreshing duplicate matches with different container IDs, then
   deleting all of them;
 - deletion of an allocation from a later pool;
