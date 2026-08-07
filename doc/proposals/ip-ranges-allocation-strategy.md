@@ -393,7 +393,7 @@ After the API is accepted:
 
 ## Test plan
 
-Unit and end-to-end coverage will include:
+Unit coverage will include:
 
 - omission and explicit `all` preserving one address per range;
 - allocation from the first range with capacity;
@@ -435,9 +435,25 @@ Unit and end-to-end coverage will include:
 - appending a range under `all` only after the network has been fully drained;
 - rejection of `first_available` combined with `node_slice_size`.
 
-The implementation change will run `make test`. The documented kind-based E2E
-suite will also run when locally feasible; otherwise the implementation PR will
-report that it relies on the upstream E2E workflow.
+The standard kind-based E2E suite will cover the observable behavior of:
+
+- omission and explicit `all` continuing to allocate one address per range;
+- `first_available` allocating from the first range with capacity;
+- fallback to a later range after earlier exhaustion;
+- total exhaustion after all configured ranges are full;
+- appending a new unique range while earlier allocations remain, then using it
+  for a new workload after the earlier ranges are exhausted;
+- deleting and reusing an allocation from a later range; and
+- mixed-family `first_available` returning one address total.
+
+`first_available` rejects `node_slice_size`, so no feature-specific node-slice
+E2E case is required. The existing node-slice suite remains a regression check.
+
+The implementation PR will run `make test` and add both unit and E2E coverage.
+The documented kind-based E2E suite will also run locally when the required
+environment is available. Regardless of local execution, the upstream standard
+E2E job is expected to pass. Any waiver of new E2E coverage must be justified
+in the implementation PR and agreed by maintainers.
 
 ## Alternatives
 
