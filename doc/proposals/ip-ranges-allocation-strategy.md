@@ -147,9 +147,9 @@ the legacy `range` first and then the explicit `ipRanges` entries in their JSON
 order.
 
 The configured order must remain stable while the network has live
-allocations. For `first_available`, additional capacity may be appended, but
-existing entries must not be reordered or modified. The operational contract
-is specified in
+allocations. For `first_available`, additional capacity may be appended through
+entries that resolve to new IPPool identifiers, but existing entries must not
+be reordered or modified. The operational contract is specified in
 [Changing strategies and ranges](#changing-strategies-and-ranges).
 
 For `first_available`, Whereabouts resolves entries to their existing IPPool
@@ -314,18 +314,23 @@ current pool's transient retries are resolved.
 
 ### Changing strategies and ranges
 
-The normalized allocation strategy and existing normalized range sequence are
+The normalized allocation strategy, `network_name`, and existing normalized
+range sequence, including every value used to derive IPPool identifiers, are
 immutable while the network has live allocations. This means operators must
-not change between `all` and `first_available`, reorder ranges, edit an existing
-range, or remove or replace one. Such changes can alter an idempotent ADD
-result, make an existing reservation undiscoverable, or orphan it during DEL.
+not change between `all` and `first_available`, rename the network, reorder
+ranges, edit an existing range, or remove or replace one. Such changes can alter
+an idempotent ADD result, make an existing reservation undiscoverable, or orphan
+it during DEL.
 
 For `first_available`, the only supported live update is appending one or more
 ranges. Existing entries and their order form an immutable prefix of the
-updated configuration. Appended ranges extend the pool for future allocations;
-they do not move existing allocations. The complete preflight search still
-returns a workload's existing allocation before attempting to allocate from
-any range.
+updated configuration. The first appended entry for each IPPool identifier not
+already present in the de-duplicated traversal extends capacity for future
+allocations; it does not move existing allocations. An appended entry that is
+identical to an existing range and resolves to the same IPPool identifier is a
+duplicate and remains a no-op: it does not add independent capacity or alter
+the traversal. The complete preflight search still returns a workload's
+existing allocation before attempting to allocate from any range.
 
 Configurations using `all` must be drained before appending a range as well as
 before any other range change. Under the existing `all` allocation loop, a
@@ -333,8 +338,9 @@ retried ADD after an append would allocate an additional address from the new
 range and change the result for an existing workload.
 
 Old ranges remain configured until the entire network is drained. After all
-allocations have been released, operators may change the strategy or edit,
-replace, reorder, or remove ranges before creating new allocations.
+allocations have been released, operators may change the strategy or
+`network_name`, or edit, replace, reorder, or remove ranges before creating new
+allocations.
 
 Whereabouts reads this configuration from CNI configuration, commonly embedded
 in a NetworkAttachmentDefinition, rather than from a dedicated CRD with update
@@ -367,8 +373,9 @@ After the API is accepted:
    handling, and the default multi-address path. Reject `first_available` with
    `node_slice_size` until Fast IPAM multiple-range semantics are designed.
 7. Document the user-facing option, append-only `first_available` capacity
-   expansion, and the drain-before-reconfiguration contract in the extended
-   configuration guide.
+   expansion through new unique IPPools, duplicate-append no-op semantics, and
+   the drain-before-reconfiguration contract in the extended configuration
+   guide.
 
 ## Test plan
 
@@ -398,11 +405,13 @@ Unit and end-to-end coverage will include:
   configured occurrence;
 - mixed IPv4/IPv6 ranges producing one address total with `first_available`;
 - legacy `range` alone and combined with `ipRanges`;
-- appending a range under `first_available` while an existing allocation
-  remains discoverable, then allocating new workloads from the appended range
-  after earlier exhaustion;
-- changing the strategy or editing, replacing, reordering, or removing ranges
-  after the network has been fully drained;
+- appending a range that resolves to a new IPPool under `first_available` while
+  an existing allocation remains discoverable, then allocating new workloads
+  from the appended range after earlier exhaustion;
+- appending a duplicate range under `first_available` remaining a no-op without
+  adding capacity or altering the de-duplicated traversal;
+- changing the strategy or `network_name`, or editing, replacing, reordering,
+  or removing ranges after the network has been fully drained;
 - appending a range under `all` only after the network has been fully drained;
 - rejection of `first_available` combined with `node_slice_size`.
 
@@ -449,9 +458,10 @@ implemented independently.
 - Proposed initial strategies: `all` and `first_available`.
 - Proposed default: `all` for backward compatibility.
 - Proposed API shape: an extensible string strategy instead of a boolean.
-- Proposed live-update contract: `first_available` permits append-only range
-  expansion; appending or otherwise changing ranges under `all`, and every
-  other strategy or range-sequence change, require a fully drained network.
+- Proposed live-update contract: `first_available` permits append-only capacity
+  expansion through new unique IPPools, while duplicate appends remain no-ops;
+  appending or otherwise changing ranges under `all`, and every other strategy,
+  pool-identity, or range-sequence change, require a fully drained network.
 - Configuration immutability is an operational invariant because this proposal
   does not add persisted configuration generations or update admission.
 - Implementation is intentionally deferred until the API is accepted.
