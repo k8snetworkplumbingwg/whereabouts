@@ -1,12 +1,15 @@
 # Persistent IPs for KubeVirt VMs via the IPAMClaim standard
 
-Status: **Draft / for discussion** (targets whereabouts#557, whereabouts#500)
+Status: **Implemented** (whereabouts#742 targets whereabouts#557, whereabouts#500)
 
-This proposal describes how Whereabouts can implement the multi-network de-facto
+User-facing docs: `doc/persistent-ips.md` (ships with
+[whereabouts#742](https://github.com/k8snetworkplumbingwg/whereabouts/pull/742)).
+
+This proposal describes how Whereabouts implements the multi-network de-facto
 standard `IPAMClaim` contract so that KubeVirt VirtualMachines keep a stable IP
 across stop/start and live migration — the same capability OVN-Kubernetes already
-provides through `[kubevirt/ipam-extensions](https://github.com/kubevirt/ipam-extensions)`
-and the `[ipamclaims](https://github.com/k8snetworkplumbingwg/ipamclaims)` CRD — **without**
+provides through [kubevirt/ipam-extensions](https://github.com/kubevirt/ipam-extensions)
+and the [ipamclaims](https://github.com/k8snetworkplumbingwg/ipamclaims) CRD — **without**
 requiring OVN-Kubernetes and **without** any KubeVirt core API change.
 
 # Table of contents
@@ -20,12 +23,10 @@ requiring OVN-Kubernetes and **without** any KubeVirt core API change.
   - [How the claim reference reaches Whereabouts](#how-the-claim-reference-reaches-whereabouts)
   - [Changes in Modules](#changes-in-modules)
   - [Lifecycle walk-through](#lifecycle-walk-through)
-- [Hard problems / open questions](#hard-problems--open-questions)
+- [Hard problems / remaining risks](#hard-problems--remaining-risks)
 - [Delivery plan](#delivery-plan)
 - [Summary](#summary)
 - [Discussions and Decisions](#discussions-and-decisions)
-
-
 
 ## Introduction
 
@@ -40,7 +41,8 @@ Upstream KubeVirt has intentionally chosen **not** to solve this in KubeVirt cor
 Instead, persistent VM IPs are handled at the IPAM layer through the `IPAMClaim`
 CRD: a controller (`ipam-extensions`) creates an `IPAMClaim` owned by the VM, and
 the IPAM plugin persists the allocation against that claim rather than against the
-pod. OVN-Kubernetes already honors these claims Whereabouts does not yet.
+pod. OVN-Kubernetes already honors these claims Whereabouts now does as well
+([#742](https://github.com/k8snetworkplumbingwg/whereabouts/pull/742)).
 
 ### Goal of this proposal
 
@@ -52,18 +54,15 @@ API and no changes to KubeVirt.
 - Remain fully backwards compatible: pods without a claim reference behave exactly
 as today.
 
-
-
 ### Non-goals
 
 - Creating or deleting `IPAMClaim` resources. That is `ipam-extensions`' job the
 claim is owned by the VM and its lifecycle is managed by the controller.
-- Persistent IPs for arbitrary (non-KubeVirt) pods, though the mechanism is generic.
+- Persistent IPs for arbitrary (non-KubeVirt) pods, though the mechanism is generic
+(manual claims work; see `doc/persistent-ips.md` in #742).
 - Any change to KubeVirt core (a bespoke `persistIP` field was proposed in
 kubevirt/kubevirt#18636 and declined as out of scope for core — this proposal is
 the maintainer-recommended alternative).
-
-
 
 ## Background: how allocation works today
 
@@ -108,116 +107,123 @@ addresses. Otherwise allocate normally and **write** `status.ips` (and set
 - **Release** happens only when the `IPAMClaim` itself is deleted (which
 `ipam-extensions` triggers when the VM is deleted).
 
-
-
 ## Design
-
-
 
 ### How the claim reference reaches Whereabouts
 
 `ipam-extensions` adds an `ipam-claim-reference` attribute to the VM pod's
-`k8s.v1.cni.cncf.io/networks` network-selection element for the eligible interface,
-and Multus forwards network-selection-element attributes to the delegate plugin.
+`k8s.v1.cni.cncf.io/networks` network-selection element (NSE) for the eligible
+interface.
 
-> **Open item to confirm before PR1:** the exact transport by which the reference
-> reaches the delegate IPAM plugin — a top-level field injected into the delegate
-> CNI config, `RuntimeConfig`, or `CNI_ARGS`. We will mirror whatever OVN-Kubernetes
-> reads (it is the reference implementation) so Whereabouts is drop-in compatible
-> with the same `ipam-extensions`/Multus wiring.
+**Resolved (mirrors OVN-Kubernetes / ipam-extensions):** Multus does **not**
+currently inject `NSE.IPAMClaimReference` into delegate IPAM CNI stdin. Production
+wiring keeps the claim on the pod annotation. Whereabouts therefore:
 
+1. Accepts `ipam-claim-reference` from CNI config when present (IPAM section,
+   top-level net field, or `args.cni`) — useful for tests and future Multus
+   injection.
+2. If still empty, **resolves the claim from the pod's network-selection
+   annotation** via the Kubernetes API (`pkg/ipamclaim.ResolveFromPodAnnotation`),
+   matching on interface name and/or network name.
 
+Claim namespace defaults to the pod namespace.
 
 ### Changes in Modules
 
-1. `go.mod` **/ vendor** — add `github.com/k8snetworkplumbingwg/ipamclaims`
-  (API types + generated clientset).
-2. `pkg/types/types.go` — extend `IPAMConfig`:
-  ```go
+As implemented in [#742](https://github.com/k8snetworkplumbingwg/whereabouts/pull/742):
+
+1. `go.mod` — add `github.com/k8snetworkplumbingwg/ipamclaims` (API types + clientset).
+2. `pkg/types/types.go` — extend `IPAMConfig` / `Net` / `IPReservation`:
+   ```go
    IPAMClaimReference string // name of the IPAMClaim, empty => legacy behavior
    IPAMClaimNamespace string // usually the pod namespace
-  ```
-3. `pkg/config/config.go` **(**`LoadIPAMConfig`**)** — populate the fields above from
-  the transport confirmed in the open item. No behavior change when empty.
-4. `pkg/storage/kubernetes/ipam.go` **(**`IPManagement`**,** `Allocate` **branch)** —
-  claim-aware allocation:
-  - Fetch the `IPAMClaim`.
-  - `len(status.ips) > 0` → reuse those IPs reserve them **idempotently** (a repeat
-  reservation for the same claim is a success, not a conflict).
-  - else → allocate as today, then patch `status.ips` + `status.ownerPod`.
-  - Tag the pool/overlapping reservation so it is recognizable as claim-backed
-  (e.g. store the claim ref alongside `PodRef`).
-5. `pkg/storage/kubernetes/ipam.go` **(**`Deallocate` **branch)** — if the reservation
-  is claim-backed, skip freeing the address (optionally clear `ownerPod`) keep the
-   reservation intact so the next pod re-acquires the same IP.
-6. `pkg/controlloop` — release on claim deletion, not pod deletion:
-  - Add an `IPAMClaim` informer on **delete**, free the claim's reserved IPs via
-   the existing `Deallocate` cleanup path.
-  - In `garbageCollectPodIPs`, skip GC for a claim-backed allocation whose claim
-  still exists (a generalization of the current StatefulSet guard).
-7. **Tests** — unit tests for config parsing, reuse-vs-allocate, and DEL-no-release
-  an `e2e/` scenario exercising VM stop/start and (ideally) migration.
-
-
+   IPAMClaimRef       string // on reservations: "namespace/name"
+   ```
+3. `pkg/ipamclaim/` — claim reference resolution (CNI args + pod NSE), claim fetch,
+   and `status.ips` / `ownerPod` persistence.
+4. `pkg/config/config.go` (`LoadIPAMConfig`) — populate claim fields from CNI stdin
+   sources when present. No behavior change when empty.
+5. `pkg/allocate/allocate.go` (`AssignIPForClaim`) — reuse by claim ref / preferred
+   IPs (idempotent take-over for stop/start and migration handoff) tag new
+   reservations with `IPAMClaimRef`.
+6. `pkg/api/...` + CRDs — dedicated `ipamclaimref` on `IPAllocation` and
+   `OverlappingRangeIPReservationSpec` (does **not** overload `PodRef`).
+7. `pkg/storage/kubernetes/ipam.go` — claim-aware Allocate / Deallocate:
+   - Resolve claim, fetch `IPAMClaim`, reuse or allocate, persist status.
+   - Skip freeing claim-backed reservations on Deallocate.
+   - Overlapping-range create treats AlreadyExists as claim take-over (update
+     PodRef / IfName / IPAMClaimRef).
+8. `pkg/controlloop` — `ClaimController` watches IPAMClaim **delete** and frees
+   matching pool / overlapping reservations. `garbageCollectPodIPs` skips any
+   reservation with non-empty `IPAMClaimRef` (release is claim-delete only).
+9. `pkg/reconciler` — orphan GC also skips claim-backed reservations.
+10. Install path — IPAMClaim CRD + RBAC for `ipamclaims` / `ipamclaims/status` in
+    daemonset, Helm chart, and kind e2e setup.
+11. **Tests / docs** — unit tests (config, allocate, reference) e2e covers
+    allocate → retain across pod recreate → release on claim delete; user docs
+    (`doc/persistent-ips.md`) ship in #742. Live-migration e2e is not yet covered.
 
 ### Lifecycle walk-through
-
 
 | Event                  | Actor                         | Result                                                                                                       |
 | ---------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | VM created             | ipam-extensions               | Creates `IPAMClaim` (empty `status.ips`), owned by the VM injects `ipam-claim-reference` on the launcher pod |
-| Pod ADD (first boot)   | Whereabouts                   | `status.ips` empty → allocate, write `status.ips`, set `ownerPod`                                            |
-| VM stop → pod DEL      | Whereabouts                   | Claim-backed → **keep** the IP control-loop **skips** GC because the claim still exists                      |
-| VM start → new pod ADD | Whereabouts                   | `status.ips` populated → **reuse** the same IP                                                               |
-| Live migration         | Whereabouts                   | Target pod ADD reuses the claim IP while source still holds it `ownerPod` hands off                          |
-| VM deleted             | ipam-extensions → Whereabouts | `IPAMClaim` deleted → control-loop **frees** the IP                                                          |
+| Pod ADD (first boot)   | Whereabouts                   | Resolve claim from NSE/config `status.ips` empty → allocate, write `status.ips`, set `ownerPod`, tag `ipamclaimref` |
+| VM stop → pod DEL      | Whereabouts                   | Claim-backed → **keep** the IP control-loop / reconciler **skip** GC when `IPAMClaimRef` is set             |
+| VM start → new pod ADD | Whereabouts                   | `status.ips` populated → **reuse** the same IP (reservation handoff to new PodRef)                           |
+| Live migration         | Whereabouts                   | Target pod ADD reuses the claim IP while source still holds it `ownerPod` hands off                         |
+| VM deleted             | ipam-extensions → Whereabouts | `IPAMClaim` deleted → claim controller **frees** pool / overlapping reservations                             |
 
-
-
-
-## Hard problems / open questions
+## Hard problems / remaining risks
 
 1. **Live migration overlap.** Source and target `virt-launcher` pods coexist and
-  share the claim's IP for a window. The target must be allowed to reuse the IP
-   while the source reservation still exists `status.ownerPod` mediates the handoff.
-   This is the primary concurrency risk and needs explicit review.
-2. **Overlapping-range reservations** are pod-keyed today re-acquiring the same IP
-  for a new pod must not be treated as a duplicate/conflict.
-3. **Idempotency under churn** (old pod terminating while new pod starts).
-4. **Stale reconciliation** — if the control-loop was down when a claim was deleted,
-  the informer resync must free orphaned reservations.
-5. **Reference transport** — the one item to confirm against OVN-Kubernetes/Multus
-  (see above) before locking the config parsing.
-
-
+  share the claim's IP for a window. Implementation allows take-over of an
+  existing claim-backed reservation and preferred IPs from `status.ips`, and
+  updates overlapping reservations on AlreadyExists. Concurrent ADD under heavy
+  churn remains the main risk area e2e covers stop/start recreate, not full
+  KubeVirt migration yet.
+2. **Overlapping-range reservations** — addressed by tagging with `IPAMClaimRef`
+  and updating (not failing) when the same IP is re-acquired for a new pod.
+3. **Idempotency under churn** (old pod terminating while new pod starts) —
+  handled via claim-ref matching and preferred-IP take-over in `AssignIPForClaim`.
+4. **Stale reconciliation** — pod/reconciler GC never frees claim-backed rows
+  only the IPAMClaim-delete controller does. If that controller was down across
+  a claim delete, a restart + delete-event (or operator re-delete) is needed to
+  free orphans broader resync cleanup is a follow-up if needed.
 
 ## Delivery plan
 
+Originally planned as incremental PRs shipped together in
+[#742](https://github.com/k8snetworkplumbingwg/whereabouts/pull/742):
 
-| PR  | Scope                                                                         | Risk   |
-| --- | ----------------------------------------------------------------------------- | ------ |
-| PR0 | This design note align at a community meeting                                 | none   |
-| PR1 | Vendor `ipamclaims` add `IPAMClaimReference` + config parsing (inert)         | low    |
-| PR2 | Allocate path: reuse existing / persist new `status.ips`                      | medium |
-| PR3 | Deallocate path: do not release claim-backed IPs on pod DEL                   | medium |
-| PR4 | Control-loop: IPAMClaim-delete watcher + skip GC for claim-backed allocations | medium |
-| PR5 | e2e (stop/start + migration) and docs                                         | low    |
-
-
-
+| PR  | Scope                                                                         | Status                                      |
+| --- | ----------------------------------------------------------------------------- | ------------------------------------------- |
+| PR0 | This design note                                                              | this document                               |
+| PR1 | Vendor `ipamclaims` add `IPAMClaimReference` + config parsing                | done in #742                                |
+| PR2 | Allocate path: reuse existing / persist new `status.ips`                      | done in #742                                |
+| PR3 | Deallocate path: do not release claim-backed IPs on pod DEL                   | done in #742                                |
+| PR4 | Control-loop: IPAMClaim-delete watcher + skip GC for claim-backed allocations | done in #742                                |
+| PR5 | e2e (stop/start recreate) + docs + CRD/RBAC                                   | done in #742 migration e2e still follow-up |
 
 ## Summary
 
 Anchor persistent allocations to the `IPAMClaim` (pod-independent, VM-owned) instead
-of the pod. On ADD, reuse `status.ips` when present else allocate and persist them
-on pod DEL, keep claim-backed IPs release only when the claim is deleted. This makes
-Whereabouts interoperable with the existing `ipam-extensions`/`IPAMClaim` machinery,
+of the pod. On ADD, resolve the claim (primarily from the pod NSE), reuse
+`status.ips` when present else allocate and persist them on pod DEL, keep
+claim-backed IPs release only when the claim is deleted. This makes Whereabouts
+interoperable with the existing `ipam-extensions`/`IPAMClaim` machinery,
 delivering persistent VM IPs on non-OVN-Kubernetes clusters with no KubeVirt API
 change and full backwards compatibility.
 
 ## Discussions and Decisions
 
-- *TBD* — reference-transport mechanism confirmed against OVN-Kubernetes.
-- *TBD* — live-migration handoff semantics (`ownerPod`) agreed with maintainers.
-- *TBD* — whether reservation records gain a dedicated claim field or overload `PodRef`.
-
+- **Reference transport** — Multus does not inject the NSE claim into delegate
+  IPAM stdin today. Whereabouts accepts CNI/`args.cni` when present and otherwise
+  resolves `ipam-claim-reference` from the pod network-selection annotation
+  (same wiring as OVN-Kubernetes / ipam-extensions).
+- **Live-migration handoff** — reuse claim-backed pool reservations and
+  `status.ips` preferred addresses update `status.ownerPod` on ADD overlapping
+  AlreadyExists is treated as take-over. Full migration e2e remains a follow-up.
+- **Reservation tagging** — dedicated `IPAMClaimRef` / `ipamclaimref` field on
+  IPPool allocations and overlapping reservations (does not overload `PodRef`).
+- **Implementation** — [whereabouts#742](https://github.com/k8snetworkplumbingwg/whereabouts/pull/742).
