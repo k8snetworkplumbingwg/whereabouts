@@ -14,6 +14,7 @@ import (
 
 	netutils "k8s.io/utils/net"
 
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/ipamclaim"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/types"
 )
@@ -162,7 +163,38 @@ func LoadIPAMConfig(bytes []byte, envArgs string, extraConfigPaths ...string) (*
 	// Copy net name into IPAM so not to drag Net struct around
 	n.IPAM.Name = n.Name
 
+	populateIPAMClaimReference(&n)
+
 	return n.IPAM, n.CNIVersion, nil
+}
+
+// populateIPAMClaimReference fills IPAMClaimReference / Namespace from CNI stdin
+// sources when present. Behavior is inert for allocation until later PRs honor
+// HasIPAMClaim(). Priority (first non-empty wins):
+//  1. IPAM section field ipam-claim-reference
+//  2. Top-level net field ipam-claim-reference
+//  3. args.cni["ipam-claim-reference"] (Multus cni-args injection)
+// Namespace defaults to the pod namespace when a claim reference is set.
+//
+// Note: Multus does not currently inject NSE.IPAMClaimReference into delegate
+// CNI stdin. Production ipam-extensions wiring keeps the claim on the pod's
+// network-selection annotation; follow-up PRs resolve it via the K8s client
+// (see pkg/ipamclaim.ReferenceFromNetworkSelectionElements).
+func populateIPAMClaimReference(n *types.Net) {
+	if n == nil || n.IPAM == nil {
+		return
+	}
+
+	if n.IPAM.IPAMClaimReference == "" && n.IPAMClaimReference != "" {
+		n.IPAM.IPAMClaimReference = n.IPAMClaimReference
+	}
+	if n.IPAM.IPAMClaimReference == "" && n.Args != nil {
+		n.IPAM.IPAMClaimReference = ipamclaim.ReferenceFromCNIArgs(n.Args.CNI)
+	}
+
+	if n.IPAM.IPAMClaimReference != "" && n.IPAM.IPAMClaimNamespace == "" {
+		n.IPAM.IPAMClaimNamespace = n.IPAM.PodNamespace
+	}
 }
 
 func pathExists(path string) bool {

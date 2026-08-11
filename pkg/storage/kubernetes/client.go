@@ -10,6 +10,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
+	ipamclaimsclient "github.com/k8snetworkplumbingwg/ipamclaims/pkg/crd/ipamclaims/v1alpha1/apis/clientset/versioned"
 	whereaboutsv1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
 	wbclient "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/clientset/versioned"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
@@ -20,9 +21,10 @@ const listRequestTimeout = 30 * time.Second
 
 // Client has info on how to connect to the kubernetes cluster
 type Client struct {
-	client    wbclient.Interface
-	clientSet kubernetes.Interface
-	retries   int
+	client           wbclient.Interface
+	clientSet        kubernetes.Interface
+	ipamClaimsClient ipamclaimsclient.Interface
+	retries          int
 }
 
 func NewClient() (*Client, error) {
@@ -57,14 +59,20 @@ func newClient(config *rest.Config) (*Client, error) {
 		return nil, err
 	}
 
-	return NewKubernetesClient(c, clientSet), nil
+	claimsClient, err := ipamclaimsclient.NewForConfig(config)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewKubernetesClient(c, clientSet, claimsClient), nil
 }
 
-func NewKubernetesClient(k8sClient wbclient.Interface, k8sClientSet kubernetes.Interface) *Client {
+func NewKubernetesClient(k8sClient wbclient.Interface, k8sClientSet kubernetes.Interface, claimsClient ipamclaimsclient.Interface) *Client {
 	return &Client{
-		client:    k8sClient,
-		clientSet: k8sClientSet,
-		retries:   storage.DatastoreRetries,
+		client:           k8sClient,
+		clientSet:        k8sClientSet,
+		ipamClaimsClient: claimsClient,
+		retries:          storage.DatastoreRetries,
 	}
 }
 

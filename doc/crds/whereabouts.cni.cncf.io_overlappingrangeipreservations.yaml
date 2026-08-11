@@ -45,6 +45,11 @@ spec:
                 type: string
               ifname:
                 type: string
+              ipamclaimref:
+                description: |-
+                  IPAMClaimRef is "namespace/name" of the IPAMClaim that owns this
+                  reservation.
+                type: string
               podref:
                 type: string
             required:

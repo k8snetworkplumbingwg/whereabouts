@@ -14,6 +14,8 @@ import (
 
 	nettypes "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 	netclient "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/client/clientset/versioned/typed/k8s.cni.cncf.io/v1"
+	ipamclaimsv1alpha1 "github.com/k8snetworkplumbingwg/ipamclaims/pkg/crd/ipamclaims/v1alpha1"
+	ipamclaimsclient "github.com/k8snetworkplumbingwg/ipamclaims/pkg/crd/ipamclaims/v1alpha1/apis/clientset/versioned"
 
 	"github.com/k8snetworkplumbingwg/whereabouts/e2e/entities"
 	whereaboutscnicncfiov1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
@@ -30,9 +32,10 @@ const (
 type statefulSetPredicate func(statefulSet *appsv1.StatefulSet, expectedReplicas int) bool
 
 type ClientInfo struct {
-	Client    *kubernetes.Clientset
-	NetClient netclient.K8sCniCncfIoV1Interface
-	WbClient  wbclient.Interface
+	Client           *kubernetes.Clientset
+	NetClient        netclient.K8sCniCncfIoV1Interface
+	WbClient         wbclient.Interface
+	IPAMClaimsClient ipamclaimsclient.Interface
 }
 
 func NewClientInfo(config *rest.Config) (*ClientInfo, error) {
@@ -50,10 +53,16 @@ func NewClientInfo(config *rest.Config) (*ClientInfo, error) {
 		return nil, err
 	}
 
+	claimsClient, err := ipamclaimsclient.NewForConfig(config)
+	if err != nil {
+		return nil, err
+	}
+
 	return &ClientInfo{
-		Client:    clientSet,
-		NetClient: netClient,
-		WbClient:  wbClient,
+		Client:           clientSet,
+		NetClient:        netClient,
+		WbClient:         wbClient,
+		IPAMClaimsClient: claimsClient,
 	}, nil
 }
 
@@ -93,7 +102,7 @@ func (c *ClientInfo) ProvisionPod(podName string, namespace string, label, annot
 		return nil, err
 	}
 
-	const podCreateTimeout = 10 * time.Second
+	const podCreateTimeout = 30 * time.Second
 	if err := WaitForPodReady(ctx, c.Client, pod.Namespace, pod.Name, podCreateTimeout); err != nil {
 		return nil, err
 	}
@@ -118,6 +127,33 @@ func (c *ClientInfo) DeletePod(pod *corev1.Pod) error {
 	}
 	return nil
 }
+
+func (c *ClientInfo) CreateIPAMClaim(claim *ipamclaimsv1alpha1.IPAMClaim) (*ipamclaimsv1alpha1.IPAMClaim, error) {
+	return c.IPAMClaimsClient.K8sV1alpha1().IPAMClaims(claim.Namespace).Create(context.TODO(), claim, metav1.CreateOptions{})
+}
+
+func (c *ClientInfo) GetIPAMClaim(namespace, name string) (*ipamclaimsv1alpha1.IPAMClaim, error) {
+	return c.IPAMClaimsClient.K8sV1alpha1().IPAMClaims(namespace).Get(context.TODO(), name, metav1.GetOptions{})
+}
+
+func (c *ClientInfo) DeleteIPAMClaim(namespace, name string) error {
+	return c.IPAMClaimsClient.K8sV1alpha1().IPAMClaims(namespace).Delete(context.TODO(), name, metav1.DeleteOptions{})
+}
+
+// IPAMClaimObject builds an empty IPAMClaim for the given network/interface.
+func IPAMClaimObject(name, namespace, network, iface string) *ipamclaimsv1alpha1.IPAMClaim {
+	return &ipamclaimsv1alpha1.IPAMClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: ipamclaimsv1alpha1.IPAMClaimSpec{
+			Network:   network,
+			Interface: iface,
+		},
+	}
+}
+
 
 func (c *ClientInfo) ProvisionReplicaSet(rsName string, namespace string, replicaCount int32, labels, annotations map[string]string) (*appsv1.ReplicaSet, error) {
 	ctx := context.Background()

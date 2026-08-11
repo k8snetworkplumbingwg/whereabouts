@@ -20,7 +20,10 @@ require (
 	k8s.io/kube-openapi v0.0.0-20250910181357-589584f1c912
 )
 
-require github.com/go-co-op/gocron/v2 v2.19.1
+require (
+	github.com/go-co-op/gocron/v2 v2.19.1
+	github.com/k8snetworkplumbingwg/ipamclaims v0.5.1-alpha
+)
 
 require (
 	github.com/emicklei/go-restful/v3 v3.12.2 // indirect

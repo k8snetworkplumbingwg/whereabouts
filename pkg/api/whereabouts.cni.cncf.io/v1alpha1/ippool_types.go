@@ -25,6 +25,9 @@ type IPAllocation struct {
 	ContainerID string `json:"id"`
 	PodRef      string `json:"podref"`
 	IfName      string `json:"ifname,omitempty"`
+	// IPAMClaimRef is "namespace/name" of the IPAMClaim that owns this allocation.
+	// Empty for legacy pod-scoped allocations.
+	IPAMClaimRef string `json:"ipamclaimref,omitempty"`
 }
 
 // +genclient

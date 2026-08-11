@@ -225,6 +225,11 @@ func (pc *PodController) garbageCollectPodIPs(pod *v1.Pod) error {
 				if allocation.PodRef == podID(podNamespace, podName) {
 					logging.Verbosef("Found an existing allocation: %+v", allocation)
 
+					if allocation.IPAMClaimRef != "" {
+						logging.Verbosef("Skipping GC for claim-backed allocation %q (released when IPAMClaim is deleted)", allocation.IPAMClaimRef)
+						continue
+					}
+
 					// The allocation could belong to a new pod with the same name and namespace. Stateful set scenarios.
 					// The previous pod should be gone by the time a pod deletion event is received.
 					if newPod, err := pc.k8sClient.CoreV1().Pods(podNamespace).Get(context.TODO(), podName, metav1.GetOptions{}); err == nil {
@@ -240,7 +245,7 @@ func (pc *PodController) garbageCollectPodIPs(pod *v1.Pod) error {
 
 					logging.Verbosef("stale allocation to cleanup: %+v", allocation)
 
-					client := *wbclient.NewKubernetesClient(pc.wbClient, pc.k8sClient)
+					client := *wbclient.NewKubernetesClient(pc.wbClient, pc.k8sClient, nil)
 					k8sIPAM := &wbclient.KubernetesIPAM{
 						Config:      *ipamConfig,
 						ContainerID: allocation.ContainerID,

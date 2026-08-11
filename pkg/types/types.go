@@ -24,9 +24,17 @@ const (
 // Net is The top-level network config - IPAM plugins are passed the full configuration
 // of the calling plugin, not just the IPAM section.
 type Net struct {
-	Name       string      `json:"name"`
-	CNIVersion string      `json:"cniVersion"`
-	IPAM       *IPAMConfig `json:"ipam"`
+	Name               string      `json:"name"`
+	CNIVersion         string      `json:"cniVersion"`
+	IPAM               *IPAMConfig `json:"ipam"`
+	IPAMClaimReference string      `json:"ipam-claim-reference,omitempty"`
+	Args               *CNINetArgs `json:"args,omitempty"`
+}
+
+// CNINetArgs carries optional CNI args Multus may inject from network-selection
+// element cni-args (args.cni).
+type CNINetArgs struct {
+	CNI *map[string]interface{} `json:"cni,omitempty"`
 }
 
 // NetConfList describes an ordered list of networks.
@@ -73,6 +81,14 @@ type IPAMConfig struct {
 	PodName                  string
 	PodNamespace             string
 	NetworkName              string `json:"network_name,omitempty"`
+	// IPAMClaimReference is the name of an IPAMClaim that owns this allocation.
+	// Empty means legacy pod-scoped behavior. Populated from CNI config / args;
+	// production Multus+ipam-extensions flows may also resolve it from the pod's
+	// network-selection element (see pkg/ipamclaim).
+	IPAMClaimReference string `json:"ipam-claim-reference,omitempty"`
+	// IPAMClaimNamespace is the namespace of the IPAMClaim. Defaults to PodNamespace
+	// when a claim reference is set and this field is empty.
+	IPAMClaimNamespace string `json:"ipam-claim-namespace,omitempty"`
 }
 
 func (ic *IPAMConfig) UnmarshalJSON(data []byte) error {
@@ -110,6 +126,8 @@ func (ic *IPAMConfig) UnmarshalJSON(data []byte) error {
 		PodName                  string
 		PodNamespace             string
 		NetworkName              string `json:"network_name,omitempty"`
+		IPAMClaimReference       string `json:"ipam-claim-reference,omitempty"`
+		IPAMClaimNamespace       string `json:"ipam-claim-namespace,omitempty"`
 	}
 
 	ipamConfigAlias := IPAMConfigAlias{
@@ -147,12 +165,32 @@ func (ic *IPAMConfig) UnmarshalJSON(data []byte) error {
 		PodName:                  ipamConfigAlias.PodName,
 		PodNamespace:             ipamConfigAlias.PodNamespace,
 		NetworkName:              ipamConfigAlias.NetworkName,
+		IPAMClaimReference:       ipamConfigAlias.IPAMClaimReference,
+		IPAMClaimNamespace:       ipamConfigAlias.IPAMClaimNamespace,
 	}
 	return nil
 }
 
 func (ic *IPAMConfig) GetPodRef() string {
 	return fmt.Sprintf("%s/%s", ic.PodNamespace, ic.PodName)
+}
+
+// HasIPAMClaim reports whether this config is claim-backed.
+// Allocation/deallocation behavior is unchanged until later PRs honor this flag.
+func (ic *IPAMConfig) HasIPAMClaim() bool {
+	return ic != nil && ic.IPAMClaimReference != ""
+}
+
+// GetIPAMClaimRef returns "namespace/name" for the referenced IPAMClaim, or "" if unset.
+func (ic *IPAMConfig) GetIPAMClaimRef() string {
+	if !ic.HasIPAMClaim() {
+		return ""
+	}
+	ns := ic.IPAMClaimNamespace
+	if ns == "" {
+		ns = ic.PodNamespace
+	}
+	return fmt.Sprintf("%s/%s", ns, ic.IPAMClaimReference)
 }
 
 func backwardsCompatibleIPAddress(ip string) net.IP {
@@ -193,7 +231,9 @@ type IPReservation struct {
 	ContainerID string `json:"id"`
 	PodRef      string `json:"podref"`
 	IfName      string `json:"ifName"`
-	IsAllocated bool
+	// IPAMClaimRef is "namespace/name" when the reservation is claim-backed.
+	IPAMClaimRef string `json:"ipamclaimref,omitempty"`
+	IsAllocated  bool
 }
 
 func (ir IPReservation) String() string {

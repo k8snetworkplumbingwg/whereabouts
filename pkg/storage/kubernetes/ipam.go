@@ -23,6 +23,7 @@ import (
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/allocate"
 	whereaboutsv1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
 	wbclient "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/clientset/versioned"
+	"github.com/k8snetworkplumbingwg/whereabouts/pkg/ipamclaim"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/iphelpers"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage"
@@ -251,7 +252,13 @@ func toIPReservationList(allocations map[string]whereaboutsv1alpha1.IPAllocation
 			continue
 		}
 		ip := iphelpers.IPAddOffset(firstip, uint64(numOffset))
-		reservelist = append(reservelist, whereaboutstypes.IPReservation{IP: ip, ContainerID: a.ContainerID, PodRef: a.PodRef, IfName: a.IfName})
+		reservelist = append(reservelist, whereaboutstypes.IPReservation{
+			IP:           ip,
+			ContainerID:  a.ContainerID,
+			PodRef:       a.PodRef,
+			IfName:       a.IfName,
+			IPAMClaimRef: a.IPAMClaimRef,
+		})
 	}
 	return reservelist
 }
@@ -263,7 +270,12 @@ func toAllocationMap(reservelist []whereaboutstypes.IPReservation, firstip net.I
 		if err != nil {
 			return nil, err
 		}
-		allocations[fmt.Sprintf("%d", index)] = whereaboutsv1alpha1.IPAllocation{ContainerID: r.ContainerID, PodRef: r.PodRef, IfName: r.IfName}
+		allocations[fmt.Sprintf("%d", index)] = whereaboutsv1alpha1.IPAllocation{
+			ContainerID:  r.ContainerID,
+			PodRef:       r.PodRef,
+			IfName:       r.IfName,
+			IPAMClaimRef: r.IPAMClaimRef,
+		}
 	}
 	return allocations, nil
 }
@@ -305,7 +317,7 @@ func (c *KubernetesOverlappingRangeStore) GetOverlappingRangeIPReservation(ctx c
 
 // UpdateOverlappingRangeAllocation updates clusterwide allocation for overlapping ranges.
 func (c *KubernetesOverlappingRangeStore) UpdateOverlappingRangeAllocation(ctx context.Context, mode int, ip net.IP,
-	podRef, ifName, networkName string) error {
+	podRef, ifName, networkName, claimRef string) error {
 	normalizedIP := NormalizeIP(ip, networkName)
 
 	clusteripres := &whereaboutsv1alpha1.OverlappingRangeIPReservation{
@@ -320,12 +332,28 @@ func (c *KubernetesOverlappingRangeStore) UpdateOverlappingRangeAllocation(ctx c
 		verb = "allocate"
 
 		clusteripres.Spec = whereaboutsv1alpha1.OverlappingRangeIPReservationSpec{
-			PodRef: podRef,
-			IfName: ifName,
+			PodRef:       podRef,
+			IfName:       ifName,
+			IPAMClaimRef: claimRef,
 		}
 
 		_, err = c.client.WhereaboutsV1alpha1().OverlappingRangeIPReservations(c.namespace).Create(
 			ctx, clusteripres, metav1.CreateOptions{})
+		if err != nil && errors.IsAlreadyExists(err) {
+			// Claim take-over (or idempotent retry): refresh PodRef / IfName / claim on the
+			// existing overlapping reservation instead of failing create.
+			existing, getErr := c.client.WhereaboutsV1alpha1().OverlappingRangeIPReservations(c.namespace).Get(
+				ctx, normalizedIP, metav1.GetOptions{})
+			if getErr != nil {
+				return getErr
+			}
+			existing.Spec.PodRef = podRef
+			existing.Spec.IfName = ifName
+			existing.Spec.IPAMClaimRef = claimRef
+			_, err = c.client.WhereaboutsV1alpha1().OverlappingRangeIPReservations(c.namespace).Update(
+				ctx, existing, metav1.UpdateOptions{})
+			verb = "update"
+		}
 
 	case whereaboutstypes.Deallocate:
 		verb = "deallocate"
@@ -566,6 +594,26 @@ func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *Kubernete
 		return newips, err
 	}
 
+	if mode == whereaboutstypes.Allocate {
+		if err := ipamclaim.ResolveFromPodAnnotation(requestCtx, ipam.clientSet, &ipamConf, ipam.IfName); err != nil {
+			logging.Errorf("IPAMClaim resolution from pod annotation failed: %v", err)
+			return newips, err
+		}
+		ipam.Config = ipamConf
+	}
+
+	var preferredClaimIPs []net.IP
+	claimRef := ipamConf.GetIPAMClaimRef()
+	if mode == whereaboutstypes.Allocate && ipamConf.HasIPAMClaim() {
+		claim, err := ipamclaim.GetClaim(requestCtx, ipam.ipamClaimsClient, ipamConf)
+		if err != nil {
+			logging.Errorf("Failed to get IPAMClaim %s: %v", claimRef, err)
+			return newips, err
+		}
+		preferredClaimIPs = ipamclaim.ParseClaimIPs(claim)
+		logging.Debugf("IPAMClaim %s preferred IPs: %v", claimRef, preferredClaimIPs)
+	}
+
 	// handle the ip add/del until successful
 	var overlappingrangeallocations []whereaboutstypes.IPReservation
 	var ipforoverlappingrangeupdate net.IP
@@ -633,7 +681,7 @@ func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *Kubernete
 			var updatedreservelist []whereaboutstypes.IPReservation
 			switch mode {
 			case whereaboutstypes.Allocate:
-				newip, updatedreservelist, err = allocate.AssignIP(ipRange, reservelist, ipam.ContainerID, ipamConf.GetPodRef(), ipam.IfName)
+				newip, updatedreservelist, err = allocate.AssignIPForClaim(ipRange, reservelist, ipam.ContainerID, ipamConf.GetPodRef(), ipam.IfName, claimRef, preferredClaimIPs)
 				if err != nil {
 					logging.Errorf("Error assigning IP: %v", err)
 					return newips, err
@@ -650,20 +698,40 @@ func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *Kubernete
 					}
 
 					if overlappingRangeIPReservation != nil {
-						if overlappingRangeIPReservation.Spec.PodRef != ipamConf.GetPodRef() {
+						samePod := overlappingRangeIPReservation.Spec.PodRef == ipamConf.GetPodRef()
+						sameClaim := claimRef != "" && overlappingRangeIPReservation.Spec.IPAMClaimRef == claimRef
+						if !samePod && !sameClaim {
 							logging.Debugf("Continuing loop, IP is already allocated (possibly from another range): %v", newip)
 							// We create "dummy" records here for evaluation, but, we need to filter those out later.
 							overlappingrangeallocations = append(overlappingrangeallocations, whereaboutstypes.IPReservation{IP: newip.IP, IsAllocated: true})
 							continue
 						}
 
-						skipOverlappingRangeUpdate = true
+						// Same pod: overlapping reservation already matches; no rewrite needed.
+						// Same claim / different pod: refresh PodRef (and related fields) on take-over.
+						if samePod {
+							skipOverlappingRangeUpdate = true
+						}
 					}
 
 					ipforoverlappingrangeupdate = newip.IP
 				}
 
 			case whereaboutstypes.Deallocate:
+				// Claim-backed allocations survive pod DEL; release happens when the
+				// IPAMClaim is deleted (control-loop, follow-up PR).
+				if claimRef == "" {
+					for _, r := range reservelist {
+						if r.ContainerID == ipam.ContainerID && r.IfName == ipam.IfName && r.IPAMClaimRef != "" {
+							claimRef = r.IPAMClaimRef
+							break
+						}
+					}
+				}
+				if claimRef != "" {
+					logging.Debugf("Skipping deallocate for claim-backed allocation %q (containerID %q)", claimRef, ipam.ContainerID)
+					return newips, nil
+				}
 				updatedreservelist, ipforoverlappingrangeupdate = allocate.DeallocateIP(reservelist, ipam.ContainerID, ipam.IfName)
 				if ipforoverlappingrangeupdate == nil {
 					// Do not fail if allocation was not found.
@@ -699,7 +767,7 @@ func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *Kubernete
 		if ipamConf.OverlappingRanges {
 			if !skipOverlappingRangeUpdate {
 				err = overlappingrangestore.UpdateOverlappingRangeAllocation(requestCtx, mode, ipforoverlappingrangeupdate,
-					ipamConf.GetPodRef(), ipam.IfName, ipamConf.NetworkName)
+					ipamConf.GetPodRef(), ipam.IfName, ipamConf.NetworkName, claimRef)
 				if err != nil {
 					logging.Errorf("Error performing UpdateOverlappingRangeAllocation: %v", err)
 					return newips, err
@@ -709,6 +777,20 @@ func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *Kubernete
 
 		newips = append(newips, newip)
 	}
+
+	if mode == whereaboutstypes.Allocate && ipamConf.HasIPAMClaim() && len(preferredClaimIPs) == 0 {
+		if err := ipamclaim.PersistClaimIPs(requestCtx, ipam.ipamClaimsClient, ipamConf, newips); err != nil {
+			logging.Errorf("Failed to persist IPs on IPAMClaim %s: %v", claimRef, err)
+			return newips, err
+		}
+	} else if mode == whereaboutstypes.Allocate && ipamConf.HasIPAMClaim() {
+		// Reuse path: still refresh ownerPod on the claim.
+		if err := ipamclaim.PersistClaimIPs(requestCtx, ipam.ipamClaimsClient, ipamConf, newips); err != nil {
+			logging.Errorf("Failed to update ownerPod on IPAMClaim %s: %v", claimRef, err)
+			return newips, err
+		}
+	}
+
 	return newips, err
 }
 

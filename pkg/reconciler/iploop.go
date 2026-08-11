@@ -75,6 +75,10 @@ func (rl *ReconcileLooper) findOrphanedIPsPerPool(ipPools []storage.IPPool) erro
 				_ = logging.Errorf("pod ref missing for Allocations: %s", ipReservation)
 				continue
 			}
+			if ipReservation.IPAMClaimRef != "" {
+				logging.Debugf("skipping claim-backed reservation %s (%s)", ipReservation.IP, ipReservation.IPAMClaimRef)
+				continue
+			}
 			if !rl.isOrphanedIP(ipReservation.PodRef, ipReservation.IP.String()) {
 				logging.Debugf("pod ref %s is not listed in the live pods list", ipReservation.PodRef)
 				orphanIP.Allocations = append(orphanIP.Allocations, ipReservation)
@@ -224,6 +228,11 @@ func (rl *ReconcileLooper) findClusterWideIPReservations() error {
 		denormalizedip := strings.ReplaceAll(ip, "-", ":")
 
 		podRef := clusterWideIPReservation.Spec.PodRef
+
+		if clusterWideIPReservation.Spec.IPAMClaimRef != "" {
+			logging.Debugf("skipping claim-backed overlapping reservation %s (%s)", denormalizedip, clusterWideIPReservation.Spec.IPAMClaimRef)
+			continue
+		}
 
 		if !rl.isOrphanedIP(podRef, denormalizedip) {
 			logging.Debugf("pod ref %s is not listed in the live pods list", podRef)
