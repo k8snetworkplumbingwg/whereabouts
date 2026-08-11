@@ -13,8 +13,22 @@ while true; do
   esac
 done
 
-HERE="$(dirname "$(readlink --canonicalize ${BASH_SOURCE[0]})")"
-ROOT="$(readlink --canonicalize "$HERE/..")"
+# macOS/BSD `readlink` does not support GNU `--canonicalize`, so compute paths
+# portably using `realpath` (preferred) or Python.
+HERE="$(
+  if command -v realpath >/dev/null 2>&1; then
+    dirname "$(realpath "${BASH_SOURCE[0]}")"
+  else
+    dirname "$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "${BASH_SOURCE[0]}")"
+  fi
+)"
+ROOT="$(
+  if command -v realpath >/dev/null 2>&1; then
+    realpath "$HERE/.."
+  else
+    python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$HERE/.."
+  fi
+)"
 MULTUS_DAEMONSET_URL="https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/master/deployments/multus-daemonset.yml"
 CNIS_DAEMONSET_PATH="$ROOT/hack/cni-install.yml"
 TIMEOUT_K8="5000s"
