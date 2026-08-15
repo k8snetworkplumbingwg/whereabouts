@@ -241,10 +241,7 @@ func (r *IPPoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	if len(pool.Spec.Allocations) == 0 {
 		r.computePoolStats(ctx, &pool, 0, 0)
 		markReady(&pool, ReasonReconciled, "no allocations to reconcile")
-		if err := patchHelper.Patch(ctx, &pool); err != nil {
-			logger.Error(err, "failed to patch status")
-		}
-		return ctrl.Result{RequeueAfter: r.reconcileInterval}, nil
+		return persist(ctx, patchHelper, &pool, ctrl.Result{RequeueAfter: r.reconcileInterval}), nil
 	}
 
 	// Collect orphaned allocation keys.
@@ -340,10 +337,7 @@ func (r *IPPoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	if pendingCount > 0 {
 		r.computePoolStats(ctx, &pool, int32(len(orphanedKeys)), pendingCount)
 		markReconciling(&pool, "waiting for pending pods to be scheduled")
-		if err := patchHelper.Patch(ctx, &pool); err != nil {
-			logger.Error(err, "failed to patch status")
-		}
-		return ctrl.Result{RequeueAfter: pendingPodRequeueInterval}, nil
+		return persist(ctx, patchHelper, &pool, ctrl.Result{RequeueAfter: pendingPodRequeueInterval}), nil
 	}
 
 	// Update allocation gauge after cleanup.
@@ -356,11 +350,33 @@ func (r *IPPoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	} else {
 		markReady(&pool, ReasonReconciled, "all allocations verified")
 	}
-	if err := patchHelper.Patch(ctx, &pool); err != nil {
-		logger.Error(err, "failed to patch status")
+	return persist(ctx, patchHelper, &pool, ctrl.Result{RequeueAfter: r.reconcileInterval}), nil
+}
+
+// persist writes the pending changes and returns the result the caller wants.
+//
+// A conflict means the IPPool changed while this reconcile was in flight, most
+// likely because the CNI plugin allocated or released an IP. The pool state
+// this reconcile decided on is stale, so it requeues immediately and reruns
+// against a fresh read instead of waiting for the next interval.
+func persist(
+	ctx context.Context,
+	helper *PatchHelper,
+	pool *whereaboutsv1alpha1.IPPool,
+	next ctrl.Result,
+) ctrl.Result {
+	err := helper.Patch(ctx, pool)
+	if err == nil {
+		return next
 	}
 
-	return ctrl.Result{RequeueAfter: r.reconcileInterval}, nil
+	logger := log.FromContext(ctx)
+	if IsConflictError(err) {
+		logger.V(1).Info("IPPool changed during reconcile, requeueing", "pool", pool.Name)
+		return ctrl.Result{Requeue: true}
+	}
+	logger.Error(err, "failed to patch IPPool", "pool", pool.Name)
+	return next
 }
 
 // removeAllocations removes the specified allocation keys from the IPPool
