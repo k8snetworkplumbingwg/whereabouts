@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"reflect"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -68,9 +69,13 @@ func NewPatchHelper(obj client.Object, c client.Client) (*PatchHelper, error) {
 
 // Patch compares the current object with the snapshot taken at creation time
 // and issues the minimal set of API calls:
-//   - If spec or metadata changed: one MergeFrom Patch on the main object
+//   - If spec or metadata changed: one MergeFrom Patch on the main object,
+//     carrying an optimistic lock on the snapshot resourceVersion
 //   - If status changed: one Status().Update on the status subresource
 //   - If nothing changed: zero API calls
+//
+// A concurrent writer causes the spec patch to fail with a conflict error.
+// Callers should requeue on conflict rather than treat it as fatal.
 //
 // When both spec and status changed, the spec patch is sent first.  Since
 // client.Patch updates obj in-place with the server response (resetting
@@ -107,7 +112,7 @@ func (h *PatchHelper) Patch(ctx context.Context, obj client.Object) error {
 			return fmt.Errorf("snapshot object: DeepCopyObject() returned type %T which does not implement client.Object", copied)
 		}
 
-		if err := h.client.Patch(ctx, obj, client.MergeFrom(h.beforeObject)); err != nil {
+		if err := h.client.Patch(ctx, obj, h.specPatch()); err != nil {
 			errs = append(errs, fmt.Errorf("patching spec/metadata: %w", err))
 		} else {
 			// Re-apply the desired status onto obj (which now reflects the
@@ -119,7 +124,7 @@ func (h *PatchHelper) Patch(ctx context.Context, obj client.Object) error {
 			}
 		}
 	case specChanged:
-		if err := h.client.Patch(ctx, obj, client.MergeFrom(h.beforeObject)); err != nil {
+		if err := h.client.Patch(ctx, obj, h.specPatch()); err != nil {
 			errs = append(errs, fmt.Errorf("patching spec/metadata: %w", err))
 		}
 	default:
@@ -130,6 +135,41 @@ func (h *PatchHelper) Patch(ctx context.Context, obj client.Object) error {
 	}
 
 	return kerrors.NewAggregate(errs)
+}
+
+// IsConflictError reports whether err is, or aggregates, an API conflict.
+//
+// Patch returns its errors through kerrors.NewAggregate, and that aggregate
+// implements no Unwrap method, so apierrors.IsConflict alone does not see the
+// wrapped conflict. Callers use this helper to decide to requeue.
+func IsConflictError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if apierrors.IsConflict(err) {
+		return true
+	}
+	if agg, ok := err.(kerrors.Aggregate); ok {
+		for _, e := range agg.Errors() {
+			if IsConflictError(e) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// specPatch returns the patch used for spec and metadata changes.
+//
+// The patch carries an optimistic lock, so the API server rejects it with a
+// conflict when the object changed since the snapshot. IPPool.Spec.Allocations
+// is written concurrently by the CNI plugin, which guards its own JSON patch
+// with a "test" on /metadata/resourceVersion. Without the same guard here, a
+// reconcile that read a stale pool could delete an allocation key that the CNI
+// plugin has already reassigned to a new pod, which frees an in-use IP and
+// allows a duplicate allocation.
+func (h *PatchHelper) specPatch() client.Patch {
+	return client.MergeFromWithOptions(h.beforeObject, client.MergeFromWithOptimisticLock{})
 }
 
 // overwriteStatus copies the "status" field from src onto dst via JSON
