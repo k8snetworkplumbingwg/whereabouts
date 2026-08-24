@@ -12,7 +12,7 @@ Status: Draft
   - [Configuration](#configuration)
   - [Range ordering](#range-ordering)
   - [Allocation](#allocation)
-  - [Idempotent retries](#idempotent-retries)
+  - [Existing allocation reuse](#existing-allocation-reuse)
   - [Deallocation](#deallocation)
   - [Overlapping ranges](#overlapping-ranges)
   - [Mixed address families](#mixed-address-families)
@@ -44,8 +44,8 @@ separates that API decision from the implementation.
 - Preserve the current one-address-per-range behavior by default.
 - Allow a configuration to allocate one address total from the first range
   with capacity.
-- Define ordering, exhaustion, retries, deallocation, overlapping ranges, and
-  mixed-family behavior precisely.
+- Define ordering, exhaustion, existing allocation reuse, deallocation,
+  overlapping ranges, and mixed-family behavior precisely.
 - Use an API that can be extended with additional allocation strategies later.
 
 ### Use cases
@@ -166,7 +166,8 @@ The `first_available` strategy performs these steps while holding the lease
 selected by the existing IPAM mode:
 
 1. Search every configured pool for an existing allocation for the same Pod
-   reference and interface, as described in [Idempotent retries](#idempotent-retries).
+   reference and interface, as described in
+   [Existing allocation reuse](#existing-allocation-reuse).
 2. If no existing allocation is found, visit ranges in normalized order.
 3. Attempt allocation from the current range using the existing within-range
    address selection and overlapping-range checks.
@@ -183,20 +184,24 @@ timeout, conflict-after-retries, and other operational errors abort the
 request. Treating arbitrary failures as exhaustion could hide a broken pool
 and allocate from a lower-priority range unexpectedly.
 
-### Idempotent retries
+### Existing allocation reuse
 
-CNI ADD processing must be idempotent when the runtime invokes ADD again for
-the same Pod and interface. This can happen when an earlier ADD persisted an
-allocation but its result did not reach the runtime, leaving the outcome
-uncertain. It can also happen after a kubelet or CRI restart if the runtime
-creates a replacement sandbox and invokes ADD for the same Pod and interface
-without an intervening DEL. In the latter case, the `CNI_CONTAINERID` can
-differ, so this is not necessarily a repeated ADD for the exact
-`(CNI_CONTAINERID, CNI_IFNAME)` tuple that the CNI specification says a runtime
-should not issue. Neither case is specific to StatefulSets.
+Whereabouts is a delegated IPAM plugin. It does not create or configure the
+interface named by `CNI_IFNAME`. The upper CNI plugin remains responsible for
+the [CNI ADD requirements](https://www.cni.dev/docs/spec/#add-add-container-to-network-or-apply-modifications),
+including returning an error if the requested interface already exists in the
+target sandbox. This proposal does not make it valid for a runtime to invoke
+ADD twice without an intervening DEL for the same
+`(CNI_CONTAINERID, CNI_IFNAME)` tuple.
 
-A subsequent ADD must return the original allocation instead of creating
-another one.
+Whereabouts already uses the Pod reference and interface name to find an
+existing allocation within one pool. When the upper CNI plugin configures a
+replacement sandbox for the same logical attachment, `CNI_CONTAINERID` and
+`CNI_NETNS` differ while the Pod reference and `CNI_IFNAME` remain the same.
+The requested interface does not already exist in the new sandbox. In this
+case, delegated Whereabouts ADD preserves the existing behavior: it returns the
+existing allocation and refreshes its stored container ID instead of allocating
+another address. This case is not specific to StatefulSets.
 
 Before attempting any new allocation, `first_available` searches the pool
 record for every currently configured range for a reservation whose `podRef`
@@ -207,13 +212,14 @@ following sequence:
 1. The first range is exhausted, so a Pod receives an address from the second
    range.
 2. Capacity later becomes available in the first range.
-3. The runtime invokes ADD again for the same Pod and interface because the
-   earlier result was uncertain or a replacement sandbox was created.
+3. The upper CNI plugin configures a replacement sandbox and invokes delegated
+   Whereabouts ADD with a different `CNI_CONTAINERID` for the same Pod reference
+   and interface name.
 
 Without a complete preflight search, step 3 would allocate a second address
 from the first range. With the search, Whereabouts returns the address already
-held in the second range and refreshes its container ID if needed, consistent
-with existing retry behavior within one pool.
+held in the second range and refreshes its container ID if needed, preserving
+the existing behavior within one pool.
 
 Failure to inspect any configured pool is an operational error; allocation
 must not proceed on incomplete knowledge. The complete search records every
@@ -233,11 +239,11 @@ reservation and the current ADD request before the address is returned. API
 failures are also operational errors. Broader recovery from conflicting or
 orphaned state belongs in a reconciler and is outside this proposal.
 
-After overlap validation and repair, Whereabouts retryably refreshes the
-container ID on every preflight match before returning the first match in
-configured order. If any refresh fails, ADD returns an operational error; a
-subsequent retry repeats the complete search and must not allocate another
-address.
+After overlap validation and repair, Whereabouts uses the existing datastore
+retry handling to refresh the container ID on every preflight match before
+returning the first match in configured order. If any refresh fails, ADD
+returns an operational error without allocating another address. Every valid
+delegated ADD performs the complete search before any allocation attempt.
 
 ### Deallocation
 
@@ -245,8 +251,8 @@ Deallocation visits every configured pool in normalized order. Not finding the
 allocation in an earlier pool does not stop the search. Every reservation that
 matches the existing container-ID-and-interface deletion identity is removed,
 together with its overlapping-range reservation when enabled. Refreshing every
-duplicate match during ADD ensures a later DEL using the current container ID
-can remove all of them.
+duplicate match during existing allocation reuse ensures a later DEL using the
+current container ID can remove all of them.
 
 Searching all pools makes deletion deterministic when the address came from a
 later fallback range. As today, deleting an allocation that is already absent
@@ -261,7 +267,7 @@ scoped by `network_name`:
   unavailable even if it appears in another configured range. Allocation
   continues within the current range, then falls back only if that range is
   exhausted.
-- A retry that finds an existing IPPool allocation verifies its corresponding
+- An ADD that finds an existing IPPool allocation verifies its corresponding
   overlapping-range reservation and recreates it only when it is absent. A
   reservation with a conflicting Pod or interface is left unchanged and causes
   an operational error.
@@ -332,8 +338,8 @@ range sequence, including every value used to derive IPPool identifiers, are
 immutable while the network has live allocations. This means operators must
 not change between `all` and `first_available`, rename the network, reorder
 ranges, edit an existing range, or remove or replace one. Such changes can alter
-an idempotent ADD result, make an existing reservation undiscoverable, or orphan
-it during DEL.
+the result when reusing an allocation for a replacement sandbox, make an
+existing reservation undiscoverable, or orphan it during DEL.
 
 For `first_available`, the only supported live update is appending one or more
 ranges. Existing entries and their order form an immutable prefix of the
@@ -346,9 +352,9 @@ the traversal. The complete preflight search still returns a workload's
 existing allocation before attempting to allocate from any range.
 
 Configurations using `all` must be drained before appending a range as well as
-before any other range change. Under the existing `all` allocation loop, a
-retried ADD after an append would allocate an additional address from the new
-range and change the result for an existing workload.
+before any other range change. Under the existing `all` allocation loop, an ADD
+for a replacement sandbox after an append would allocate an additional address
+from the new range and change the result for an existing workload.
 
 Old ranges remain configured until the entire network is drained. After all
 allocations have been released, operators may change the strategy or
@@ -380,8 +386,8 @@ After the API is accepted:
    overlapping-range reservations before performing any preflight update.
    Recreate missing secondary records only after the validation pass finds no
    ownership conflict; fail without modifying state when ownership conflicts.
-4. Retryably refresh every matching container ID, then return the first match
-   in configured order.
+4. Use the existing datastore retry handling to refresh every matching
+   container ID, then return the first match in configured order.
 5. Make deallocation search every pool and clean up every matching reservation.
 6. Preserve existing mode-specific lease selection, datastore retries, overlap
    handling, and the default multi-address path. Reject `first_available` with
@@ -408,17 +414,18 @@ Unit coverage will include:
 - rejection of empty, unknown, and incorrectly cased strategies;
 - inline and flat-file precedence, including rejection of invalid values in
   either source and normalization of omission or explicit `all`;
-- retry returning an existing later-pool allocation after an earlier pool
-  regains capacity;
-- retry restoring overlap protection after IPPool persistence succeeds but
-  overlapping-range reservation persistence fails;
-- retry rejecting an overlapping-range reservation owned by a different Pod or
-  interface without overwriting either record;
+- replacement-sandbox ADD returning an existing later-pool allocation after an
+  earlier pool regains capacity;
+- ADD finding an existing allocation restoring overlap protection after IPPool
+  persistence succeeds but overlapping-range reservation persistence fails;
+- ADD finding an existing allocation rejecting an overlapping-range
+  reservation owned by a different Pod or interface without overwriting either
+  record;
 - multiple preflight matches where an earlier overlap reservation is missing
   and a later one has conflicting ownership, returning an operational error
   without recreating the missing record or refreshing any container ID;
-- retryably refreshing duplicate matches with different container IDs, then
-  deleting all of them;
+- refreshing duplicate matches with different container IDs using the existing
+  datastore retry handling, then deleting all of them;
 - deletion of an allocation from a later pool;
 - overlapping ranges with overlap protection enabled and disabled;
 - identical entries resolving to one pool traversal while preserving the first
