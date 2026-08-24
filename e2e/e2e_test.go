@@ -80,8 +80,21 @@ var _ = Describe("Whereabouts functionality", func() {
 			netAttachDef = util.MacvlanNetworkWithWhereaboutsIPAMNetwork(testNetworkName, testNamespace, ipv4TestRange, []string{}, wbstorage.UnnamedNetwork, true)
 
 			By("creating a NetworkAttachmentDefinition for whereabouts")
+			// The cluster is reused between test runs; make this idempotent.
+			_ = clientInfo.DelNetAttachDef(netAttachDef)
 			_, err = clientInfo.AddNetAttachDef(netAttachDef)
 			Expect(err).NotTo(HaveOccurred())
+
+			// Multus reads NADs via informers; give it a moment to pick up the
+			// newly-created definition before we schedule the pod.
+			Eventually(func() bool {
+				_, err := clientInfo.NetClient.NetworkAttachmentDefinitions(testNamespace).Get(
+					context.TODO(),
+					testNetworkName,
+					metav1.GetOptions{},
+				)
+				return err == nil
+			}, 10*time.Second, 500*time.Millisecond).Should(BeTrue())
 		})
 
 		AfterEach(func() {
@@ -889,6 +902,130 @@ var _ = Describe("Whereabouts functionality", func() {
 			})
 		})
 
+		Context("IPAMClaim persistent IPs", func() {
+			const (
+				claimPodName = "whereabouts-ipamclaim-pod"
+				claimName    = "wa-persistent-claim"
+				claimIfName  = "net1"
+			)
+
+			AfterEach(func() {
+				if pod != nil {
+					_ = clientInfo.DeletePod(pod)
+					pod = nil
+				}
+				_ = clientInfo.DeleteIPAMClaim(testNamespace, claimName)
+			})
+
+			It("keeps the same IP across pod delete/recreate and releases on claim delete", func() {
+				By("creating an IPAMClaim")
+				// The cluster can be reused between test runs; make claim create idempotent.
+				_ = clientInfo.DeleteIPAMClaim(testNamespace, claimName)
+				_, err := clientInfo.CreateIPAMClaim(
+					wbtestclient.IPAMClaimObject(claimName, testNamespace, testNetworkName, claimIfName),
+				)
+				Expect(err).NotTo(HaveOccurred())
+
+				Eventually(func() bool {
+					_, err := clientInfo.GetIPAMClaim(testNamespace, claimName)
+					return err == nil
+				}, 10*time.Second, 500*time.Millisecond).Should(BeTrue())
+
+				By("creating a pod referencing the IPAMClaim")
+				// If a prior run crashed, the pod name might still exist.
+				_ = clientInfo.Client.CoreV1().Pods(testNamespace).Delete(
+					context.TODO(),
+					claimPodName,
+					metav1.DeleteOptions{},
+				)
+				pod, err = clientInfo.ProvisionPod(
+					claimPodName,
+					testNamespace,
+					util.PodTierLabel(claimPodName),
+					entities.PodNetworkSelectionElementsWithIPAMClaim(testNetworkName, claimIfName, claimName),
+				)
+				Expect(err).NotTo(HaveOccurred())
+
+				By("recording the allocated IP and verifying claim status")
+				ips, err := retrievers.SecondaryIfaceIPValue(pod, claimIfName)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(ips).NotTo(BeEmpty())
+				allocatedIP := ips[0]
+				Expect(inRange(ipv4TestRange, allocatedIP)).To(Succeed())
+				fmt.Printf("\nIPAMClaim initial allocation: pod=%s iface=%s ip=%s\n", claimPodName, claimIfName, allocatedIP)
+
+				Eventually(func() []string {
+					c, err := clientInfo.GetIPAMClaim(testNamespace, claimName)
+					Expect(err).NotTo(HaveOccurred())
+					return c.Status.IPs
+				}, 10*time.Second, 500*time.Millisecond).Should(ContainElement(allocatedIP))
+				fmt.Printf("IPAMClaim %s/%s status.ips=%v\n", testNamespace, claimName, []string{allocatedIP})
+
+				claimRef := fmt.Sprintf("%s/%s", testNamespace, claimName)
+				verifyClaimAllocations(clientInfo, ipv4TestRange, allocatedIP, testNamespace, claimPodName, claimIfName, claimRef)
+
+				By("deleting the pod and verifying the allocation is retained")
+				Expect(clientInfo.DeletePod(pod)).To(Succeed())
+				pod = nil
+
+				Consistently(func() bool {
+					ipPool, err := clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(
+						context.Background(),
+						wbstorage.IPPoolName(wbstorage.PoolIdentifier{IpRange: ipv4TestRange, NetworkName: wbstorage.UnnamedNetwork}),
+						metav1.GetOptions{},
+					)
+					Expect(err).NotTo(HaveOccurred())
+					for _, allocation := range ipPool.Spec.Allocations {
+						if allocation.IPAMClaimRef == claimRef {
+							return true
+						}
+					}
+					return false
+				}, 3*time.Second, 500*time.Millisecond).Should(BeTrue())
+				fmt.Printf("IPAMClaim allocation retained after pod delete: claim=%s ip=%s\n", claimRef, allocatedIP)
+
+				By("recreating the pod with the same claim and verifying the same IP is reused")
+				pod, err = clientInfo.ProvisionPod(
+					claimPodName+"-restart",
+					testNamespace,
+					util.PodTierLabel(claimPodName+"-restart"),
+					entities.PodNetworkSelectionElementsWithIPAMClaim(testNetworkName, claimIfName, claimName),
+				)
+				Expect(err).NotTo(HaveOccurred())
+
+				reusedIPs, err := retrievers.SecondaryIfaceIPValue(pod, claimIfName)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(reusedIPs).NotTo(BeEmpty())
+				Expect(reusedIPs[0]).To(Equal(allocatedIP))
+				fmt.Printf("IPAMClaim reused allocation: pod=%s iface=%s ip=%s (same as initial=%s)\n",
+					claimPodName+"-restart", claimIfName, reusedIPs[0], allocatedIP)
+
+				verifyClaimAllocations(clientInfo, ipv4TestRange, allocatedIP, testNamespace, claimPodName+"-restart", claimIfName, claimRef)
+
+				By("deleting the pod then the IPAMClaim and verifying the allocation is released")
+				Expect(clientInfo.DeletePod(pod)).To(Succeed())
+				pod = nil
+				Expect(clientInfo.DeleteIPAMClaim(testNamespace, claimName)).To(Succeed())
+
+				Eventually(func() bool {
+					ipPool, err := clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(
+						context.Background(),
+						wbstorage.IPPoolName(wbstorage.PoolIdentifier{IpRange: ipv4TestRange, NetworkName: wbstorage.UnnamedNetwork}),
+						metav1.GetOptions{},
+					)
+					if err != nil {
+						return false
+					}
+					for _, allocation := range ipPool.Spec.Allocations {
+						if allocation.IPAMClaimRef == claimRef {
+							return false
+						}
+					}
+					return true
+				}, 15*time.Second, 500*time.Millisecond).Should(BeTrue())
+			})
+		})
+
 	})
 
 	Context("Reconciler conformance", func() {
@@ -971,6 +1108,28 @@ func verifyAllocations(clientInfo *wbtestclient.ClientInfo, ipv4TestRange, ip, t
 
 	Expect(overlapping.Spec.IfName).To(Equal(ifName))
 	Expect(overlapping.Spec.PodRef).To(Equal(getPodRef(testNamespace, podName)))
+}
+
+func verifyClaimAllocations(clientInfo *wbtestclient.ClientInfo, ipv4TestRange, ip, testNamespace, podName, ifName, claimRef string) {
+	ipPool, err := clientInfo.WbClient.WhereaboutsV1alpha1().IPPools(ipPoolNamespace).Get(context.Background(), wbstorage.IPPoolName(wbstorage.PoolIdentifier{IpRange: ipv4TestRange, NetworkName: wbstorage.UnnamedNetwork}), metav1.GetOptions{})
+	Expect(err).NotTo(HaveOccurred())
+
+	firstIP, _, err := net.ParseCIDR(ipv4TestRange)
+	Expect(err).NotTo(HaveOccurred())
+	offset, err := iphelpers.IPGetOffset(net.ParseIP(ip), firstIP)
+	Expect(err).NotTo(HaveOccurred())
+
+	allocation, ok := ipPool.Spec.Allocations[fmt.Sprintf("%d", offset)]
+	Expect(ok).To(BeTrue())
+	Expect(allocation.PodRef).To(Equal(getPodRef(testNamespace, podName)))
+	Expect(allocation.IfName).To(Equal(ifName))
+	Expect(allocation.IPAMClaimRef).To(Equal(claimRef))
+
+	overlapping, err := clientInfo.WbClient.WhereaboutsV1alpha1().OverlappingRangeIPReservations(ipPoolNamespace).Get(context.Background(), wbstorage.NormalizeIP(net.ParseIP(ip), wbstorage.UnnamedNetwork), metav1.GetOptions{})
+	Expect(err).NotTo(HaveOccurred())
+	Expect(overlapping.Spec.IfName).To(Equal(ifName))
+	Expect(overlapping.Spec.PodRef).To(Equal(getPodRef(testNamespace, podName)))
+	Expect(overlapping.Spec.IPAMClaimRef).To(Equal(claimRef))
 }
 
 func allocationForPodRef(podRef string, ipPool v1alpha1.IPPool) []v1alpha1.IPAllocation {

@@ -412,6 +412,131 @@ var _ = Describe("Allocation operations", func() {
 				HavePrefix(
 					"LoadIPAMConfig - JSON Parsing Error: invalid character 'a' looking for beginning of object key string")))
 	})
+
+	It("parses ipam-claim-reference from the IPAM section", func() {
+		confPath := filepath.Join(tmpDir, "whereabouts.conf")
+		Expect(os.WriteFile(confPath, []byte(`{
+			"kubernetes": {"kubeconfig": "/etc/cni/net.d/whereabouts.d/whereabouts.kubeconfig"}
+		}`), 0755)).To(Succeed())
+
+		conf := `{
+			"cniVersion": "0.3.1",
+			"name": "mynet",
+			"type": "ipvlan",
+			"ipam": {
+				"type": "whereabouts",
+				"range": "192.168.1.0/24",
+				"configuration_path": "` + confPath + `",
+				"ipam-claim-reference": "vm-iface0",
+				"ipam-claim-namespace": "vms"
+			}
+		}`
+		envArgs := "K8S_POD_NAME=virt-launcher-vm;K8S_POD_NAMESPACE=vms"
+		ipamConfig, _, err := LoadIPAMConfig([]byte(conf), envArgs)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ipamConfig.IPAMClaimReference).To(Equal("vm-iface0"))
+		Expect(ipamConfig.IPAMClaimNamespace).To(Equal("vms"))
+		Expect(ipamConfig.HasIPAMClaim()).To(BeTrue())
+		Expect(ipamConfig.GetIPAMClaimRef()).To(Equal("vms/vm-iface0"))
+	})
+
+	It("defaults claim namespace to the pod namespace", func() {
+		confPath := filepath.Join(tmpDir, "whereabouts.conf")
+		Expect(os.WriteFile(confPath, []byte(`{
+			"kubernetes": {"kubeconfig": "/etc/cni/net.d/whereabouts.d/whereabouts.kubeconfig"}
+		}`), 0755)).To(Succeed())
+
+		conf := `{
+			"cniVersion": "0.3.1",
+			"name": "mynet",
+			"type": "ipvlan",
+			"ipam": {
+				"type": "whereabouts",
+				"range": "192.168.1.0/24",
+				"configuration_path": "` + confPath + `",
+				"ipam-claim-reference": "vm-iface0"
+			}
+		}`
+		envArgs := "K8S_POD_NAME=virt-launcher-vm;K8S_POD_NAMESPACE=tenant-a"
+		ipamConfig, _, err := LoadIPAMConfig([]byte(conf), envArgs)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ipamConfig.IPAMClaimReference).To(Equal("vm-iface0"))
+		Expect(ipamConfig.IPAMClaimNamespace).To(Equal("tenant-a"))
+		Expect(ipamConfig.GetIPAMClaimRef()).To(Equal("tenant-a/vm-iface0"))
+	})
+
+	It("reads ipam-claim-reference from top-level net config", func() {
+		confPath := filepath.Join(tmpDir, "whereabouts.conf")
+		Expect(os.WriteFile(confPath, []byte(`{
+			"kubernetes": {"kubeconfig": "/etc/cni/net.d/whereabouts.d/whereabouts.kubeconfig"}
+		}`), 0755)).To(Succeed())
+
+		conf := `{
+			"cniVersion": "0.3.1",
+			"name": "mynet",
+			"type": "ipvlan",
+			"ipam-claim-reference": "top-level-claim",
+			"ipam": {
+				"type": "whereabouts",
+				"range": "192.168.1.0/24",
+				"configuration_path": "` + confPath + `"
+			}
+		}`
+		envArgs := "K8S_POD_NAME=pod;K8S_POD_NAMESPACE=ns"
+		ipamConfig, _, err := LoadIPAMConfig([]byte(conf), envArgs)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ipamConfig.IPAMClaimReference).To(Equal("top-level-claim"))
+		Expect(ipamConfig.IPAMClaimNamespace).To(Equal("ns"))
+	})
+
+	It("reads ipam-claim-reference from args.cni", func() {
+		confPath := filepath.Join(tmpDir, "whereabouts.conf")
+		Expect(os.WriteFile(confPath, []byte(`{
+			"kubernetes": {"kubeconfig": "/etc/cni/net.d/whereabouts.d/whereabouts.kubeconfig"}
+		}`), 0755)).To(Succeed())
+
+		conf := `{
+			"cniVersion": "0.3.1",
+			"name": "mynet",
+			"type": "ipvlan",
+			"args": {
+				"cni": {
+					"ipam-claim-reference": "from-cni-args"
+				}
+			},
+			"ipam": {
+				"type": "whereabouts",
+				"range": "192.168.1.0/24",
+				"configuration_path": "` + confPath + `"
+			}
+		}`
+		envArgs := "K8S_POD_NAME=pod;K8S_POD_NAMESPACE=ns"
+		ipamConfig, _, err := LoadIPAMConfig([]byte(conf), envArgs)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ipamConfig.IPAMClaimReference).To(Equal("from-cni-args"))
+	})
+
+	It("leaves claim fields empty when unset (legacy behavior)", func() {
+		confPath := filepath.Join(tmpDir, "whereabouts.conf")
+		Expect(os.WriteFile(confPath, []byte(`{
+			"kubernetes": {"kubeconfig": "/etc/cni/net.d/whereabouts.d/whereabouts.kubeconfig"}
+		}`), 0755)).To(Succeed())
+
+		conf := `{
+			"cniVersion": "0.3.1",
+			"name": "mynet",
+			"type": "ipvlan",
+			"ipam": {
+				"type": "whereabouts",
+				"range": "192.168.1.0/24",
+				"configuration_path": "` + confPath + `"
+			}
+		}`
+		ipamConfig, _, err := LoadIPAMConfig([]byte(conf), "K8S_POD_NAME=pod;K8S_POD_NAMESPACE=ns")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ipamConfig.HasIPAMClaim()).To(BeFalse())
+		Expect(ipamConfig.GetIPAMClaimRef()).To(BeEmpty())
+	})
 })
 
 func generateIPAMConfWithOverlappingRanges() string {

@@ -65,6 +65,16 @@ rules:
     - get
     - list
     - watch
+- apiGroups: ["k8s.cni.cncf.io"]
+  resources:
+    - ipamclaims
+    - ipamclaims/status
+  verbs:
+    - get
+    - list
+    - watch
+    - update
+    - patch
 - apiGroups:
   - ""
   - events.k8s.io

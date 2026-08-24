@@ -24,11 +24,20 @@ func (a AssignmentError) Error() string {
 
 // AssignIP assigns an IP using a range and a reserve list.
 func AssignIP(ipamConf types.RangeConfiguration, reservelist []types.IPReservation, containerID, podRef, ifName string) (net.IPNet, []types.IPReservation, error) {
+	return AssignIPForClaim(ipamConf, reservelist, containerID, podRef, ifName, "", nil)
+}
 
-	// Setup the basics here.
-	_, ipnet, _ := net.ParseCIDR(ipamConf.Range)
+// AssignIPForClaim assigns an IP for an optional IPAMClaim.
+// When claimRef is set and preferredIPs is non-empty, those addresses are reused
+// (idempotent take-over for VM stop/start and live migration). Otherwise a new
+// address is chosen and tagged with claimRef when present.
+func AssignIPForClaim(ipamConf types.RangeConfiguration, reservelist []types.IPReservation, containerID, podRef, ifName, claimRef string, preferredIPs []net.IP) (net.IPNet, []types.IPReservation, error) {
+	_, ipnet, err := net.ParseCIDR(ipamConf.Range)
+	if err != nil {
+		return net.IPNet{}, nil, fmt.Errorf("invalid range CIDR %q: %w", ipamConf.Range, err)
+	}
 
-	// Verify if podRef and ifName have already an allocation.
+	// Legacy / same-pod idempotency: podRef + ifName already allocated.
 	for i, r := range reservelist {
 		if r.PodRef == podRef && r.IfName == ifName {
 			logging.Debugf("IP already allocated for podRef: %q - ifName:%q - IP: %s", podRef, ifName, r.IP.String())
@@ -36,8 +45,48 @@ func AssignIP(ipamConf types.RangeConfiguration, reservelist []types.IPReservati
 				logging.Debugf("updating container ID: %q", containerID)
 				reservelist[i].ContainerID = containerID
 			}
-
+			if claimRef != "" && reservelist[i].IPAMClaimRef == "" {
+				reservelist[i].IPAMClaimRef = claimRef
+			}
 			return net.IPNet{IP: r.IP, Mask: ipnet.Mask}, reservelist, nil
+		}
+	}
+
+	if claimRef != "" {
+		// Existing claim-backed reservation (same interface): hand off to new pod.
+		for i, r := range reservelist {
+			if r.IPAMClaimRef == claimRef && r.IfName == ifName {
+				logging.Debugf("Reusing claim-backed IP %s for claim %q (podRef %q -> %q)", r.IP, claimRef, r.PodRef, podRef)
+				reservelist[i].ContainerID = containerID
+				reservelist[i].PodRef = podRef
+				reservelist[i].IfName = ifName
+				return net.IPNet{IP: r.IP, Mask: ipnet.Mask}, reservelist, nil
+			}
+		}
+
+		for _, pref := range preferredIPs {
+			if pref == nil || !ipnet.Contains(pref) {
+				continue
+			}
+			for i, r := range reservelist {
+				if r.IP.Equal(pref) {
+					logging.Debugf("Taking over preferred claim IP %s for claim %q", pref, claimRef)
+					reservelist[i].ContainerID = containerID
+					reservelist[i].PodRef = podRef
+					reservelist[i].IfName = ifName
+					reservelist[i].IPAMClaimRef = claimRef
+					return net.IPNet{IP: r.IP, Mask: ipnet.Mask}, reservelist, nil
+				}
+			}
+			logging.Debugf("Reserving preferred claim IP %s for claim %q", pref, claimRef)
+			reservelist = append(reservelist, types.IPReservation{
+				IP:           pref,
+				ContainerID:  containerID,
+				PodRef:       podRef,
+				IfName:       ifName,
+				IPAMClaimRef: claimRef,
+			})
+			return net.IPNet{IP: pref, Mask: ipnet.Mask}, reservelist, nil
 		}
 	}
 
@@ -45,7 +94,14 @@ func AssignIP(ipamConf types.RangeConfiguration, reservelist []types.IPReservati
 	if err != nil {
 		return net.IPNet{}, nil, err
 	}
-
+	if claimRef != "" {
+		for i := range updatedreservelist {
+			if updatedreservelist[i].IP.Equal(newip) && updatedreservelist[i].PodRef == podRef && updatedreservelist[i].IfName == ifName {
+				updatedreservelist[i].IPAMClaimRef = claimRef
+				break
+			}
+		}
+	}
 	return net.IPNet{IP: newip, Mask: ipnet.Mask}, updatedreservelist, nil
 }
 

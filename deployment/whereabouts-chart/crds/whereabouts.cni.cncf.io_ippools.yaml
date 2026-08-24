@@ -48,6 +48,11 @@ spec:
                       type: string
                     ifname:
                       type: string
+                    ipamclaimref:
+                      description: |-
+                        IPAMClaimRef is "namespace/name" of the IPAMClaim that owns this
+                        allocation. Empty for legacy pod-scoped allocations.
+                      type: string
                     podref:
                       type: string
                   required:

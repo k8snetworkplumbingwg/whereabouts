@@ -7,6 +7,8 @@ type OverlappingRangeIPReservationSpec struct {
 	ContainerID string `json:"containerid,omitempty"`
 	PodRef      string `json:"podref"`
 	IfName      string `json:"ifname,omitempty"`
+	// IPAMClaimRef is "namespace/name" of the IPAMClaim that owns this reservation.
+	IPAMClaimRef string `json:"ipamclaimref,omitempty"`
 }
 
 // +genclient

@@ -46,6 +46,7 @@ kubectl apply \
     -f doc/crds/daemonset-install.yaml \
     -f doc/crds/whereabouts.cni.cncf.io_ippools.yaml \
     -f doc/crds/whereabouts.cni.cncf.io_overlappingrangeipreservations.yaml \
+    -f doc/crds/k8s.cni.cncf.io_ipamclaims.yaml \
     -f doc/crds/reconciler-deployment.yaml
 ```
 
@@ -224,6 +225,34 @@ You must run your whereabouts daemonset, whereabouts controller in the same name
 The field in the example `node_slice_size` determines how large of a CIDR to allocate per node and the existence of the field is what triggers
 `Fast IPAM` mode.
 
+## Persistent IPs (IPAMClaim)
+
+Whereabouts can retain the same IP across pod recreation by tying the allocation
+to an [`IPAMClaim`](https://github.com/k8snetworkplumbingwg/ipamclaims). This is
+the recommended way to give KubeVirt VMs stable addresses on Multus secondary
+networks that use Whereabouts (interoperable with
+[`kubevirt/ipam-extensions`](https://github.com/kubevirt/ipam-extensions)).
+
+Install the CRD if you have not already:
+
+```bash
+kubectl apply -f doc/crds/k8s.cni.cncf.io_ipamclaims.yaml
+```
+
+Reference the claim from the Multus network-selection element:
+
+```yaml
+annotations:
+  k8s.v1.cni.cncf.io/networks: |
+    [{
+      "name": "wa-nad",
+      "interface": "net1",
+      "ipam-claim-reference": "my-claim"
+    }]
+```
+
+Pods without a claim behave as before. See [doc/persistent-ips.md](doc/persistent-ips.md)
+for lifecycle details, a full manual example, and KubeVirt notes.
 
 ## Core Parameters
 

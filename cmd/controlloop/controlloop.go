@@ -16,6 +16,8 @@ import (
 
 	nadclient "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/client/clientset/versioned"
 	nadinformers "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/client/informers/externalversions"
+	ipamclaimsclient "github.com/k8snetworkplumbingwg/ipamclaims/pkg/crd/ipamclaims/v1alpha1/apis/clientset/versioned"
+	ipamclaimsinformers "github.com/k8snetworkplumbingwg/ipamclaims/pkg/crd/ipamclaims/v1alpha1/apis/informers/externalversions"
 
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/controlloop"
 	wbclient "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/clientset/versioned"
@@ -55,8 +57,16 @@ func main() {
 		os.Exit(couldNotCreateController)
 	}
 
+	claimController, err := newClaimController(stopChan)
+	if err != nil {
+		_ = logging.Errorf("could not create the IPAMClaim controller: %v", err)
+		os.Exit(couldNotCreateController)
+	}
+
 	networkController.Start(stopChan)
 	defer networkController.Shutdown()
+	claimController.Start(stopChan)
+	defer claimController.Shutdown()
 
 	<-stopChan
 	logging.Verbosef("shutting down network controller")
@@ -117,6 +127,40 @@ func newPodController(stopChannel chan struct{}) (*controlloop.PodController, er
 	netAttachDefInformerFactory.Start(stopChannel)
 	ipPoolInformerFactory.Start(stopChannel)
 	logging.Verbosef("Informer factories started")
+
+	return controller, nil
+}
+
+func newClaimController(stopChannel chan struct{}) (*controlloop.ClaimController, error) {
+	cfg, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to implicitly generate the kubeconfig: %w", err)
+	}
+
+	wbClientSet, err := wbclient.NewForConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	claimsClientSet, err := ipamclaimsclient.NewForConfig(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create the IPAMClaims client: %w", err)
+	}
+
+	const noResyncPeriod = 0
+	ipPoolInformerFactory := wbinformers.NewSharedInformerFactory(wbClientSet, noResyncPeriod)
+	claimsInformerFactory := ipamclaimsinformers.NewSharedInformerFactory(claimsClientSet, noResyncPeriod)
+
+	controller := controlloop.NewClaimController(
+		wbClientSet,
+		claimsClientSet,
+		ipPoolInformerFactory,
+		claimsInformerFactory,
+	)
+	logging.Verbosef("IPAMClaim controller created")
+
+	ipPoolInformerFactory.Start(stopChannel)
+	claimsInformerFactory.Start(stopChannel)
 
 	return controller, nil
 }
