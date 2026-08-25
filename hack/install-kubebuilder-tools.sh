@@ -2,7 +2,7 @@
 set -xe
 BASEDIR=$(pwd)
 
-K8S_API_VERSION="v0.34.1"
+K8S_API_VERSION="v0.35.1"
 CONTROLLER_GEN_VERSION="v0.20.0"
 
 # install controller-gen
