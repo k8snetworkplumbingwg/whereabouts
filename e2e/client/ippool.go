@@ -6,21 +6,23 @@ package client
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
-	kubeClient "github.com/k8snetworkplumbingwg/whereabouts/pkg/storage/kubernetes"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
+
+	kubeClient "github.com/k8snetworkplumbingwg/whereabouts/pkg/storage/kubernetes"
 )
 
 func isIPPoolAllocationsEmpty(ctx context.Context, k8sIPAM *kubeClient.KubernetesIPAM, ipPoolCIDR string) wait.ConditionWithContextFunc {
 	return func(context.Context) (bool, error) {
-		ipPool, err := k8sIPAM.GetIPPool(ctx, kubeClient.PoolIdentifier{IpRange: ipPoolCIDR, NetworkName: kubeClient.UnnamedNetwork})
-		noPoolError := fmt.Errorf("k8s pool initialized")
-		if errors.Is(err, noPoolError) {
-			return true, nil
-		} else if err != nil {
+		ipPool, err := k8sIPAM.GetIPPool(ctx, kubeClient.PoolIdentifier{IPRange: ipPoolCIDR, NetworkName: kubeClient.UnnamedNetwork})
+		if err != nil {
+			// ErrPoolInitialized is a temporaryError returned when the pool
+			// doesn't exist and is freshly created — treat as zero allocations.
+			if errors.Is(err, kubeClient.ErrPoolInitialized) {
+				return true, nil
+			}
 			return false, err
 		}
 
@@ -38,14 +40,14 @@ func isIPPoolAllocationsEmptyForNodeSlices(ctx context.Context, k8sIPAM *kubeCli
 		if err != nil {
 			return false, err
 		}
-		for _, node := range nodes.Items {
-			ipPool, err := k8sIPAM.GetIPPool(ctx, kubeClient.PoolIdentifier{NodeName: node.Name, IpRange: ipPoolCIDR, NetworkName: k8sIPAM.Config.NetworkName})
+		for i := range nodes.Items {
+			node := &nodes.Items[i]
+			ipPool, err := k8sIPAM.GetIPPool(ctx, kubeClient.PoolIdentifier{NodeName: node.Name, IPRange: ipPoolCIDR, NetworkName: k8sIPAM.Config.NetworkName})
 			if err != nil {
-				if err.Error() == "k8s pool initialized" {
+				if errors.Is(err, kubeClient.ErrPoolInitialized) {
 					continue
-				} else {
-					return false, err
 				}
+				return false, err
 			}
 
 			if len(ipPool.Allocations()) != 0 {

@@ -20,7 +20,7 @@ package v1alpha1
 import (
 	http "net/http"
 
-	whereaboutscnicncfiov1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
+	whereaboutscnicncfiov1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/api/whereabouts.cni.cncf.io/v1alpha1"
 	scheme "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/clientset/versioned/scheme"
 	rest "k8s.io/client-go/rest"
 )

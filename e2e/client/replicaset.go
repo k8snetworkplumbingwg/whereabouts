@@ -3,10 +3,11 @@ package client
 import (
 	"context"
 	"fmt"
-	corev1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"time"
+
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -56,7 +57,7 @@ func isReplicaSetSynchronized(replicaSet *appsv1.ReplicaSet, podList *corev1.Pod
 func isReplicaSetGone(ctx context.Context, cs *kubernetes.Clientset, rsName, namespace string) wait.ConditionWithContextFunc {
 	return func(context.Context) (bool, error) {
 		replicaSet, err := cs.AppsV1().ReplicaSets(namespace).Get(ctx, rsName, metav1.GetOptions{})
-		if err != nil && k8serrors.IsNotFound(err) {
+		if err != nil && apierrors.IsNotFound(err) {
 			return true, nil
 		} else if err != nil {
 			return false, fmt.Errorf("something weird happened with the replicaset, which is in state: [%s]. Errors: %w", replicaSet.Status.Conditions, err)

@@ -18,20 +18,21 @@ limitations under the License.
 package fake
 
 import (
-	v1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
-	whereaboutscnicncfiov1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/clientset/versioned/typed/whereabouts.cni.cncf.io/v1alpha1"
+	v1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/api/whereabouts.cni.cncf.io/v1alpha1"
+	whereaboutscnicncfiov1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/applyconfiguration/whereabouts.cni.cncf.io/v1alpha1"
+	typedwhereaboutscnicncfiov1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/clientset/versioned/typed/whereabouts.cni.cncf.io/v1alpha1"
 	gentype "k8s.io/client-go/gentype"
 )
 
 // fakeNodeSlicePools implements NodeSlicePoolInterface
 type fakeNodeSlicePools struct {
-	*gentype.FakeClientWithList[*v1alpha1.NodeSlicePool, *v1alpha1.NodeSlicePoolList]
+	*gentype.FakeClientWithListAndApply[*v1alpha1.NodeSlicePool, *v1alpha1.NodeSlicePoolList, *whereaboutscnicncfiov1alpha1.NodeSlicePoolApplyConfiguration]
 	Fake *FakeWhereaboutsV1alpha1
 }
 
-func newFakeNodeSlicePools(fake *FakeWhereaboutsV1alpha1, namespace string) whereaboutscnicncfiov1alpha1.NodeSlicePoolInterface {
+func newFakeNodeSlicePools(fake *FakeWhereaboutsV1alpha1, namespace string) typedwhereaboutscnicncfiov1alpha1.NodeSlicePoolInterface {
 	return &fakeNodeSlicePools{
-		gentype.NewFakeClientWithList[*v1alpha1.NodeSlicePool, *v1alpha1.NodeSlicePoolList](
+		gentype.NewFakeClientWithListAndApply[*v1alpha1.NodeSlicePool, *v1alpha1.NodeSlicePoolList, *whereaboutscnicncfiov1alpha1.NodeSlicePoolApplyConfiguration](
 			fake.Fake,
 			namespace,
 			v1alpha1.SchemeGroupVersion.WithResource("nodeslicepools"),

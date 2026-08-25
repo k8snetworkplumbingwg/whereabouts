@@ -4,22 +4,22 @@ import (
 	"encoding/json"
 	"fmt"
 
-	core "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 
 	nettypes "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 )
 
 func filterNetworkStatus(
 	networkStatuses []nettypes.NetworkStatus, predicate func(nettypes.NetworkStatus) bool) *nettypes.NetworkStatus {
-	for i, networkStatus := range networkStatuses {
-		if predicate(networkStatus) {
+	for i := range networkStatuses {
+		if predicate(networkStatuses[i]) {
 			return &networkStatuses[i]
 		}
 	}
 	return nil
 }
 
-func SecondaryIfaceIPValue(pod *core.Pod, ifName string) ([]string, error) {
+func SecondaryIfaceIPValue(pod *corev1.Pod, ifName string) ([]string, error) {
 	podNetStatus, found := pod.Annotations[nettypes.NetworkStatusAnnot]
 	if !found {
 		return nil, fmt.Errorf("the pod must feature the `networks-status` annotation")
