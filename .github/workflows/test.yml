@@ -1,9 +1,9 @@
-on: 
+on:
   pull_request:
     paths-ignore:
       - "**/*.md'"
       - "doc/*.{json,png,svg}"
-  push: 
+  push:
     paths-ignore:
       - "**/*.md'"
       - "doc/*.{json,png,svg}"
@@ -16,46 +16,46 @@ jobs:
         os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
-    - name: Checkout code
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
-    - name: Install Go
-      uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
-      with:
-        go-version-file: go.mod
+      - name: Install Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: go.mod
 
-    - name: Run Revive Action by building from repository
-      uses: morphy2k/revive-action@bd8016177e3722fe0aad85e22507805641be5bb1 # v2.7.8
+      - name: Run Revive Action by building from repository
+        uses: morphy2k/revive-action@bd8016177e3722fe0aad85e22507805641be5bb1 # v2.7.8
 
-    - name: Install dependencies
-      run: make update-deps
-      
-    - name: Install kubebuilder tools
-      run: ./hack/install-kubebuilder-tools.sh
+      - name: Install dependencies
+        run: make update-deps
 
-    - name: Generate code
-      run: ./hack/generate-code.sh && hack/verify-codegen.sh
+      - name: Install kubebuilder tools
+        run: ./hack/install-kubebuilder-tools.sh
 
-    - name: Run go fmt
-      run: go fmt ./...
-      #run: diff -u <(echo -n) <(gofmt -d -s .)
+      - name: Generate code
+        run: ./hack/generate-code.sh && hack/verify-codegen.sh
 
-    - name: Run go vet
-      run: go vet --tags=test $(go list ./... | grep -v /e2e)
+      - name: Run go fmt
+        run: go fmt ./...
+        #run: diff -u <(echo -n) <(gofmt -d -s .)
 
-    - name: Install static check
-      run: go install honnef.co/go/tools/cmd/staticcheck@latest
+      - name: Run go vet
+        run: go vet --tags=test $(go list ./... | grep -v /e2e)
 
-    - name: Test
-      run: sudo PATH=${PATH}:./bin ./hack/test-go.sh
+      - name: Install static check
+        run: go install honnef.co/go/tools/cmd/staticcheck@latest
 
-    - name: Send coverage
-      uses: shogo82148/actions-goveralls@9606dbc5ac5cf888a0e9ef901515c3cd516a2790 # v1
-      with:
-        path-to-profile: coverage.out
-        flag-name: Go-${{ matrix.go }}
-      env:
-        KUBEBUILDER_ASSETS: "$(pwd)/bin"
+      - name: Test
+        run: sudo PATH=${PATH}:./bin ./hack/test-go.sh
+
+      - name: Send coverage
+        uses: shogo82148/actions-goveralls@9606dbc5ac5cf888a0e9ef901515c3cd516a2790 # v1
+        with:
+          path-to-profile: coverage.out
+          flag-name: Go-${{ matrix.go }}
+        env:
+          KUBEBUILDER_ASSETS: "$(pwd)/bin"
 
   e2e-test:
     name: e2e test
@@ -75,7 +75,9 @@ jobs:
         run: sudo apt-get install nmap jq && ./hack/build-go.sh
 
       - name: Get tools, setup KinD cluster test environment
-        run: source hack/e2e-get-test-tools.sh && ./hack/e2e-setup-kind-cluster.sh --number-of-compute $NUMBER_OF_COMPUTE_NODES
+        run: |
+          source hack/e2e-get-test-tools.sh && \
+          ./hack/e2e-setup-kind-cluster.sh --number-of-compute $NUMBER_OF_COMPUTE_NODES
 
       - name: Clear test-cache
         run: go clean -testcache
@@ -105,7 +107,9 @@ jobs:
         run: sudo apt-get install nmap jq && ./hack/build-go.sh
 
       - name: Get tools, setup KinD cluster test environment
-        run: source hack/e2e-get-test-tools.sh && ./hack/e2e-setup-kind-cluster.sh --number-of-compute $NUMBER_OF_COMPUTE_NODES
+        run: |
+          source hack/e2e-get-test-tools.sh && \
+          ./hack/e2e-setup-kind-cluster.sh --number-of-compute $NUMBER_OF_COMPUTE_NODES
 
       - name: Clear test-cache
         run: go clean -testcache

@@ -5,25 +5,25 @@ jobs:
     strategy:
       matrix:
         goarch: [amd64, arm64]
-        os: [linux] 
+        os: [linux]
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout code
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
-    - name: Install Go
-      uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
-      with:
-        go-version-file: go.mod
+      - name: Install Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: go.mod
 
-    - name: Install kubebuilder tools
-      run: ./hack/install-kubebuilder-tools.sh
+      - name: Install kubebuilder tools
+        run: ./hack/install-kubebuilder-tools.sh
 
-    - name: Generate code
-      run: ./hack/generate-code.sh
+      - name: Generate code
+        run: ./hack/generate-code.sh
 
-    - name: Build
-      env:
-        GOARCH: ${{ matrix.goarch }}
-        GOOS: ${{ matrix.os }}
-      run: ./hack/build-go.sh
+      - name: Build
+        env:
+          GOARCH: ${{ matrix.goarch }}
+          GOOS: ${{ matrix.os }}
+        run: ./hack/build-go.sh
