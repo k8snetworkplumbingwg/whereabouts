@@ -81,6 +81,9 @@ cases and retain the `all` strategy.
   concurrency models.
 - Persisting configuration generations or introducing a new CRD to enforce
   configuration-update admission.
+- Guaranteeing address retention across Pod object recreation, including
+  StatefulSet Pods recreated with the same namespace and name. This requires a
+  separate enhancement defining allocation identity and cleanup semantics.
 - This proposal defines the allocation-strategy API only. Implementation will
   follow after maintainers agree on it.
 
