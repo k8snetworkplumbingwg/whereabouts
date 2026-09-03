@@ -575,7 +575,7 @@ func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *Kubernete
 		for j := 0; j < storage.DatastoreRetries; j++ {
 			select {
 			case <-ctx.Done():
-				break RETRYLOOP
+				return newips, ctx.Err()
 			default:
 				// retry the IPAM loop if the context has not been cancelled
 			}
@@ -694,6 +694,13 @@ func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *Kubernete
 				break RETRYLOOP
 			}
 			break RETRYLOOP
+		}
+
+		if err != nil {
+			return newips, err
+		}
+		if ctx.Err() != nil {
+			return newips, ctx.Err()
 		}
 
 		if ipamConf.OverlappingRanges {
