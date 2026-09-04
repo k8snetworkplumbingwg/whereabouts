@@ -69,13 +69,30 @@ func newConfigWatcher(
 	}, nil
 }
 
+// ReconcilerConfigEventPredicate matches fsnotify events that mean the
+// reconciler cron config may have changed:
+//   - CREATE on "..data": ConfigMap atomic writer swapped the projected payload
+//     (repeat updates when the key was already present)
+//   - CREATE on configPath: first-time projection of the key; kubelet creates
+//     this symlink *after* swapping "..data", so watching "..data" alone can
+//     race, read before the symlink exists, and miss the update
+func ReconcilerConfigEventPredicate(configPath string) func(fsnotify.Event) bool {
+	dataDirFile := filepath.Join(filepath.Dir(configPath), "..data")
+	return func(event fsnotify.Event) bool {
+		if event.Op&fsnotify.Create != fsnotify.Create {
+			return false
+		}
+		return event.Name == dataDirFile || event.Name == configPath
+	}
+}
+
 func determineCronExpression(configPath string) (string, error) {
 	// We read the expression from a file if present, otherwise we use ReconcilerCronExpression
 	fileContents, err := os.ReadFile(configPath)
 	if err != nil {
-		flatipam, _, err := config.GetFlatIPAM(true, &types.IPAMConfig{}, "")
-		if err != nil {
-			return "", logging.Errorf("could not get flatipam config: %v", err)
+		flatipam, _, flatErr := config.GetFlatIPAM(true, &types.IPAMConfig{}, "")
+		if flatErr != nil {
+			return "", logging.Errorf("could not get flatipam config: %v", flatErr)
 		}
 
 		logging.Verbosef("notice: could not read file: %v, defaulting to expression from configuration: %v", err, flatipam.IPAM.ReconcilerCronExpression)
@@ -107,6 +124,7 @@ func (c *ConfigWatcher) syncConfig(relevantEventPredicate func(event fsnotify.Ev
 			updatedSchedule, err := determineCronExpression(c.configPath)
 			if err != nil {
 				_ = logging.Errorf("error determining cron expression from %q: %v", c.configPath, err)
+				continue
 			}
 			logging.Verbosef(
 				"configuration updated to file %q. New cron expression: %s",
@@ -125,6 +143,7 @@ func (c *ConfigWatcher) syncConfig(relevantEventPredicate func(event fsnotify.Ev
 			)
 			if err != nil {
 				_ = logging.Errorf("error updating job %q configuration: %v", c.job.ID().String(), err)
+				continue
 			}
 			c.currentSchedule = updatedSchedule
 			logging.Verbosef(
