@@ -70,11 +70,9 @@ func run() int {
 	}
 	s.Start()
 
-	const reconcilerConfigMntFile = "/cron-schedule/..data"
-	p := func(e fsnotify.Event) bool {
-		return e.Name == reconcilerConfigMntFile && e.Op&fsnotify.Create == fsnotify.Create
-	}
-	reconcilerConfigWatcher.SyncConfiguration(p)
+	reconcilerConfigWatcher.SyncConfiguration(
+		reconciler.ReconcilerConfigEventPredicate(reconcilerCronConfiguration),
+	)
 
 	for {
 		select {
