@@ -12,7 +12,10 @@ data:
     case "$ARCH" in
       x86_64|amd64) CNI_TGZ="cni-plugins-linux-amd64-v1.1.1.tgz" ;;
       aarch64|arm64) CNI_TGZ="cni-plugins-linux-arm64-v1.1.1.tgz" ;;
-      *) CNI_TGZ="cni-plugins-linux-amd64-v1.1.1.tgz" ;;
+      *)
+        echo "unsupported architecture: ${ARCH}" >&2
+        exit 1
+        ;;
     esac
     wget "https://github.com/containernetworking/plugins/releases/download/v1.1.1/${CNI_TGZ}"
     cd /host/opt/cni/bin
