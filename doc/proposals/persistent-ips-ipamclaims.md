@@ -132,27 +132,41 @@ interface.
 currently inject `NSE.IPAMClaimReference` into delegate IPAM CNI stdin. Production
 wiring keeps the claim on the pod annotation. Whereabouts therefore:
 
-1. Accepts `ipam-claim-reference` from CNI config when present (IPAM section,
-   top-level net field, or `args.cni`) — useful for tests and future Multus
-   injection. A present-but-invalid value here **fails immediately**, it does
-   not fall through to the annotation.
-2. If the attribute is still **absent**, **resolves the claim from the pod's
-   network-selection annotation** via the Kubernetes API:
-   - When both interface name and network name are available, match **both**.
-   - A single-field match (interface **or** network) is allowed only when it
-     yields **exactly one** candidate.
-   - Ambiguous matches (the same network attached more than once, or multiple
-     NSEs that satisfy a single-field filter) **fail CNI ADD**. Do not pick an
-     arbitrary NSE.
+Collect every present `ipam-claim-reference` from these sources, in this
+**precedence** (highest first):
 
-`ipam-claim-reference` is a **claim name only**. Fail closed:
+1. IPAM section of the CNI config
+2. Top-level net field
+3. `args.cni` (tests / future Multus injection)
+4. Pod network-selection annotation (production path today — Multus does not
+   inject `NSE.IPAMClaimReference` into delegate IPAM stdin)
 
-- **Absent** (the attribute is not set on any resolved source): legacy
-  pod-scoped allocation.
-- **Present but invalid** (empty string, whitespace-only, non-string, `ns/name`,
-  or any other malformed value): **return a validation error**. Do **not** fall
-  back to pod-scoped allocation. A typo must not silently lose persistence on
-  pod DEL.
+Resolution rules, applied **before any pool or status write**, and used by ADD,
+DEL, and reconcile whenever they read a claim name from CNI/pod (after ADD, the
+reservation identity is authoritative — see below):
+
+- A present-but-invalid value in **any** source (empty string, whitespace-only,
+  non-string, `ns/name`, or other malformed) **fails immediately**. It does not
+  fall through to a lower source.
+- If two or more sources are present with **valid but different** claim names,
+  **reject** the operation. Do not pick a winner. ADD and a later DEL/reconcile
+  must not bind different claims.
+- If sources agree, or only one source is present and valid, use that name.
+- If the attribute is **absent** from every source, use legacy pod-scoped
+  allocation.
+
+Annotation matching (source 4), when that source is used:
+
+- When both interface name and network name are available, match **both**.
+- A single-field match (interface **or** network) is allowed only when it
+  yields **exactly one** candidate.
+- Ambiguous matches (the same network attached more than once, or multiple
+  NSEs that satisfy a single-field filter) **fail CNI ADD**. Do not pick an
+  arbitrary NSE.
+
+`ipam-claim-reference` is a **claim name only**. Tests must cover every source
+combination: each source alone, agreeing sources, conflicting valid names, and
+present-but-invalid values mixed with a valid lower source.
 
 ### Claim namespace
 
@@ -163,8 +177,9 @@ This matches `ipam-extensions` (the claim is owned by the VM in the same
 namespace as the `virt-launcher` pod) and avoids a pod in namespace A pinning
 allocations owned by a claim in namespace B.
 
-Reservations still record `namespace/name` because `IPPool` objects live in the
-Whereabouts namespace, not the pod namespace.
+Reservations record the claim as `namespace/name` **plus UID** because `IPPool`
+objects live in the Whereabouts namespace, not the pod namespace, and a deleted
+claim can be recreated with the same name.
 
 ### Keeping the CRs in sync
 
@@ -185,56 +200,74 @@ the claim still exists.
 **Reuse (CNI ADD with populated `status.ips`):** after the `IPAMClaimSpec`
 network/interface check above, also validate address family and pool membership.
 Atomically take over each address only if it is free or already owned by **this**
-claim (match on `IPAMClaimRef`, `namespace/name`). Resource-version conflicts
+claim (match on `IPAMClaimRef` + `IPAMClaimUID`). Resource-version conflicts
 retry. Never steal an IP owned by a different live claim.
 
 **Reconcile (level-driven, not only delete events):** periodically, and on
-informer resync / claim add-update-delete, walk claim-tagged pool and overlapping
-rows and compare them to live `IPAMClaim` objects:
+informer resync / claim add-update-delete, walk the **union** of (1) live
+`IPAMClaim` objects and their `status.ips`, (2) claim-tagged `IPPool` rows, and
+(3) overlapping-range reservations. Starting from reservations alone cannot see
+a live claim whose `status.ips` has no pool row. Starting from claims alone
+cannot see overlap-only leftovers.
 
-- Claim **NotFound** → free the pool row **and** the overlapping CR.
-- Claim **lookup error** (timeout, conflict, unavailable) → **retry do not
+- Claim **NotFound** for a tagged pool or overlapping row → free that row.
+- Claim **lookup error** (timeout, conflict, unavailable) → **retry, do not
   release**.
-- Claim exists, IP is in `status.ips`, pool row missing or untagged → re-reserve
-  if free or already owned by this claim otherwise set a claim condition and do
-  not steal.
-- Claim exists, pool row tagged for this claim, IP **not** in `status.ips` →
-  treat as incomplete persist write the IP into `status.ips` rather than free.
+- Live claim, IP in `status.ips`, pool row missing or untagged → re-reserve
+  if free or already owned by this claim (UID match), otherwise set a claim
+  condition and do not steal.
+- Live claim, pool row tagged for this claim (UID match), IP **not** in
+  `status.ips` → treat as incomplete persist, write the IP into `status.ips`
+  rather than free.
 - Overlapping CR vs pool row: compare the **complete lease identity** — IP,
-  `IPAMClaimRef`, `PodRef`, `IfName`, and the pool/network key. If the overlapping
-  row is missing **or** any of those fields diverge while the pool row is
-  claim-owned, create/update the overlapping CR to match the pool row. A matching
-  `PodRef` with a wrong IP, `IPAMClaimRef`, or `IfName` is still drift and must
-  be repaired. Never leave overlapping state that would reject a later take-over.
+  `IPAMClaimRef`, `IPAMClaimUID`, `PodRef`, `IfName`, and the pool/network key.
+  If the overlapping row is missing **or** any of those fields diverge while the
+  pool row is claim-owned, create/update the overlapping CR to match the pool
+  row.
+- **Overlap-only / stale overlap:** an overlapping row with no matching
+  claim-owned pool row, or whose claim is gone, is **deleted**. Do not keep
+  overlap state that would block a later allocation. Never remove or overwrite
+  an overlapping row whose IP is owned by a **different** live claim.
 
 A repair must never transfer an IP that another live claim already owns.
 
-**Claim identity on every reservation:** `IPAMClaimRef` (`<pod-namespace>/<claim-name>`).
-Assignment, deallocation, overlapping-range conflict checks, and GC compare this
-identity, not `PodRef` alone. Existing pod-only rows stay pod-scoped (empty
-claim fields).
+**Claim identity on every reservation:** `IPAMClaimRef`
+(`<pod-namespace>/<claim-name>`) **and** `IPAMClaimUID` (the claim object's
+UID). Assignment, deallocation, overlapping-range conflict checks, and GC
+compare both. A claim deleted and recreated with the same name is a different
+object and must not match a stale reservation.
+
+Existing **pod-only** rows (empty claim fields) stay pod-scoped.
+
+**Name-only claim rows** (upgrade from an earlier `IPAMClaimRef` without UID):
+on the first successful ADD or reconcile against a live claim of that
+namespace/name, stamp `IPAMClaimUID`. If no live claim exists, free the row.
+Do not treat a recreated same-name claim as the owner of a UID-stamped row
+for a previous UID. Operators should not delete/recreate claims during that
+one-time stamp.
 
 ### Changes in Modules
 
 1. `go.mod` — add `github.com/k8snetworkplumbingwg/ipamclaims` (API types + clientset).
 2. `pkg/types/types.go` — extend `IPAMConfig` / `Net` / `IPReservation`:
    ```go
-   IPAMClaimReference string // claim *name* only namespace is the pod namespace
+   IPAMClaimReference string // claim *name* only, namespace is the pod namespace
    IPAMClaimRef       string // on reservations: "namespace/name"
+   IPAMClaimUID       string // on reservations: claim object UID
    ```
    No `IPAMClaimNamespace` field on config.
-3. `pkg/ipamclaim/` — claim reference resolution (CNI args + pod NSE with
-   unambiguous matching), fail-closed validation of present-but-invalid
-   references, claim fetch in the pod namespace, `IPAMClaimSpec` network/interface
-   validation against the current attachment, and `status.ips` / `ownerPod`
-   persistence.
+3. `pkg/ipamclaim/` — claim reference resolution (precedence + conflict reject
+   across CNI fields and pod NSE, unambiguous NSE matching), fail-closed
+   validation of present-but-invalid references, claim fetch in the pod
+   namespace, `IPAMClaimSpec` network/interface validation against the current
+   attachment, and `status.ips` / `ownerPod` persistence.
 4. `pkg/config/config.go` (`LoadIPAMConfig`) — populate the claim **name** from CNI
-   stdin sources when present. Absent attribute: no behavior change. Present but
-   invalid: fail config load (do not ignore).
-5. `pkg/allocate/allocate.go` (`AssignIPForClaim`) — reuse by claim identity /
-   preferred IPs (idempotent take-over for stop/start and migration handoff) tag
-   new reservations with `IPAMClaimRef`.
-6. `pkg/api/...` + CRDs — `ipamclaimref` on `IPAllocation` and
+   stdin sources when present, applying the same precedence/conflict rules.
+   Absent attribute: no behavior change. Present but invalid: fail config load.
+5. `pkg/allocate/allocate.go` (`AssignIPForClaim`) — reuse by claim identity
+   (name + UID) / preferred IPs (idempotent take-over for stop/start and
+   migration handoff), tag new reservations with `IPAMClaimRef` + `IPAMClaimUID`.
+6. `pkg/api/...` + CRDs — `ipamclaimref` and `ipamclaimuid` on `IPAllocation` and
    `OverlappingRangeIPReservationSpec` (does **not** overload `PodRef`).
 7. `pkg/storage/kubernetes/ipam.go` — claim-aware Allocate / Deallocate:
    - Resolve claim in the pod namespace, validate `IPAMClaimSpec` against the
@@ -242,27 +275,35 @@ claim fields).
      pool/overlapping write.
    - Skip freeing claim-backed reservations on Deallocate.
    - Overlapping-range create treats AlreadyExists as claim take-over when the
-     existing row is owned by the same `IPAMClaimRef` (update `PodRef` / `IfName`).
-8. `pkg/controlloop` — **level-driven** claim reconcile: compare claim-tagged
-   pool and overlapping reservations to live `IPAMClaim` objects (add/update/delete
-   **and** periodic/resync). `garbageCollectPodIPs` skips any reservation with
-   non-empty `IPAMClaimRef` (release is claim-absence, not pod delete).
-9. `pkg/reconciler` — orphan GC uses the same live-claim check never frees on
-   lookup error.
-10. Install path — IPAMClaim CRD + RBAC for `ipamclaims` / `ipamclaims/status` in
-    daemonset, Helm chart, and kind e2e setup.
-11. **Tests / docs** — unit tests (config fail-closed parsing, unambiguous NSE
-    match, spec validation, allocate, complete overlapping-identity drift repair,
-    overlapping take-over). e2e covers allocate → retain across pod recreate →
-    release on claim delete. User docs (`doc/persistent-ips.md`) ship with the
-    implementation PR, not this design note. Live-migration e2e remains follow-up.
+     existing row is owned by the same `IPAMClaimRef` **and** UID (update
+     `PodRef` / `IfName`).
+8. `pkg/controlloop` — **level-driven** claim reconcile over the union of live
+   claims, pool rows, and overlapping rows (add/update/delete **and**
+   periodic/resync), including overlap-only cleanup. `garbageCollectPodIPs`
+   skips any reservation with non-empty `IPAMClaimRef` (release is
+   claim-absence, not pod delete).
+9. `pkg/reconciler` — orphan GC uses the same live-claim + UID check, never
+   frees on lookup error.
+10. Install path — IPAMClaim **CRD + RBAC** (`ipamclaims` / `ipamclaims/status`)
+    in daemonset, Helm chart, and kind e2e setup. This ships in the **same
+    rollout unit** as claim-aware allocate/deallocate/control-loop, not after
+    it. If the CRD or status permissions are missing, claim-aware paths must
+    not run (fail ADD / skip reconcile writes), do not allocate as if the
+    feature were enabled.
+11. **Tests / docs** — unit tests (source precedence and conflict combinations,
+    config fail-closed parsing, unambiguous NSE match, spec validation, UID
+    identity, name-only migration, bidirectional drift repair, overlap-only
+    removal, overlapping take-over). e2e covers allocate → retain across pod
+    recreate → release on claim delete. User docs (`doc/persistent-ips.md`)
+    ship with the implementation PR, not this design note. Live-migration e2e
+    remains follow-up.
 
 ### Lifecycle walk-through
 
 | Event                  | Actor                         | Result                                                                                                       |
 | ---------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | VM created             | ipam-extensions               | Creates `IPAMClaim` (empty `status.ips`), owned by the VM injects `ipam-claim-reference` on the launcher pod |
-| Pod ADD (first boot)   | Whereabouts                   | Resolve + validate claim/spec, `status.ips` empty → allocate, write `status.ips`, set `ownerPod`, tag `ipamclaimref` |
+| Pod ADD (first boot)   | Whereabouts                   | Resolve + validate claim/spec, allocate, tag `ipamclaimref` + UID, write `status.ips` / `ownerPod`           |
 | VM stop → pod DEL      | Whereabouts                   | Claim-backed → **keep** the IP control-loop / reconciler **skip** GC when `IPAMClaimRef` is set             |
 | VM start → new pod ADD | Whereabouts                   | Validate spec, `status.ips` populated → **reuse** the same IP (reservation handoff to new PodRef)            |
 | Live migration         | Whereabouts                   | Target pod ADD reuses the claim IP while source still holds it `ownerPod` hands off                         |
@@ -271,35 +312,48 @@ claim fields).
 ## Hard problems / remaining risks
 
 1. **Live migration overlap.** Source and target pods coexist and share the
-   claim's IP for a window. Take-over is allowed only for the same `IPAMClaimRef`.
-   Source DEL must not clear the target's reservation.
+   claim's IP for a window. Take-over is allowed only for the same `IPAMClaimRef`
+   **and** UID. Source DEL must not clear the target's reservation.
 2. **Overlapping-range reservations** — tagged with the same claim identity as
-   the pool row updated (not failed) on take-over included in drift reconcile.
+   the pool row, updated (not failed) on take-over, included in bidirectional
+   drift reconcile, overlap-only stale rows are removed.
 3. **Idempotency under churn** (old pod terminating while new pod starts) —
-   handled via `IPAMClaimRef` matching and preferred-IP take-over.
+   handled via `IPAMClaimRef` + UID matching and preferred-IP take-over.
 4. **Incomplete updates / drift** — pool-first writes plus level-driven
-   reconcile repair `status.ips` ↔ pool ↔ overlapping divergence without stealing
-   IPs owned by another live claim.
-5. **Controller downtime** — because cleanup is level-driven, a missed delete
+   reconcile over the union of claims, pool, and overlapping rows, repair
+   without stealing IPs owned by another live claim.
+5. **Claim recreate** — same name, new UID must not inherit a stale reservation.
+   Name-only rows are stamped once during upgrade.
+6. **Controller downtime** — because cleanup is level-driven, a missed delete
    event is healed on the next reconcile. Lookup errors never release.
 
 ## Delivery plan
 
-Originally planned as incremental PRs. **PR1–PR4 are one compatible rollout
-unit** and must not land independently: persisting `status.ips` without the DEL
-and GC protections would leave a claim holding an address after the pool record
-is freed, so another workload could acquire it. Implementation is tracked in
-[#742](https://github.com/k8snetworkplumbingwg/whereabouts/pull/742) (open not
+Originally planned as incremental PRs. **PR1–PR4 plus CRD/RBAC are one
+compatible rollout unit** and must not land independently: persisting
+`status.ips` without the DEL and GC protections would leave a claim holding an
+address after the pool record is freed, and enabling claim resolution/watches
+without the CRD and `ipamclaims`/`ipamclaims/status` RBAC would fail lookups or
+status updates while allocation code is on.
+
+**Upgrade order:** install CRD and RBAC first, then start claim-aware binaries.
+**Rollback order:** disable/roll back binaries first, then remove RBAC/CRD (or
+leave the CRD in place). If the CRD or status permissions are absent, gate the
+feature off (fail closed on claim-backed ADD, do not treat missing CRD as
+legacy allocation when a claim reference is present).
+
+Implementation is tracked in
+[#742](https://github.com/k8snetworkplumbingwg/whereabouts/pull/742) (open, not
 shipped). Live-migration e2e remains follow-up.
 
 | PR  | Scope                                                                         | Status                                      |
 | --- | ----------------------------------------------------------------------------- | ------------------------------------------- |
 | PR0 | This design note                                                              | this document                               |
-| PR1 | Vendor `ipamclaims` add `IPAMClaimReference` + config parsing                | in #742 (not merged)                        |
+| PR1 | Vendor `ipamclaims`, add `IPAMClaimReference` + config parsing, **CRD + RBAC** | in #742 (not merged)                        |
 | PR2 | Allocate path: reuse existing / persist new `status.ips`                      | in #742 (not merged)                        |
 | PR3 | Deallocate path: do not release claim-backed IPs on pod DEL                   | in #742 (not merged)                        |
-| PR4 | Control-loop: IPAMClaim-delete watcher + skip GC for claim-backed allocations | in #742 (not merged)                        |
-| PR5 | e2e (stop/start recreate) + docs + CRD/RBAC                                   | in #742 (not merged) migration e2e follow-up |
+| PR4 | Control-loop: IPAMClaim reconcile + skip GC for claim-backed allocations      | in #742 (not merged)                        |
+| PR5 | e2e (stop/start recreate) + user docs                                         | in #742 (not merged), migration e2e follow-up |
 
 ## Summary
 
@@ -315,11 +369,12 @@ backwards compatibility.
 ## Discussions and Decisions
 
 - **Reference transport** — Multus does not inject the NSE claim into delegate
-  IPAM stdin today. Whereabouts accepts CNI/`args.cni` when present and otherwise
-  resolves `ipam-claim-reference` (claim **name**) from the pod network-selection
-  annotation (same wiring as OVN-Kubernetes / ipam-extensions). NSE matching uses
-  both interface and network when both are set, a single-field match is valid
-  only when unique, ambiguity fails CNI ADD.
+  IPAM stdin today. Sources, highest precedence first: IPAM section, top-level
+  net field, `args.cni`, then the pod network-selection annotation. Present-but-
+  invalid values fail immediately. Distinct valid names from two sources are
+  rejected. NSE matching uses both interface and network when both are set, a
+  single-field match is valid only when unique, ambiguity fails CNI ADD. Tests
+  cover every source combination.
 - **Fail closed** — Only an **absent** `ipam-claim-reference` uses legacy
   pod-scoped allocation. A present-but-invalid or cross-namespace value is a
   validation error, not a silent fallback.
@@ -329,22 +384,26 @@ backwards compatibility.
 - **Claim namespace** — Pin to the workload (pod) namespace. Drop
   `IPAMClaimNamespace`, no cross-namespace claims.
 - **CR sync** — `IPPool.Spec.Allocations` is the authoritative lease,
-  `IPAMClaim.status.ips` is the persisted claim set. Reconcile must detect and
-  repair drift, including incomplete pool-vs-status updates, and must never steal
-  an IP another live claim owns.
-- **Overlapping CR** — Same `IPAMClaimRef` (`namespace/name`) and the same
+  `IPAMClaim.status.ips` is the persisted claim set. Reconcile walks the **union**
+  of live claims, pool rows, and overlapping rows so a claim with no pool row
+  is still repaired. Never steal an IP another live claim owns. Overlap-only
+  stale rows are deleted.
+- **Overlapping CR** — Same claim identity (`namespace/name` + UID) and the same
   sync/repair rules as the pool row, comparing the complete lease identity (IP,
-  `IPAMClaimRef`, `PodRef`, `IfName`, pool/network key). Take-over updates the
-  overlapping CR instead of treating the target pod as a conflict.
+  `IPAMClaimRef`, `IPAMClaimUID`, `PodRef`, `IfName`, pool/network key). Take-over
+  updates the overlapping CR instead of treating the target pod as a conflict.
 - **Live-migration handoff** — Target ADD reuses the claim IP, source DEL does
   not free it. `ownerPod` hands off, overlapping AlreadyExists is take-over for
-  the same `IPAMClaimRef`.
+  the same `IPAMClaimRef` + UID.
 - **Level-driven cleanup** — Do not rely only on IPAMClaim delete events.
-  Reconcile claim-tagged reservations against live claims on resync/periodic
-  sync. API/informer errors are retryable and must not release.
-- **Reservation tagging** — Dedicated `IPAMClaimRef` on IPPool allocations and
-  overlapping reservations (does not overload `PodRef`).
+  Reconcile the union of live claims and both reservation stores on
+  resync/periodic sync. API/informer errors are retryable and must not release.
+- **Reservation tagging** — Dedicated `IPAMClaimRef` + `IPAMClaimUID` on IPPool
+  allocations and overlapping reservations (does not overload `PodRef`). Name-only
+  rows are a one-time upgrade stamp against the live claim of that name.
 - **Rollout** — Allocate-path persist (`status.ips`) must not ship without DEL
-  and GC protections. PR1–PR4 are one rollout unit in
+  and GC protections, and claim-aware code must not ship without the IPAMClaim
+  CRD and RBAC. Upgrade: CRD/RBAC first, then binaries. Rollback: binaries
+  first. PR1–PR4 (including install path) are one rollout unit in
   [whereabouts#742](https://github.com/k8snetworkplumbingwg/whereabouts/pull/742)
   (open). Live-migration e2e is follow-up.
