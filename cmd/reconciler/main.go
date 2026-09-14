@@ -41,7 +41,6 @@ func run() int {
 
 	stopChan := make(chan struct{})
 	errorChan := make(chan error, 1)
-	defer close(stopChan)
 	defer close(errorChan)
 	handleSignals(stopChan, os.Interrupt, syscall.SIGTERM)
 
@@ -99,6 +98,6 @@ func handleSignals(stopChannel chan struct{}, signals ...os.Signal) {
 	signal.Notify(signalChannel, signals...)
 	go func() {
 		<-signalChannel
-		stopChannel <- struct{}{}
+		close(stopChannel)
 	}()
 }
