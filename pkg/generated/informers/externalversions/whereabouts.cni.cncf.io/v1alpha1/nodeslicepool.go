@@ -27,16 +27,45 @@ import (
 	whereaboutscnicncfiov1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/listers/whereabouts.cni.cncf.io/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
+	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	watch "k8s.io/apimachinery/pkg/watch"
 	cache "k8s.io/client-go/tools/cache"
 )
 
 // NodeSlicePoolInformer provides access to a shared informer and lister for
-// NodeSlicePools.
+// NodeSlicePools. Prefer using the type-safe variant (see [TypedNodeSlicePoolInformer]).
 type NodeSlicePoolInformer interface {
 	Informer() cache.SharedIndexInformer
 	Lister() whereaboutscnicncfiov1alpha1.NodeSlicePoolLister
 }
+
+// TypedNodeSlicePoolInformer provides access to a shared informer and lister for
+// NodeSlicePools, including the type-safe TypedInformer variant.
+// It is a superset of NodeSlicePoolInformer.
+type TypedNodeSlicePoolInformer interface {
+	Informer() cache.SharedIndexInformer
+	TypedInformer() NodeSlicePoolIndexInformer
+	Lister() whereaboutscnicncfiov1alpha1.NodeSlicePoolLister
+}
+
+// NodeSlicePoolIndexInformer is a wrapper around the underlying [cache.SharedIndexInformer]
+// with type-safe variants of several methods.
+type NodeSlicePoolIndexInformer cache.TypedSharedIndexInformer[*apiwhereaboutscnicncfiov1alpha1.NodeSlicePool]
+
+// NodeSlicePoolHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerFuncs] for NodeSlicePool.
+type NodeSlicePoolHandlerFuncs = cache.TypedResourceEventHandlerFuncs[*apiwhereaboutscnicncfiov1alpha1.NodeSlicePool]
+
+// NodeSlicePoolDetailedHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerDetailedFuncs] for NodeSlicePool.
+type NodeSlicePoolDetailedHandlerFuncs = cache.TypedResourceEventHandlerDetailedFuncs[*apiwhereaboutscnicncfiov1alpha1.NodeSlicePool]
+
+// NodeSlicePoolFilteringHandler is a specialization of [cache.TypedFilteringResourceEventHandler] for NodeSlicePool.
+type NodeSlicePoolFilteringHandler = cache.TypedFilteringResourceEventHandler[*apiwhereaboutscnicncfiov1alpha1.NodeSlicePool]
+
+// NodeSlicePoolIndexers is a specialization of [cache.TypedIndexers] for NodeSlicePool.
+type NodeSlicePoolIndexers = cache.TypedIndexers[*apiwhereaboutscnicncfiov1alpha1.NodeSlicePool]
+
+// DeletedNodeSlicePool is a specialization of [cache.DeletedObject] for NodeSlicePool.
+type DeletedNodeSlicePool = cache.DeletedObject[*apiwhereaboutscnicncfiov1alpha1.NodeSlicePool]
 
 type nodeSlicePoolInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
@@ -47,55 +76,132 @@ type nodeSlicePoolInformer struct {
 // NewNodeSlicePoolInformer constructs a new informer for NodeSlicePool type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedNodeSlicePoolInformer]).
 func NewNodeSlicePoolInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
-	return NewFilteredNodeSlicePoolInformer(client, namespace, resyncPeriod, indexers, nil)
+	return NewNodeSlicePoolInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers})
+}
+
+// NewTypedNodeSlicePoolInformer constructs a new informer for NodeSlicePool type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedNodeSlicePoolInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers NodeSlicePoolIndexers) NodeSlicePoolIndexInformer {
+	return NewTypedNodeSlicePoolInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers)})
 }
 
 // NewFilteredNodeSlicePoolInformer constructs a new informer for NodeSlicePool type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedFilteredNodeSlicePoolInformer]).
 func NewFilteredNodeSlicePoolInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
-	return cache.NewSharedIndexInformer(
-		&cache.ListWatch{
-			ListFunc: func(options v1.ListOptions) (runtime.Object, error) {
+	return NewTypedNodeSlicePoolInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+}
+
+// NewTypedFilteredNodeSlicePoolInformer constructs a new informer for NodeSlicePool type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedFilteredNodeSlicePoolInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers NodeSlicePoolIndexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) NodeSlicePoolIndexInformer {
+	return NewTypedNodeSlicePoolInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers), TweakListOptions: tweakListOptions})
+}
+
+// NewNodeSlicePoolInformerWithOptions constructs a new informer for NodeSlicePool type with additional options.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedNodeSlicePoolInformerWithOptions]).
+func NewNodeSlicePoolInformerWithOptions(client versioned.Interface, namespace string, options internalinterfaces.InformerOptions) cache.SharedIndexInformer {
+	return NewTypedNodeSlicePoolInformerWithOptions(client, namespace, options)
+}
+
+// NewTypedNodeSlicePoolInformerWithOptions constructs a new informer for NodeSlicePool type with additional options.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedNodeSlicePoolInformerWithOptions(client versioned.Interface, namespace string, options internalinterfaces.InformerOptions) NodeSlicePoolIndexInformer {
+	gvr := schema.GroupVersionResource{Group: "whereabouts.cni.cncf.io", Version: "v1alpha1", Resource: "nodeslicepools"}
+	identifier := options.InformerName.WithResource(gvr)
+	tweakListOptions := options.TweakListOptions
+	return cache.NewTypedSharedIndexInformer[*apiwhereaboutscnicncfiov1alpha1.NodeSlicePool](cache.NewSharedIndexInformerWithOptions(
+		cache.ToListWatcherWithWatchListSemantics(&cache.ListWatch{
+			ListFunc: func(opts v1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
-					tweakListOptions(&options)
+					tweakListOptions(&opts)
 				}
-				return client.WhereaboutsV1alpha1().NodeSlicePools(namespace).List(context.Background(), options)
+				return client.WhereaboutsV1alpha1().NodeSlicePools(namespace).List(context.Background(), opts)
 			},
-			WatchFunc: func(options v1.ListOptions) (watch.Interface, error) {
+			WatchFunc: func(opts v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
-					tweakListOptions(&options)
+					tweakListOptions(&opts)
 				}
-				return client.WhereaboutsV1alpha1().NodeSlicePools(namespace).Watch(context.Background(), options)
+				return client.WhereaboutsV1alpha1().NodeSlicePools(namespace).Watch(context.Background(), opts)
 			},
-			ListWithContextFunc: func(ctx context.Context, options v1.ListOptions) (runtime.Object, error) {
+			ListWithContextFunc: func(ctx context.Context, opts v1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
-					tweakListOptions(&options)
+					tweakListOptions(&opts)
 				}
-				return client.WhereaboutsV1alpha1().NodeSlicePools(namespace).List(ctx, options)
+				return client.WhereaboutsV1alpha1().NodeSlicePools(namespace).List(ctx, opts)
 			},
-			WatchFuncWithContext: func(ctx context.Context, options v1.ListOptions) (watch.Interface, error) {
+			WatchFuncWithContext: func(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
-					tweakListOptions(&options)
+					tweakListOptions(&opts)
 				}
-				return client.WhereaboutsV1alpha1().NodeSlicePools(namespace).Watch(ctx, options)
+				return client.WhereaboutsV1alpha1().NodeSlicePools(namespace).Watch(ctx, opts)
 			},
-		},
+		}, client),
 		&apiwhereaboutscnicncfiov1alpha1.NodeSlicePool{},
-		resyncPeriod,
-		indexers,
-	)
+		cache.SharedIndexInformerOptions{
+			ResyncPeriod: options.ResyncPeriod,
+			Indexers:     options.Indexers,
+			Identifier:   identifier,
+		},
+	))
 }
 
 func (f *nodeSlicePoolInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
-	return NewFilteredNodeSlicePoolInformer(client, f.namespace, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, f.tweakListOptions)
+	return NewTypedNodeSlicePoolInformerWithOptions(client, f.namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
 }
 
 func (f *nodeSlicePoolInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&apiwhereaboutscnicncfiov1alpha1.NodeSlicePool{}, f.defaultInformer)
+	return f.TypedInformer()
+}
+
+func (f *nodeSlicePoolInformer) TypedInformer() NodeSlicePoolIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apiwhereaboutscnicncfiov1alpha1.NodeSlicePool](f.factory.InformerFor(&apiwhereaboutscnicncfiov1alpha1.NodeSlicePool{}, f.defaultInformer))
 }
 
 func (f *nodeSlicePoolInformer) Lister() whereaboutscnicncfiov1alpha1.NodeSlicePoolLister {
 	return whereaboutscnicncfiov1alpha1.NewNodeSlicePoolLister(f.Informer().GetIndexer())
+}
+
+// ToTypedNodeSlicePoolInformer converts an untyped informer into a TypedNodeSlicePoolInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *NodeSlicePool. If that is not the case, calling type-safe methods of the returned
+// TypedNodeSlicePoolInformer leads to runtime panics. A safer alternative is to pass
+// around a TypedNodeSlicePoolInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToTypedNodeSlicePoolInformer(informer NodeSlicePoolInformer) TypedNodeSlicePoolInformer {
+	if informer, ok := informer.(TypedNodeSlicePoolInformer); ok {
+		return informer
+	}
+	return &nodeSlicePoolTypedInformerAdapter{informer}
+}
+
+type nodeSlicePoolTypedInformerAdapter struct {
+	NodeSlicePoolInformer
+}
+
+func (a *nodeSlicePoolTypedInformerAdapter) TypedInformer() NodeSlicePoolIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apiwhereaboutscnicncfiov1alpha1.NodeSlicePool](a.Informer())
+}
+
+// ToNodeSlicePoolIndexInformer converts an untyped informer into a NodeSlicePoolIndexInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *NodeSlicePool. If that is not the case, calling type-safe methods of the returned
+// NodeSlicePoolIndexInformer leads to runtime panics. A safer alternative is to pass
+// around a NodeSlicePoolIndexInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToNodeSlicePoolIndexInformer(informer cache.SharedIndexInformer) NodeSlicePoolIndexInformer {
+	if informer, ok := informer.(NodeSlicePoolIndexInformer); ok {
+		return informer
+	}
+	return cache.NewTypedSharedIndexInformer[*apiwhereaboutscnicncfiov1alpha1.NodeSlicePool](informer)
 }

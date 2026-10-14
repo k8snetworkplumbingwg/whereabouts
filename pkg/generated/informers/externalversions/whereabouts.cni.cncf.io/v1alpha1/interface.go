@@ -24,11 +24,11 @@ import (
 // Interface provides access to all the informers in this group version.
 type Interface interface {
 	// IPPools returns a IPPoolInformer.
-	IPPools() IPPoolInformer
+	IPPools() TypedIPPoolInformer
 	// NodeSlicePools returns a NodeSlicePoolInformer.
-	NodeSlicePools() NodeSlicePoolInformer
+	NodeSlicePools() TypedNodeSlicePoolInformer
 	// OverlappingRangeIPReservations returns a OverlappingRangeIPReservationInformer.
-	OverlappingRangeIPReservations() OverlappingRangeIPReservationInformer
+	OverlappingRangeIPReservations() TypedOverlappingRangeIPReservationInformer
 }
 
 type version struct {
@@ -42,17 +42,17 @@ func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakList
 	return &version{factory: f, namespace: namespace, tweakListOptions: tweakListOptions}
 }
 
-// IPPools returns a IPPoolInformer.
-func (v *version) IPPools() IPPoolInformer {
+// IPPools returns a TypedIPPoolInformer.
+func (v *version) IPPools() TypedIPPoolInformer {
 	return &iPPoolInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
-// NodeSlicePools returns a NodeSlicePoolInformer.
-func (v *version) NodeSlicePools() NodeSlicePoolInformer {
+// NodeSlicePools returns a TypedNodeSlicePoolInformer.
+func (v *version) NodeSlicePools() TypedNodeSlicePoolInformer {
 	return &nodeSlicePoolInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
-// OverlappingRangeIPReservations returns a OverlappingRangeIPReservationInformer.
-func (v *version) OverlappingRangeIPReservations() OverlappingRangeIPReservationInformer {
+// OverlappingRangeIPReservations returns a TypedOverlappingRangeIPReservationInformer.
+func (v *version) OverlappingRangeIPReservations() TypedOverlappingRangeIPReservationInformer {
 	return &overlappingRangeIPReservationInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
