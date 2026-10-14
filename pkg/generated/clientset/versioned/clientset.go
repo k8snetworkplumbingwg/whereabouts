@@ -28,7 +28,7 @@ import (
 )
 
 type Interface interface {
-	Discovery() discovery.DiscoveryInterface
+	Discovery() discovery.DiscoveryInterfaces
 	WhereaboutsV1alpha1() whereaboutsv1alpha1.WhereaboutsV1alpha1Interface
 }
 
@@ -44,7 +44,7 @@ func (c *Clientset) WhereaboutsV1alpha1() whereaboutsv1alpha1.WhereaboutsV1alpha
 }
 
 // Discovery retrieves the DiscoveryClient
-func (c *Clientset) Discovery() discovery.DiscoveryInterface {
+func (c *Clientset) Discovery() discovery.DiscoveryInterfaces {
 	if c == nil {
 		return nil
 	}

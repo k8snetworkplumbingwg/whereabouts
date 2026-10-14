@@ -27,16 +27,45 @@ import (
 	whereaboutscnicncfiov1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/listers/whereabouts.cni.cncf.io/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
+	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	watch "k8s.io/apimachinery/pkg/watch"
 	cache "k8s.io/client-go/tools/cache"
 )
 
 // OverlappingRangeIPReservationInformer provides access to a shared informer and lister for
-// OverlappingRangeIPReservations.
+// OverlappingRangeIPReservations. Prefer using the type-safe variant (see [TypedOverlappingRangeIPReservationInformer]).
 type OverlappingRangeIPReservationInformer interface {
 	Informer() cache.SharedIndexInformer
 	Lister() whereaboutscnicncfiov1alpha1.OverlappingRangeIPReservationLister
 }
+
+// TypedOverlappingRangeIPReservationInformer provides access to a shared informer and lister for
+// OverlappingRangeIPReservations, including the type-safe TypedInformer variant.
+// It is a superset of OverlappingRangeIPReservationInformer.
+type TypedOverlappingRangeIPReservationInformer interface {
+	Informer() cache.SharedIndexInformer
+	TypedInformer() OverlappingRangeIPReservationIndexInformer
+	Lister() whereaboutscnicncfiov1alpha1.OverlappingRangeIPReservationLister
+}
+
+// OverlappingRangeIPReservationIndexInformer is a wrapper around the underlying [cache.SharedIndexInformer]
+// with type-safe variants of several methods.
+type OverlappingRangeIPReservationIndexInformer cache.TypedSharedIndexInformer[*apiwhereaboutscnicncfiov1alpha1.OverlappingRangeIPReservation]
+
+// OverlappingRangeIPReservationHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerFuncs] for OverlappingRangeIPReservation.
+type OverlappingRangeIPReservationHandlerFuncs = cache.TypedResourceEventHandlerFuncs[*apiwhereaboutscnicncfiov1alpha1.OverlappingRangeIPReservation]
+
+// OverlappingRangeIPReservationDetailedHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerDetailedFuncs] for OverlappingRangeIPReservation.
+type OverlappingRangeIPReservationDetailedHandlerFuncs = cache.TypedResourceEventHandlerDetailedFuncs[*apiwhereaboutscnicncfiov1alpha1.OverlappingRangeIPReservation]
+
+// OverlappingRangeIPReservationFilteringHandler is a specialization of [cache.TypedFilteringResourceEventHandler] for OverlappingRangeIPReservation.
+type OverlappingRangeIPReservationFilteringHandler = cache.TypedFilteringResourceEventHandler[*apiwhereaboutscnicncfiov1alpha1.OverlappingRangeIPReservation]
+
+// OverlappingRangeIPReservationIndexers is a specialization of [cache.TypedIndexers] for OverlappingRangeIPReservation.
+type OverlappingRangeIPReservationIndexers = cache.TypedIndexers[*apiwhereaboutscnicncfiov1alpha1.OverlappingRangeIPReservation]
+
+// DeletedOverlappingRangeIPReservation is a specialization of [cache.DeletedObject] for OverlappingRangeIPReservation.
+type DeletedOverlappingRangeIPReservation = cache.DeletedObject[*apiwhereaboutscnicncfiov1alpha1.OverlappingRangeIPReservation]
 
 type overlappingRangeIPReservationInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
@@ -47,55 +76,132 @@ type overlappingRangeIPReservationInformer struct {
 // NewOverlappingRangeIPReservationInformer constructs a new informer for OverlappingRangeIPReservation type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedOverlappingRangeIPReservationInformer]).
 func NewOverlappingRangeIPReservationInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
-	return NewFilteredOverlappingRangeIPReservationInformer(client, namespace, resyncPeriod, indexers, nil)
+	return NewOverlappingRangeIPReservationInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers})
+}
+
+// NewTypedOverlappingRangeIPReservationInformer constructs a new informer for OverlappingRangeIPReservation type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedOverlappingRangeIPReservationInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers OverlappingRangeIPReservationIndexers) OverlappingRangeIPReservationIndexInformer {
+	return NewTypedOverlappingRangeIPReservationInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers)})
 }
 
 // NewFilteredOverlappingRangeIPReservationInformer constructs a new informer for OverlappingRangeIPReservation type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedFilteredOverlappingRangeIPReservationInformer]).
 func NewFilteredOverlappingRangeIPReservationInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
-	return cache.NewSharedIndexInformer(
-		&cache.ListWatch{
-			ListFunc: func(options v1.ListOptions) (runtime.Object, error) {
+	return NewTypedOverlappingRangeIPReservationInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+}
+
+// NewTypedFilteredOverlappingRangeIPReservationInformer constructs a new informer for OverlappingRangeIPReservation type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedFilteredOverlappingRangeIPReservationInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers OverlappingRangeIPReservationIndexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) OverlappingRangeIPReservationIndexInformer {
+	return NewTypedOverlappingRangeIPReservationInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers), TweakListOptions: tweakListOptions})
+}
+
+// NewOverlappingRangeIPReservationInformerWithOptions constructs a new informer for OverlappingRangeIPReservation type with additional options.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedOverlappingRangeIPReservationInformerWithOptions]).
+func NewOverlappingRangeIPReservationInformerWithOptions(client versioned.Interface, namespace string, options internalinterfaces.InformerOptions) cache.SharedIndexInformer {
+	return NewTypedOverlappingRangeIPReservationInformerWithOptions(client, namespace, options)
+}
+
+// NewTypedOverlappingRangeIPReservationInformerWithOptions constructs a new informer for OverlappingRangeIPReservation type with additional options.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedOverlappingRangeIPReservationInformerWithOptions(client versioned.Interface, namespace string, options internalinterfaces.InformerOptions) OverlappingRangeIPReservationIndexInformer {
+	gvr := schema.GroupVersionResource{Group: "whereabouts.cni.cncf.io", Version: "v1alpha1", Resource: "overlappingrangeipreservations"}
+	identifier := options.InformerName.WithResource(gvr)
+	tweakListOptions := options.TweakListOptions
+	return cache.NewTypedSharedIndexInformer[*apiwhereaboutscnicncfiov1alpha1.OverlappingRangeIPReservation](cache.NewSharedIndexInformerWithOptions(
+		cache.ToListWatcherWithWatchListSemantics(&cache.ListWatch{
+			ListFunc: func(opts v1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
-					tweakListOptions(&options)
+					tweakListOptions(&opts)
 				}
-				return client.WhereaboutsV1alpha1().OverlappingRangeIPReservations(namespace).List(context.Background(), options)
+				return client.WhereaboutsV1alpha1().OverlappingRangeIPReservations(namespace).List(context.Background(), opts)
 			},
-			WatchFunc: func(options v1.ListOptions) (watch.Interface, error) {
+			WatchFunc: func(opts v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
-					tweakListOptions(&options)
+					tweakListOptions(&opts)
 				}
-				return client.WhereaboutsV1alpha1().OverlappingRangeIPReservations(namespace).Watch(context.Background(), options)
+				return client.WhereaboutsV1alpha1().OverlappingRangeIPReservations(namespace).Watch(context.Background(), opts)
 			},
-			ListWithContextFunc: func(ctx context.Context, options v1.ListOptions) (runtime.Object, error) {
+			ListWithContextFunc: func(ctx context.Context, opts v1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
-					tweakListOptions(&options)
+					tweakListOptions(&opts)
 				}
-				return client.WhereaboutsV1alpha1().OverlappingRangeIPReservations(namespace).List(ctx, options)
+				return client.WhereaboutsV1alpha1().OverlappingRangeIPReservations(namespace).List(ctx, opts)
 			},
-			WatchFuncWithContext: func(ctx context.Context, options v1.ListOptions) (watch.Interface, error) {
+			WatchFuncWithContext: func(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
-					tweakListOptions(&options)
+					tweakListOptions(&opts)
 				}
-				return client.WhereaboutsV1alpha1().OverlappingRangeIPReservations(namespace).Watch(ctx, options)
+				return client.WhereaboutsV1alpha1().OverlappingRangeIPReservations(namespace).Watch(ctx, opts)
 			},
-		},
+		}, client),
 		&apiwhereaboutscnicncfiov1alpha1.OverlappingRangeIPReservation{},
-		resyncPeriod,
-		indexers,
-	)
+		cache.SharedIndexInformerOptions{
+			ResyncPeriod: options.ResyncPeriod,
+			Indexers:     options.Indexers,
+			Identifier:   identifier,
+		},
+	))
 }
 
 func (f *overlappingRangeIPReservationInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
-	return NewFilteredOverlappingRangeIPReservationInformer(client, f.namespace, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, f.tweakListOptions)
+	return NewTypedOverlappingRangeIPReservationInformerWithOptions(client, f.namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
 }
 
 func (f *overlappingRangeIPReservationInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&apiwhereaboutscnicncfiov1alpha1.OverlappingRangeIPReservation{}, f.defaultInformer)
+	return f.TypedInformer()
+}
+
+func (f *overlappingRangeIPReservationInformer) TypedInformer() OverlappingRangeIPReservationIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apiwhereaboutscnicncfiov1alpha1.OverlappingRangeIPReservation](f.factory.InformerFor(&apiwhereaboutscnicncfiov1alpha1.OverlappingRangeIPReservation{}, f.defaultInformer))
 }
 
 func (f *overlappingRangeIPReservationInformer) Lister() whereaboutscnicncfiov1alpha1.OverlappingRangeIPReservationLister {
 	return whereaboutscnicncfiov1alpha1.NewOverlappingRangeIPReservationLister(f.Informer().GetIndexer())
+}
+
+// ToTypedOverlappingRangeIPReservationInformer converts an untyped informer into a TypedOverlappingRangeIPReservationInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *OverlappingRangeIPReservation. If that is not the case, calling type-safe methods of the returned
+// TypedOverlappingRangeIPReservationInformer leads to runtime panics. A safer alternative is to pass
+// around a TypedOverlappingRangeIPReservationInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToTypedOverlappingRangeIPReservationInformer(informer OverlappingRangeIPReservationInformer) TypedOverlappingRangeIPReservationInformer {
+	if informer, ok := informer.(TypedOverlappingRangeIPReservationInformer); ok {
+		return informer
+	}
+	return &overlappingRangeIPReservationTypedInformerAdapter{informer}
+}
+
+type overlappingRangeIPReservationTypedInformerAdapter struct {
+	OverlappingRangeIPReservationInformer
+}
+
+func (a *overlappingRangeIPReservationTypedInformerAdapter) TypedInformer() OverlappingRangeIPReservationIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apiwhereaboutscnicncfiov1alpha1.OverlappingRangeIPReservation](a.Informer())
+}
+
+// ToOverlappingRangeIPReservationIndexInformer converts an untyped informer into a OverlappingRangeIPReservationIndexInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *OverlappingRangeIPReservation. If that is not the case, calling type-safe methods of the returned
+// OverlappingRangeIPReservationIndexInformer leads to runtime panics. A safer alternative is to pass
+// around a OverlappingRangeIPReservationIndexInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToOverlappingRangeIPReservationIndexInformer(informer cache.SharedIndexInformer) OverlappingRangeIPReservationIndexInformer {
+	if informer, ok := informer.(OverlappingRangeIPReservationIndexInformer); ok {
+		return informer
+	}
+	return cache.NewTypedSharedIndexInformer[*apiwhereaboutscnicncfiov1alpha1.OverlappingRangeIPReservation](informer)
 }
