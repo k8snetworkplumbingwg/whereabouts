@@ -28,8 +28,9 @@ if [ $SKIP_STATIC_CHECK ]
 then
     echo "Skipped golang staticcheck"
 else
+  STATICCHECK_VERSION=${STATICCHECK_VERSION:-v0.7.0}
   echo "Installing golang staticcheck ..."
-  GOBIN=${BASEDIR}/bin go install honnef.co/go/tools/cmd/staticcheck@latest
+  GOBIN=${BASEDIR}/bin go install honnef.co/go/tools/cmd/staticcheck@${STATICCHECK_VERSION}
   echo "Running golang staticcheck ..."
   ${BASEDIR}/bin/staticcheck --tags=test ./...
 fi
