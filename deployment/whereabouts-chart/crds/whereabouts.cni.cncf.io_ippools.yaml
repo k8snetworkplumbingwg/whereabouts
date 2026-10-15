@@ -11,13 +11,36 @@ spec:
     kind: IPPool
     listKind: IPPoolList
     plural: ippools
+    shortNames:
+    - ipp
     singular: ippool
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - description: CIDR range of the IP pool
+      jsonPath: .spec.range
+      name: Range
+      type: string
+    - description: Total usable IPs in the range
+      jsonPath: .status.totalIPs
+      name: Total
+      type: integer
+    - description: Number of IPs currently allocated
+      jsonPath: .status.usedIPs
+      name: Used
+      type: integer
+    - description: Number of IPs available for allocation
+      jsonPath: .status.freeIPs
+      name: Free
+      type: integer
+    - description: Whether the IP pool is ready
+      jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: IPPool is the Schema for the ippools API
+        description: IPPool is the Schema for the ippools API.
         properties:
           apiVersion:
             description: |-
@@ -37,35 +60,172 @@ spec:
           metadata:
             type: object
           spec:
-            description: IPPoolSpec defines the desired state of IPPool
+            description: IPPoolSpec defines the desired state of IPPool.
             properties:
               allocations:
                 additionalProperties:
                   description: IPAllocation represents metadata about the pod/container
-                    owner of a specific IP
+                    owner of a specific IP.
                   properties:
                     id:
+                      description: ContainerID is the identifier of the container
+                        that owns this allocation.
                       type: string
                     ifname:
+                      description: IfName is the network interface name inside the
+                        pod for this allocation.
                       type: string
                     podref:
+                      description: PodRef is the namespace/name reference of the pod
+                        that owns this allocation.
                       type: string
                   required:
                   - id
                   - podref
                   type: object
                 description: |-
-                  Allocations is the set of allocated IPs for the given range. Its` indices are a direct mapping to the
+                  Allocations is the set of allocated IPs for the given range. Its indices are a direct mapping to the
                   IP with the same index/offset for the pool's range.
                 type: object
               range:
                 description: Range is a RFC 4632/4291-style string that represents
-                  an IP address and prefix length in CIDR notation
+                  an IP address and prefix length in CIDR notation.
+                minLength: 1
                 type: string
             required:
             - allocations
             - range
             type: object
+          status:
+            description: IPPoolStatus defines the observed state of IPPool.
+            properties:
+              allocatedIPs:
+                description: |-
+                  AllocatedIPs is a list of resolved IP-to-pod assignments derived from the
+                  spec allocations offset map. Provides a human-readable view of the pool's
+                  current allocations.
+                items:
+                  description: |-
+                    IPAddressAllocation represents a single resolved IP allocation with its
+                    actual IP address (computed from the CIDR base and offset key).
+                  properties:
+                    ifName:
+                      description: IfName is the network interface name inside the
+                        pod.
+                      type: string
+                    ip:
+                      description: IP is the resolved IP address for this allocation.
+                      type: string
+                    podRef:
+                      description: PodRef is the namespace/name reference of the pod
+                        that owns this allocation.
+                      type: string
+                  required:
+                  - ip
+                  - podRef
+                  type: object
+                type: array
+              conditions:
+                description: Conditions holds the conditions for the IPPool.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              firstIP:
+                description: FirstIP is the first usable IP address in the pool's
+                  range.
+                type: string
+              freeIPs:
+                description: FreeIPs is the number of IPs available for allocation
+                  (totalIPs - usedIPs).
+                format: int32
+                type: integer
+              lastIP:
+                description: LastIP is the last usable IP address in the pool's range.
+                type: string
+              orphanedIPs:
+                description: |-
+                  OrphanedIPs is the number of allocations whose pods no longer exist,
+                  as detected during the last reconciliation.
+                format: int32
+                type: integer
+              overlappingReservations:
+                description: |-
+                  OverlappingReservations is the number of OverlappingRangeIPReservation CRDs
+                  that correspond to allocations in this pool.
+                format: int32
+                type: integer
+              pendingPods:
+                description: |-
+                  PendingPods is the number of allocations whose pods are still in the
+                  Pending phase, as detected during the last reconciliation.
+                format: int32
+                type: integer
+              totalIPs:
+                description: |-
+                  TotalIPs is the total number of usable IPs in the pool's CIDR range
+                  (excluding network and broadcast addresses).
+                format: int32
+                type: integer
+              usedIPs:
+                description: UsedIPs is the number of IPs currently allocated from
+                  the pool.
+                format: int32
+                type: integer
+            type: object
         type: object
     served: true
     storage: true
+    subresources:
+      status: {}

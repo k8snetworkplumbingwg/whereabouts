@@ -18,12 +18,13 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pkg/errors"
 )
 
-// Level type
+// Level type.
 type Level uint32
 
 // PanicLevel ErrorLevel etc are our logging level constants.
@@ -39,6 +40,12 @@ const (
 var loggingStderr bool
 var loggingFp *os.File
 var loggingLevel Level
+
+// mu guards all logging state (loggingStderr, loggingFp, loggingLevel).
+// A full Mutex (not RWMutex) is used intentionally: SetLogFile closes
+// the previous loggingFp under the lock, so concurrent Printf callers
+// must not hold a reader lock that would let them write to a closed file.
+var mu sync.Mutex
 
 const defaultTimestampFormat = time.RFC3339
 
@@ -56,24 +63,24 @@ func (l Level) String() string {
 	return "unknown"
 }
 
-// Printf provides basic Printf functionality for logs
+// Printf provides basic Printf functionality for logs.
 func Printf(level Level, format string, a ...interface{}) {
-	header := "%s [%s] "
-	t := time.Now()
+	mu.Lock()
+	defer mu.Unlock()
+
 	if level > loggingLevel {
 		return
 	}
 
+	t := time.Now()
+	line := fmt.Sprintf("%s [%s] %s\n", t.Format(defaultTimestampFormat), level, fmt.Sprintf(format, a...))
+
 	if loggingStderr {
-		fmt.Fprintf(os.Stderr, header, t.Format(defaultTimestampFormat), level)
-		fmt.Fprintf(os.Stderr, format, a...)
-		fmt.Fprintf(os.Stderr, "\n")
+		fmt.Fprint(os.Stderr, line)
 	}
 
 	if loggingFp != nil {
-		fmt.Fprintf(loggingFp, header, t.Format(defaultTimestampFormat), level)
-		fmt.Fprintf(loggingFp, format, a...)
-		fmt.Fprintf(loggingFp, "\n")
+		fmt.Fprint(loggingFp, line)
 	}
 }
 
@@ -88,8 +95,10 @@ func Verbosef(format string, a ...interface{}) {
 }
 
 // Errorf defines our printf for error level.
+// It supports %w for proper error wrapping in the returned error.
+// The log output substitutes %w with %v so fmt.Sprintf renders the message.
 func Errorf(format string, a ...interface{}) error {
-	Printf(ErrorLevel, format, a...)
+	Printf(ErrorLevel, strings.ReplaceAll(format, "%w", "%v"), a...)
 	return fmt.Errorf(format, a...)
 }
 
@@ -97,11 +106,12 @@ func Errorf(format string, a ...interface{}) error {
 func Panicf(format string, a ...interface{}) {
 	Printf(PanicLevel, format, a...)
 	Printf(PanicLevel, "========= Stack trace output ========")
-	Printf(PanicLevel, "%+v", errors.New("Whereabouts Panic"))
+	Printf(PanicLevel, "%+v", errors.Errorf(format, a...))
 	Printf(PanicLevel, "========= Stack trace output end ========")
+	panic(fmt.Sprintf(format, a...))
 }
 
-// GetLoggingLevel returns loggingLevel
+// GetLoggingLevel returns loggingLevel.
 func GetLoggingLevel() Level {
 	return loggingLevel
 }
@@ -121,31 +131,43 @@ func getLoggingLevel(levelStr string) Level {
 	return UnknownLevel
 }
 
-// SetLogLevel sets loggingLevel
+// SetLogLevel sets loggingLevel.
 func SetLogLevel(levelStr string) {
 	level := getLoggingLevel(levelStr)
 	if level < MaxLevel {
+		mu.Lock()
 		loggingLevel = level
+		mu.Unlock()
 	}
 }
 
-// SetLogStderr enables logging to stderr
+// SetLogStderr enables logging to stderr.
 func SetLogStderr(enable bool) {
+	mu.Lock()
 	loggingStderr = enable
+	mu.Unlock()
 }
 
-// SetLogFile defines which log file we'll log to
+// SetLogFile defines which log file we'll log to.
 func SetLogFile(filename string) {
 	if filename == "" {
 		return
 	}
 
-	fp, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+	fp, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o640)
 	if err != nil {
-		loggingFp = nil
-		fmt.Fprintf(os.Stderr, "Whereabouts logging: cannot open %s", filename)
+		_, _ = os.Stderr.WriteString("Whereabouts logging: cannot open " + filename + "\n")
+		return
+	}
+
+	mu.Lock()
+	if loggingFp != nil {
+		if closeErr := loggingFp.Close(); closeErr != nil {
+			fmt.Fprintf(os.Stderr, "Whereabouts logging: error closing previous log file: %v\n", closeErr)
+		}
 	}
 	loggingFp = fp
+	mu.Unlock()
 }
 
 func init() {
