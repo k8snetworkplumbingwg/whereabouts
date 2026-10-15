@@ -10,8 +10,8 @@ GITHUB_REPO_OWNER=${GITHUB_REPO_OWNER:-}
 
 BASE=${PWD}
 YQ_CMD="${BASE}/bin/yq"
-HELM_VALUES=${BASE}/deployment/whereabouts-chart/values.yaml
-HELM_CHART=${BASE}/deployment/whereabouts-chart/Chart.yaml
+HELM_VALUES=${BASE}/deploy/charts/whereabouts/values.yaml
+HELM_CHART=${BASE}/deploy/charts/whereabouts/Chart.yaml
 
 
 if [ -z "$GITHUB_TAG" ]; then
@@ -47,7 +47,8 @@ WHEREABOUTS_TAG=${GITHUB_TAG}
 
 # whereabouts image:
 WHEREABOUTS_REPO=${GITHUB_REPO_OWNER} # this is used to allow to release whereabouts from forks
-$YQ_CMD -i ".image.repository = \"ghcr.io/${WHEREABOUTS_REPO}/whereabouts\"" ${HELM_VALUES}
+$YQ_CMD -i ".image.registry = \"ghcr.io\"" ${HELM_VALUES}
+$YQ_CMD -i ".image.repository = \"${WHEREABOUTS_REPO}/whereabouts\"" ${HELM_VALUES}
 $YQ_CMD -i ".image.tag = \"${WHEREABOUTS_TAG}\"" ${HELM_VALUES}
 
 # patch Chart.yaml in-place

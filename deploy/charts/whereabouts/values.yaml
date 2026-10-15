@@ -1,18 +1,15 @@
-# Default values for whereabouts.
-# This is a YAML-formatted file.
-# Declare variables to be passed into your templates.
-
 image:
-  repository: ghcr.io/k8snetworkplumbingwg/whereabouts
-  pullPolicy: IfNotPresent
+  registry: ghcr.io
+  repository: k8snetworkplumbingwg/whereabouts
   # Overrides the image tag whose default is the chart appVersion.
-  tag: v0.8.0
+  tag: ""
+  pullPolicy: IfNotPresent
 
 updateStrategy: RollingUpdate
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
-namespaceOverride: "kube-system"
+namespaceOverride: ""
 successfulJobsHistoryLimit: 0
 
 serviceAccount:
@@ -22,23 +19,22 @@ serviceAccount:
   annotations: {}
   # The name of the service account to use.
   # If not set and create is true, a name is generated using the fullname template
-  #name: ""
+  # name: ""
 
 podAnnotations: {}
 
 podSecurityContext: {}
-  # fsGroup: 2000
 
 securityContext:
   privileged: true
 
 resources:
   requests:
-    cpu: "100m"
-    memory: "50Mi"
+    cpu: 100m
+    memory: 50Mi
   limits:
-    cpu: "100m"
-    memory: "50Mi"
+    cpu: 100m
+    memory: 50Mi
 
 nodeSelector:
   kubernetes.io/os: linux
@@ -55,16 +51,27 @@ cniConf:
   confDir: /etc/cni/net.d
   binDir: /opt/cni/bin
 
-nodeSliceController:
-  enabled: true
-  priorityClassName: ""
+# Default schedule is once per day at 4:30am. Users may configure this value to their liking.
+cronExpression: "30 4 * * *"
 
 reconciler:
   logLevel: debug
+  priorityClassName: ""
   resources:
     requests:
-      cpu: "100m"
-      memory: "50Mi"
+      cpu: 100m
+      memory: 50Mi
     limits:
-      cpu: "100m"
-      memory: "50Mi"
+      cpu: 100m
+      memory: 50Mi
+
+nodeSliceController:
+  enabled: false
+  priorityClassName: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 50Mi
+    limits:
+      cpu: 100m
+      memory: 50Mi
