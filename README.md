@@ -131,6 +131,8 @@ The same applies for the usage of IPv6:
 
 `ipRanges` field can be used to provide a list of range configurations for assigning multiple IP addresses.
 
+Set `singleIP: true` in the IPAM configuration to allocate only one IP from the first configured range with available capacity, and set `include_network_address: true` and/or `include_broadcast_address: true` in a range configuration to allow allocation of its first (network) and/or last (broadcast) address, respectively.
+
 ```
 {
       "cniVersion": "0.3.0",

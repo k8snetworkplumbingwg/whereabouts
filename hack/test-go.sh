@@ -29,7 +29,7 @@ then
     echo "Skipped golang staticcheck"
 else
   echo "Installing golang staticcheck ..."
-  GOBIN=${BASEDIR}/bin go install honnef.co/go/tools/cmd/staticcheck@latest
+  GOBIN=${BASEDIR}/bin go install honnef.co/go/tools/cmd/staticcheck@v0.7.0
   echo "Running golang staticcheck ..."
   ${BASEDIR}/bin/staticcheck --tags=test ./...
 fi
