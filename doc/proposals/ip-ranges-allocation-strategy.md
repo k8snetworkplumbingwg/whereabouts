@@ -17,6 +17,7 @@ Status: Draft
   - [Overlapping ranges](#overlapping-ranges)
   - [Mixed address families](#mixed-address-families)
   - [Errors and concurrency](#errors-and-concurrency)
+  - [Operational recovery](#operational-recovery)
   - [Backward compatibility](#backward-compatibility)
   - [Changing strategies and ranges](#changing-strategies-and-ranges)
 - [Implementation plan](#implementation-plan)
@@ -79,8 +80,8 @@ cases and retain the `all` strategy.
   lowest available address according to the existing range configuration.
 - Changing the existing standard or Fast IPAM lease selection and datastore
   concurrency models.
-- Persisting configuration generations or introducing a new CRD to enforce
-  configuration-update admission.
+- Persisting configuration history or fingerprints, or introducing a new CRD
+  or admission controller to enforce configuration updates.
 - Guaranteeing address retention across Pod object recreation, including
   StatefulSet Pods recreated with the same namespace and name. This requires a
   separate enhancement defining allocation identity and cleanup semantics.
@@ -149,10 +150,19 @@ to `IPRanges`. Therefore, when both forms are present, `first_available` tries
 the legacy `range` first and then the explicit `ipRanges` entries in their JSON
 order.
 
-The configured order must remain stable while the network has live
-allocations. For `first_available`, additional capacity may be appended through
-entries that resolve to new IPPool identifiers, but existing entries must not
-be reordered or modified. The operational contract is specified in
+Changing the configured order changes which range `first_available` tries
+first for new allocations. An existing allocation remains discoverable because
+ADD preflight and DEL visit every configured pool. If inconsistent duplicate
+matches exist, however, a reorder can change which match is returned first.
+
+The supported operational contract therefore requires the configured order to
+remain stable while the network has live allocations. For `first_available`,
+additional capacity may be appended through entries that resolve to new IPPool
+identifiers, but existing entries must not be reordered or modified. This
+proposal does not enforce that contract at runtime because an invocation sees
+only the current configuration and the existing persistence model does not
+record a previous normalized sequence or configuration generation. The full
+contract is specified in
 [Changing strategies and ranges](#changing-strategies-and-ranges).
 
 For `first_available`, Whereabouts resolves entries to their existing IPPool
@@ -197,14 +207,22 @@ target sandbox. This proposal does not make it valid for a runtime to invoke
 ADD twice without an intervening DEL for the same
 `(CNI_CONTAINERID, CNI_IFNAME)` tuple.
 
-Whereabouts already uses the Pod reference and interface name to find an
-existing allocation within one pool. When the upper CNI plugin configures a
-replacement sandbox for the same logical attachment, `CNI_CONTAINERID` and
-`CNI_NETNS` differ while the Pod reference and `CNI_IFNAME` remain the same.
-The requested interface does not already exist in the new sandbox. In this
-case, delegated Whereabouts ADD preserves the existing behavior: it returns the
-existing allocation and refreshes its stored container ID instead of allocating
-another address. This case is not specific to StatefulSets.
+Within one pool, Whereabouts currently uses the Pod reference
+(`namespace/name`) and interface name as the existing-allocation lookup key. If
+it finds a match, it returns the allocation and refreshes the stored container
+ID. `first_available` preserves this existing identity model and only applies
+the lookup across all configured pools; it does not introduce a stronger IP
+pinning guarantee.
+
+When the upper CNI plugin configures a replacement sandbox, `CNI_CONTAINERID`
+and `CNI_NETNS` differ while the Pod reference and `CNI_IFNAME` can remain the
+same. The requested interface does not already exist in the new sandbox. Under
+the current identity model, delegated Whereabouts ADD returns the existing
+allocation and refreshes its stored container ID instead of allocating another
+address. Because a reservation does not persist the Pod UID, Whereabouts cannot
+distinguish a replacement sandbox for the same Pod object from a new Pod object
+with the same namespace and name. Defining a UID-aware allocation identity and
+its cleanup semantics is a separate enhancement, as stated in [Non-goals](#non-goals).
 
 Before attempting any new allocation, `first_available` searches the pool
 record for every currently configured range for a reservation whose `podRef`
@@ -323,6 +341,30 @@ This proposal does not otherwise change lease selection. Existing datastore
 retry handling also remains in place; exhaustion is considered only after the
 current pool's transient retries are resolved.
 
+### Operational recovery
+
+Failing closed on incomplete pool knowledge prevents Whereabouts from
+allocating an address that may already be reserved. A pool-specific
+inconsistency blocks new ADDs for network configurations that traverse that
+pool, but it does not revoke existing allocations. For Kubernetes API,
+datastore, or authorization failures, the blast radius follows the failed
+dependency or access policy and may include every network that requires it.
+
+For transient Kubernetes API, datastore, or authorization failures, operators
+restore the failed dependency or access and retry the request. For orphaned
+IPPool allocations or overlapping-range reservations that no longer correspond
+to a live Pod attachment, the existing Whereabouts reconciler can remove the
+stale records using live Pod and network-status data.
+
+Ambiguous records that appear to have conflicting live owners cannot be safely
+repaired automatically because neither record establishes authoritative
+ownership. Before implementation, the user documentation must provide a tested
+recovery procedure for this case. The procedure must require operators to
+quiesce allocation for the affected network, establish the authoritative live
+attachment state, repair the IPPool and overlapping-range records consistently,
+and verify the result before resuming allocation. Ad hoc fallback to a later
+range is not a recovery mechanism because it could allocate a duplicate address.
+
 ### Backward compatibility
 
 - Existing configurations omit `ipRangesAllocation` and therefore keep `all`.
@@ -367,9 +409,12 @@ allocations.
 Whereabouts reads this configuration from CNI configuration, commonly embedded
 in a NetworkAttachmentDefinition, rather than from a dedicated CRD with update
 admission. Without persisting a configuration generation with reservations, it
-cannot compare the current configuration with a previous version and enforce
-this invariant. This proposal therefore defines the supported operational
-contract: configuration management must prevent unsupported live changes.
+cannot compare the current configuration with a previous version, detect a
+reorder, removal, or replacement, or enforce this invariant. This proposal
+therefore defines the supported operational contract: configuration management
+must prevent unsupported live changes. Hard enforcement would require a
+persisted normalized-configuration fingerprint or generation, or admission of
+the configuration object, and remains a separate enhancement.
 
 <hr>
 
@@ -399,6 +444,9 @@ After the API is accepted:
    expansion through new unique IPPools, duplicate-append no-op semantics, and
    the drain-before-reconfiguration contract in the extended configuration
    guide.
+8. Document and test an operator recovery procedure for ambiguous IPPool and
+   overlapping-range ownership records. The procedure must quiesce allocation
+   for the affected network before the records are inspected and repaired.
 
 ## Test plan
 
@@ -410,6 +458,8 @@ Unit coverage will include:
   `allocate.AssignmentError`;
 - an operational error in an earlier range being returned with the same error
   identity and aborting allocation without visiting a later range;
+- a failed all-pool preflight preventing allocation, followed by a successful
+  retry after the transient read failure is removed;
 - total exhaustion returning `AllRangesExhaustedError` with ordered configured
   indices, resolved pool identifiers, and underlying assignment errors, with
   `Unwrap()` returning those exact errors in traversal order and `errors.As`
@@ -440,6 +490,8 @@ Unit coverage will include:
   from the appended range after earlier exhaustion;
 - appending a duplicate range under `first_available` remaining a no-op without
   adding capacity or altering the de-duplicated traversal;
+- recovery after consistently repairing an ambiguous IPPool and
+  overlapping-range ownership conflict;
 - changing the strategy or `network_name`, or editing, replacing, reordering,
   or removing ranges after the network has been fully drained;
 - appending a range under `all` only after the network has been fully drained;
