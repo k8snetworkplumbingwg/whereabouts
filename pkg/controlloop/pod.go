@@ -324,7 +324,7 @@ func (pc *PodController) addressGarbageCollected(pod *v1.Pod, networkName string
 		if err != nil {
 			return err
 		}
-		index, err := strconv.Atoi(allocationIndex)
+		index, err := strconv.ParseUint(allocationIndex, 10, 64)
 		if err != nil {
 			return err
 		}
@@ -333,7 +333,7 @@ func (pc *PodController) addressGarbageCollected(pod *v1.Pod, networkName string
 			v1.EventTypeNormal,
 			addressGarbageCollected,
 			"successful cleanup of IP address [%s] from network %s",
-			iphelpers.IPAddOffset(ip, uint64(index)),
+			iphelpers.IPAddOffset(ip, index),
 			networkName)
 	}
 	return nil
