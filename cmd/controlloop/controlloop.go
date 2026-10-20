@@ -46,7 +46,6 @@ func main() {
 	logging.SetLogStderr(true)
 
 	stopChan := make(chan struct{})
-	defer close(stopChan)
 	handleSignals(stopChan, os.Interrupt, syscall.SIGTERM)
 
 	networkController, err := newPodController(stopChan)
@@ -67,7 +66,7 @@ func handleSignals(stopChannel chan struct{}, signals ...os.Signal) {
 	signal.Notify(signalChannel, signals...)
 	go func() {
 		<-signalChannel
-		stopChannel <- struct{}{}
+		close(stopChannel)
 	}()
 }
 
