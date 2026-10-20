@@ -1,0 +1,266 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+#
+# SPDX-License-Identifier: CC0-1.0
+
+# golangci-lint v2 configuration.
+# Modeled after kubernetes-sigs/cluster-api and adapted for whereabouts.
+
+version: "2"
+
+run:
+  timeout: 10m
+  build-tags:
+    - e2e
+  allow-parallel-runners: true
+
+linters:
+  default: none
+  enable:
+    # Bug detection
+    - asasalint
+    - asciicheck
+    - bidichk
+    - bodyclose
+    - containedctx
+    - copyloopvar
+    - durationcheck
+    - errchkjson
+    - nilerr
+    - sqlclosecheck
+    # Security
+    - gosec
+    - noctx
+    # Style and readability
+    - dogsled
+    - dupword
+    - gocritic
+    - godot
+    - goprintffuncname
+    - importas
+    - misspell
+    - nolintlint
+    - nosprintfhostport
+    - prealloc
+    - predeclared
+    - revive
+    - unconvert
+    - usestdlibvars
+    - whitespace
+    # Error handling
+    - errcheck
+    # Code correctness
+    - govet
+    - ineffassign
+    - intrange
+    - staticcheck
+    - thelper
+    - unparam
+    - unused
+    - wastedassign
+    # Ginkgo/Gomega
+    - ginkgolinter
+
+  settings:
+    gosec:
+      excludes:
+        - G115  # int→int32 conversions for pool sizes (safely bounded)
+        - G703  # False positive: paths from config, not user input
+
+    staticcheck:
+      checks:
+        - all
+        - "-SA1019"
+        - "-ST1003"
+
+    govet:
+      enable:
+        - unusedresult
+
+    errcheck:
+      exclude-functions:
+        - (io.Closer).Close
+        - (*os.File).Close
+        - github.com/k8snetworkplumbingwg/whereabouts/pkg/logging.Errorf
+
+    misspell:
+      locale: US
+
+    gocritic:
+      disabled-checks:
+        - appendAssign       # https://github.com/go-critic/go-critic/issues/845
+        - hugeParam          # K8s types are inherently large structs
+      enabled-tags:
+        - diagnostic
+        - experimental
+        - performance
+
+    godot:
+      scope: toplevel
+      exclude:
+        - '^ \+.*'
+        - '^ SPDX-.*'
+        - '^ Copyright .*'
+        - '^ -+$'
+
+    ginkgolinter:
+      forbid-focus-container: true
+
+    importas:
+      alias:
+        - pkg: k8s.io/api/core/v1
+          alias: corev1
+        - pkg: k8s.io/apimachinery/pkg/apis/meta/v1
+          alias: metav1
+        - pkg: k8s.io/apimachinery/pkg/api/errors
+          alias: apierrors
+        - pkg: k8s.io/apimachinery/pkg/util/errors
+          alias: kerrors
+        - pkg: sigs.k8s.io/controller-runtime
+          alias: ctrl
+        - pkg: github.com/k8snetworkplumbingwg/whereabouts/api/whereabouts.cni.cncf.io/v1alpha1
+          alias: whereaboutsv1alpha1
+        - pkg: github.com/k8snetworkplumbingwg/whereabouts/pkg/types
+          alias: whereaboutstypes
+      no-unaliased: false
+
+    nolintlint:
+      require-specific: true
+      allow-unused: false
+
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+        - name: if-return
+        - name: increment-decrement
+        - name: var-naming
+        - name: var-declaration
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+        - name: empty-block
+        - name: superfluous-else
+        - name: unused-parameter
+        - name: unreachable-code
+        - name: redefines-builtin-id
+        - name: bool-literal-in-expr
+        - name: constant-logical-expr
+
+  exclusions:
+    generated: strict
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - errcheck
+          - gosec
+          - bodyclose
+          - nilerr
+          - noctx
+          - unparam
+          - gocritic
+          - containedctx
+          - thelper
+        path: _test\.go$
+
+      - linters:
+          - revive
+          - staticcheck
+        path: _test\.go
+        text: should not use dot imports
+
+      - linters:
+          - revive
+        path: _test\.go$
+        text: "exported (method|function|type|const) (.+) should have comment or be unexported"
+
+      - linters:
+          - errcheck
+          - gosec
+          - bodyclose
+          - noctx
+          - unparam
+          - revive
+          - thelper
+        path: e2e/
+
+      - linters:
+          - revive
+          - staticcheck
+        path: e2e/
+        text: should not use dot imports
+
+      - linters:
+          - all
+        path: "(zz_generated|mock_|fake_)"
+
+      - linters:
+          - gocyclo
+          - cyclop
+          - funlen
+        path: cmd/
+
+      - linters:
+          - revive
+        path: fake_\.go
+        text: "exported (method|function|type|const) (.+) should have comment or be unexported"
+
+      - linters:
+          - errcheck
+        text: "Error return value of .((os\\.)?std(out|err)\\..*|.*Close|.*Flush|os\\.Remove(All)?|.*print(f|ln)?|os\\.(Un)?Setenv). is not checked"
+
+      - linters:
+          - godot
+        text: "Comment should end in a period"
+        source: '^\s*//\s*\+.*'
+
+      # Exported type stuttering — renaming would break API compatibility
+      - linters:
+          - revive
+        path: pkg/storage/kubernetes/
+        text: "exported: type name will be used as kubernetes\\.Kubernetes"
+
+      # Package naming — meaningful names that mirror upstream conventions
+      - linters:
+          - revive
+        text: "var-naming: (avoid meaningless package names|avoid package names that conflict)"
+
+    paths:
+      - vendor
+      - testdata
+      - pkg/generated
+      - '.*\.gen\.go$'
+      - tools\.go
+
+formatters:
+  enable:
+    - goimports
+
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/k8snetworkplumbingwg/whereabouts
+
+  exclusions:
+    paths:
+      - vendor
+      - testdata
+      - pkg/generated
+      - '.*\.gen\.go$'
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

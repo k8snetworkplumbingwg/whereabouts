@@ -11,13 +11,40 @@ spec:
     kind: NodeSlicePool
     listKind: NodeSlicePoolList
     plural: nodeslicepools
+    shortNames:
+    - nsp
     singular: nodeslicepool
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - description: CIDR range of the node slice pool
+      jsonPath: .spec.range
+      name: Range
+      type: string
+    - description: Size of each node slice
+      jsonPath: .spec.sliceSize
+      name: SliceSize
+      type: string
+    - description: Total number of slices
+      jsonPath: .status.totalSlices
+      name: Total
+      type: integer
+    - description: Slices assigned to nodes
+      jsonPath: .status.assignedSlices
+      name: Assigned
+      type: integer
+    - description: Slices available for assignment
+      jsonPath: .status.freeSlices
+      name: Free
+      type: integer
+    - description: Whether the node slice pool is ready
+      jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: NodeSlicePool is the Schema for the nodesliceippools API
+        description: NodeSlicePool is the Schema for the nodeslicepools API.
         properties:
           apiVersion:
             description: |-
@@ -37,43 +64,122 @@ spec:
           metadata:
             type: object
           spec:
-            description: NodeSlicePoolSpec defines the desired state of NodeSlicePool
+            description: NodeSlicePoolSpec defines the desired state of NodeSlicePool.
             properties:
               range:
                 description: |-
-                  Range is a RFC 4632/4291-style string that represents an IP address and prefix length in CIDR notation
-                  this refers to the entire range where the node is allocated a subset
+                  Range is a RFC 4632/4291-style string that represents an IP address and prefix length in CIDR notation.
+                  This refers to the entire range where the node is allocated a subset.
+                minLength: 1
                 type: string
               sliceSize:
-                description: SliceSize is the size of subnets or slices of the range
-                  that each node will be assigned
+                description: |-
+                  SliceSize is the size of subnets or slices of the range that each node will be assigned.
+                  The value must be a numeric prefix length, optionally preceded by a slash (e.g. "24" or "/24").
+                  Semantic validation is performed by the validating webhook.
+                minLength: 1
+                pattern: ^/?[0-9]+$
                 type: string
             required:
             - range
             - sliceSize
             type: object
           status:
-            description: NodeSlicePoolStatus defines the desired state of NodeSlicePool
+            description: NodeSlicePoolStatus defines the observed state of NodeSlicePool.
             properties:
               allocations:
-                description: Allocations holds the allocations of nodes to slices
+                description: Allocations holds the allocations of nodes to slices.
                 items:
+                  description: NodeSliceAllocation represents a single node-to-slice
+                    assignment.
                   properties:
                     nodeName:
-                      description: NodeName is the name of the node assigned to this
-                        slice, empty node name is an available slice for assignment
+                      description: |-
+                        NodeName is the name of the node assigned to this slice. An empty node name
+                        indicates that this slice is available for assignment.
                       type: string
                     sliceRange:
-                      description: SliceRange is the subnet of this slice
+                      description: SliceRange is the subnet of this slice.
                       type: string
                   required:
                   - nodeName
                   - sliceRange
                   type: object
                 type: array
-            required:
-            - allocations
+              assignedSlices:
+                description: AssignedSlices is the number of slices currently assigned
+                  to nodes.
+                format: int32
+                type: integer
+              conditions:
+                description: Conditions holds the conditions for the NodeSlicePool.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              freeSlices:
+                description: FreeSlices is the number of slices available for node
+                  assignment.
+                format: int32
+                type: integer
+              totalSlices:
+                description: TotalSlices is the total number of IP slices in the pool.
+                format: int32
+                type: integer
             type: object
         type: object
     served: true
     storage: true
+    subresources:
+      status: {}

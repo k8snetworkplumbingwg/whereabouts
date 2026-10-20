@@ -17,7 +17,7 @@ package logging
 import (
 	"testing"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
@@ -41,7 +41,7 @@ var _ = Describe("logging operations", func() {
 
 	It("Check file setter with empty", func() {
 		SetLogFile("/tmp/foobar.logging")
-		Expect(loggingFp).NotTo(Equal(nil))
+		Expect(loggingFp).NotTo(BeNil())
 	})
 
 	It("Check loglevel setter", func() {
