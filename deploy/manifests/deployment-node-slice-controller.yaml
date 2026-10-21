@@ -1,0 +1,65 @@
+---
+# Don't forget to update deploy/charts/whereabouts/templates/node-slice-controller.yaml as well
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: whereabouts-node-slice-controller
+  namespace: kube-system
+spec:
+  # replicas must not be set to more than 1; there is no leader election, so running
+  # multiple replicas would cause duplicate reconciliation.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: whereabouts-controller
+  template:
+    metadata:
+      labels:
+        app: whereabouts-controller
+    spec:
+      serviceAccount: whereabouts
+      serviceAccountName: whereabouts
+      containers:
+        - name: whereabouts-node-slice-controller
+          image: ghcr.io/k8snetworkplumbingwg/whereabouts:latest
+          imagePullPolicy: Always
+          command: ["/node-slice-controller"]
+          env:
+            - name: NODENAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+            - name: WHEREABOUTS_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+          resources:
+            requests:
+              cpu: 100m
+              memory: 100Mi
+            limits:
+              cpu: 100m
+              memory: 200Mi
+          volumeMounts:
+            - mountPath: /host/opt/cni/bin
+              name: cni-bin
+            - mountPath: /host/etc/cni/net.d
+              name: cni-net-dir
+            - mountPath: /cron-schedule
+              name: cron-scheduler-configmap
+      volumes:
+        - name: cni-bin
+          hostPath:
+            path: /opt/cni/bin
+        - name: cni-net-dir
+          hostPath:
+            path: /etc/cni/net.d
+        - name: cron-scheduler-configmap
+          configMap:
+            name: whereabouts-config
+            items:
+              - key: cron-expression
+                path: config
+            defaultMode: 0744

@@ -27,10 +27,10 @@ If release name contains chart name it will be used as a full name.
 Provide a method to override namespace so parent charts can set it
 */}}
 {{- define "whereabouts.namespace" -}}
-{{- if hasKey .Values "namespaceOverride" -}}
-namespace: {{ .Values.namespaceOverride }}
+{{- if .Values.namespaceOverride -}}
+{{- .Values.namespaceOverride }}
 {{- else }}
-namespace: {{ .Release.Namespace }}
+{{- .Release.Namespace }}
 {{- end }}
 {{- end }}
 
@@ -57,7 +57,6 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 Selector labels
 */}}
 {{- define "whereabouts.selectorLabels" -}}
-app: {{ include "whereabouts.name" . }}
 app.kubernetes.io/name: {{ include "whereabouts.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
