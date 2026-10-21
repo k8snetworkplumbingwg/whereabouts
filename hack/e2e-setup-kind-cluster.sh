@@ -13,8 +13,22 @@ while true; do
   esac
 done
 
-HERE="$(dirname "$(readlink --canonicalize ${BASH_SOURCE[0]})")"
-ROOT="$(readlink --canonicalize "$HERE/..")"
+# macOS/BSD `readlink` does not support GNU `--canonicalize`, so compute paths
+# portably using `realpath` (preferred) or Python.
+HERE="$(
+  if command -v realpath >/dev/null 2>&1; then
+    dirname "$(realpath "${BASH_SOURCE[0]}")"
+  else
+    dirname "$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "${BASH_SOURCE[0]}")"
+  fi
+)"
+ROOT="$(
+  if command -v realpath >/dev/null 2>&1; then
+    realpath "$HERE/.."
+  else
+    python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$HERE/.."
+  fi
+)"
 MULTUS_DAEMONSET_URL="https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/master/deployments/multus-daemonset.yml"
 CNIS_DAEMONSET_PATH="$ROOT/hack/cni-install.yml"
 TIMEOUT_K8="5000s"
@@ -49,6 +63,44 @@ check_requirements() {
       exit 1
     fi
   done
+  # GNU timeout is not part of stock macOS; perl is the fallback below.
+  if ! command -v timeout >/dev/null 2>&1 && ! command -v perl >/dev/null 2>&1; then
+    echo "timeout or perl is required"
+    exit 1
+  fi
+}
+
+# Run a command with a deadline. Prefer GNU timeout, which is missing from
+# stock macOS, and fall back to perl (available at /usr/bin/perl).
+with_timeout() {
+  local seconds=$1
+  shift
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$seconds" "$@"
+    return $?
+  fi
+
+  perl -e '
+    my $seconds = shift @ARGV;
+    my $pid = fork();
+    die "fork: $!\n" unless defined $pid;
+    if ($pid == 0) {
+      setpgrp(0, 0);
+      exec @ARGV or die "exec: $!\n";
+    }
+    local $SIG{ALRM} = sub {
+      kill "TERM", -$pid;
+      exit 124;
+    };
+    alarm $seconds;
+    waitpid($pid, 0);
+    alarm 0;
+    my $status = $?;
+    if ($status & 127) {
+      exit 128 + ($status & 127);
+    }
+    exit($status >> 8);
+  ' "$seconds" "$@"
 }
 
 retry() {
@@ -61,7 +113,7 @@ retry() {
   while [ $retries -gt 0 ]
   do
     status=0
-    timeout $to bash -c "echo $cmd && $cmd" || status=$?
+    with_timeout "$to" bash -c "echo $cmd && $cmd" || status=$?
     if [ $status -eq 0 ]; then
       break;
     fi
@@ -70,6 +122,16 @@ retry() {
     let retries--
   done
   return $status
+}
+
+# Insert imagePullPolicy under a container image line. BSD sed (macOS) rejects
+# GNU sed's same-line `a\` form, so use the POSIX append (backslash, newline).
+insert_image_pull_policy() {
+  local indent=$1
+  local file=$2
+  sed "/${indent}image:/a\\
+${indent}imagePullPolicy: Never
+" "$file"
 }
 
 echo "## checking requirements"
@@ -101,10 +163,10 @@ echo "## install whereabouts"
 for file in "daemonset-install.yaml" "whereabouts.cni.cncf.io_ippools.yaml" "whereabouts.cni.cncf.io_overlappingrangeipreservations.yaml" "whereabouts.cni.cncf.io_nodeslicepools.yaml" "reconciler-deployment.yaml"; do
   # insert 'imagePullPolicy: Never' under the container 'image' so it is certain that the image used
   # by the daemonset is the one loaded into KinD and not one pulled from a repo
-  sed '/        image:/a\        imagePullPolicy: Never' "$ROOT/doc/crds/$file" | retry kubectl apply -f -
+  insert_image_pull_policy '        ' "$ROOT/doc/crds/$file" | retry kubectl apply -f -
 done
-# deployment has an extra tab for the sed so doing out of the loop
-sed '/          image:/a\          imagePullPolicy: Never' "$ROOT/doc/crds/node-slice-controller.yaml" | retry kubectl apply -f -
+# deployment has an extra indent, so handle it outside the loop
+insert_image_pull_policy '          ' "$ROOT/doc/crds/node-slice-controller.yaml" | retry kubectl apply -f -
 retry kubectl wait -n kube-system --for=condition=ready -l app=whereabouts pod --timeout=$TIMEOUT_K8
 retry kubectl wait -n kube-system --for=condition=ready -l app=whereabouts-controller pod --timeout=$TIMEOUT_K8
 retry kubectl wait -n kube-system --for=condition=ready -l app=whereabouts-reconciler pod --timeout=$TIMEOUT_K8
