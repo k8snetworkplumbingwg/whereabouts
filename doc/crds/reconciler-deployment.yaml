@@ -20,6 +20,7 @@ spec:
         app: whereabouts-reconciler
         name: whereabouts-reconciler
     spec:
+      priorityClassName: ""
       serviceAccountName: whereabouts
       containers:
       - name: whereabouts-reconciler
