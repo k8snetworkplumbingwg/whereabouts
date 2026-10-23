@@ -243,14 +243,12 @@ func (p *KubernetesIPPool) Update(ctx context.Context, reservations []whereabout
 func toIPReservationList(allocations map[string]whereaboutsv1alpha1.IPAllocation, firstip net.IP) []whereaboutstypes.IPReservation {
 	reservelist := []whereaboutstypes.IPReservation{}
 	for offset, a := range allocations {
-		numOffset, err := strconv.ParseInt(offset, 10, 64)
+		numOffset, err := strconv.ParseUint(offset, 10, 64)
 		if err != nil {
-			// allocations that are invalid int64s should be ignored
-			// toAllocationMap should be the only writer of offsets, via `fmt.Sprintf("%d", ...)``
 			logging.Errorf("Error decoding ip offset (backend: kubernetes): %v", err)
 			continue
 		}
-		ip := iphelpers.IPAddOffset(firstip, uint64(numOffset))
+		ip := iphelpers.IPAddOffset(firstip, numOffset)
 		reservelist = append(reservelist, whereaboutstypes.IPReservation{IP: ip, ContainerID: a.ContainerID, PodRef: a.PodRef, IfName: a.IfName})
 	}
 	return reservelist
