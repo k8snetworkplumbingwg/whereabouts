@@ -1,0 +1,9 @@
+# Example NodeSlicePool resource
+apiVersion: whereabouts.cni.cncf.io/v1alpha1
+kind: NodeSlicePool
+metadata:
+  name: example-nodeslicepool
+  namespace: kube-system
+spec:
+  range: "10.10.0.0/16"
+  sliceSize: "64"

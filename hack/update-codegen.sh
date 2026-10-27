@@ -20,15 +20,34 @@ set -o pipefail
 
 SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
 SCRIPT_ROOT="${SCRIPT_DIR}/.."
-CODEGEN_PKG="${CODEGEN_PKG:-"${SCRIPT_ROOT}/bin/code-generator"}"
+# Use the code-generator version pinned in go.mod (via tools.go) from the module cache.
+CODEGEN_PKG="${CODEGEN_PKG:-$(cd "${SCRIPT_ROOT}" && go mod download k8s.io/code-generator && go list -m -f '{{.Dir}}' k8s.io/code-generator)}"
 
 source "${CODEGEN_PKG}/kube_codegen.sh"
 
 THIS_PKG="github.com/k8snetworkplumbingwg/whereabouts"
 
+kube::codegen::gen_openapi \
+    --output-dir "${SCRIPT_ROOT}/pkg/generated/openapi" \
+    --output-pkg "${THIS_PKG}/pkg/generated/openapi" \
+    --report-filename "${SCRIPT_ROOT}/hack/openapi-violations.list" \
+    --update-report \
+    --boilerplate "${SCRIPT_ROOT}/hack/boilerplate.go.txt" \
+    "${SCRIPT_ROOT}/api"
+
+# Build OpenAPI schema JSON from the generated Go definitions.
+# applyconfiguration-gen needs this to populate the structured-merge-diff
+# schema used by fake.NewClientset().
+OPENAPI_JSON="${SCRIPT_ROOT}/bin/openapi-schema.json"
+mkdir -p "${SCRIPT_ROOT}/bin"
+(cd "${SCRIPT_ROOT}" && go build -o bin/openapi-schema ./hack/tools/openapi-schema/)
+"${SCRIPT_ROOT}/bin/openapi-schema" > "${OPENAPI_JSON}"
+
 kube::codegen::gen_client \
     --with-watch \
+    --with-applyconfig \
+    --applyconfig-openapi-schema "${OPENAPI_JSON}" \
     --output-dir "${SCRIPT_ROOT}/pkg/generated" \
     --output-pkg "${THIS_PKG}/pkg/generated" \
     --boilerplate "${SCRIPT_ROOT}/hack/boilerplate.go.txt" \
-    "${SCRIPT_ROOT}/pkg/api"
+    "${SCRIPT_ROOT}/api"

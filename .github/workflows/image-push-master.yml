@@ -60,7 +60,7 @@ jobs:
           context: .
           push: true
           tags: ghcr.io/${{ github.repository }}:latest-arm64
-          file: Dockerfile.arm64
+          file: Dockerfile
           platforms: linux/arm64
 
   push-multi-arch:
