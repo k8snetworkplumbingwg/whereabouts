@@ -20,7 +20,8 @@ set -o pipefail
 
 SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
 SCRIPT_ROOT="${SCRIPT_DIR}/.."
-CODEGEN_PKG="${CODEGEN_PKG:-"${SCRIPT_ROOT}/bin/code-generator"}"
+# Use the code-generator version pinned in go.mod (via tools.go) from the module cache.
+CODEGEN_PKG="${CODEGEN_PKG:-$(cd "${SCRIPT_ROOT}" && go mod download k8s.io/code-generator && go list -m -f '{{.Dir}}' k8s.io/code-generator)}"
 
 source "${CODEGEN_PKG}/kube_codegen.sh"
 

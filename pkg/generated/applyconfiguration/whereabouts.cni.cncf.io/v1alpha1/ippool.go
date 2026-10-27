@@ -31,7 +31,7 @@ import (
 //
 // IPPool is the Schema for the ippools API.
 type IPPoolApplyConfiguration struct {
-	v1.TypeMetaApplyConfiguration    `json:",inline"`
+	v1.TypeMetaApplyConfiguration    `json:""`
 	*v1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
 	Spec                             *IPPoolSpecApplyConfiguration   `json:"spec,omitempty"`
 	Status                           *IPPoolStatusApplyConfiguration `json:"status,omitempty"`

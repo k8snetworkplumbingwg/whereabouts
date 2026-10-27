@@ -31,7 +31,7 @@ import (
 //
 // NodeSlicePool is the Schema for the nodeslicepools API.
 type NodeSlicePoolApplyConfiguration struct {
-	v1.TypeMetaApplyConfiguration    `json:",inline"`
+	v1.TypeMetaApplyConfiguration    `json:""`
 	*v1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
 	Spec                             *NodeSlicePoolSpecApplyConfiguration   `json:"spec,omitempty"`
 	Status                           *NodeSlicePoolStatusApplyConfiguration `json:"status,omitempty"`
