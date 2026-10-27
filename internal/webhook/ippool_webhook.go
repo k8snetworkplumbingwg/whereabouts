@@ -45,25 +45,50 @@ func (v *IPPoolValidator) ValidateCreate(_ context.Context, pool *whereaboutsv1a
 
 // ValidateUpdate validates an IPPool on update.
 func (v *IPPoolValidator) ValidateUpdate(_ context.Context, oldPool, pool *whereaboutsv1alpha1.IPPool) (admission.Warnings, error) {
-	var warnings admission.Warnings
-	// Warn (but allow) range changes to support expansion/resizing.
-	if oldPool != nil && oldPool.Spec.Range != pool.Spec.Range {
-		warnings = append(warnings, fmt.Sprintf(
-			"spec.range changed from %q to %q - existing allocations outside the new range will be orphaned",
-			oldPool.Spec.Range, pool.Spec.Range))
+	if err := validateRangeChange(oldPool, pool); err != nil {
+		ippoolLog.Info("rejected", "name", pool.Name, "operation", "update", "reason", err.Error())
+		recordValidation("ippool", "update", err)
+		return nil, err
 	}
 	w, err := validateIPPool(pool)
 	if err != nil {
 		ippoolLog.Info("rejected", "name", pool.Name, "operation", "update", "reason", err.Error())
 	}
 	recordValidation("ippool", "update", err)
-	return append(warnings, w...), err
+	return w, err
 }
 
 // ValidateDelete is a no-op — deletes are always allowed.
 func (v *IPPoolValidator) ValidateDelete(_ context.Context, _ *whereaboutsv1alpha1.IPPool) (admission.Warnings, error) {
 	recordValidation("ippool", "delete", nil)
 	return nil, nil
+}
+
+// validateRangeChange rejects spec.range changes that would remap existing
+// allocations. Allocations are stored as offsets from the IP in spec.range, so
+// a change is only safe when the pool is empty, or when the base IP stays the
+// same and the new range contains the old one (pure expansion).
+func validateRangeChange(oldPool, pool *whereaboutsv1alpha1.IPPool) error {
+	if oldPool == nil || oldPool.Spec.Range == pool.Spec.Range || len(pool.Spec.Allocations) == 0 {
+		return nil
+	}
+	oldIP, oldNet, err := oldPool.ParseCIDR()
+	if err != nil {
+		// The stored range is unparsable; nothing meaningful to preserve.
+		return nil //nolint:nilerr // let validateIPPool judge the new range
+	}
+	newIP, newNet, err := pool.ParseCIDR()
+	if err != nil {
+		return nil //nolint:nilerr // validateIPPool reports the invalid range
+	}
+	oldOnes, _ := oldNet.Mask.Size()
+	newOnes, _ := newNet.Mask.Size()
+	if !oldIP.Equal(newIP) || newOnes > oldOnes || !newNet.Contains(oldNet.IP) {
+		return fmt.Errorf("spec.range cannot change from %q to %q while the pool has %d allocation(s): "+
+			"allocations are stored as offsets from the range IP, so only an expansion that keeps the same base IP is allowed",
+			oldPool.Spec.Range, pool.Spec.Range, len(pool.Spec.Allocations))
+	}
+	return nil
 }
 
 func validateIPPool(pool *whereaboutsv1alpha1.IPPool) (admission.Warnings, error) {

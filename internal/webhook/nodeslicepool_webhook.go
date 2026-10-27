@@ -6,8 +6,8 @@ package webhook
 import (
 	"context"
 	"fmt"
+	"net"
 
-	kerrors "k8s.io/apimachinery/pkg/util/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -45,24 +45,10 @@ func (v *NodeSlicePoolValidator) ValidateCreate(_ context.Context, pool *whereab
 }
 
 // ValidateUpdate validates a NodeSlicePool on update.
-func (v *NodeSlicePoolValidator) ValidateUpdate(_ context.Context, oldPool, pool *whereaboutsv1alpha1.NodeSlicePool) (admission.Warnings, error) {
-	var errs []error
-	if oldPool != nil {
-		if oldPool.Spec.Range != pool.Spec.Range {
-			errs = append(errs, fmt.Errorf("spec.range is immutable and cannot be changed (was %q, now %q)", oldPool.Spec.Range, pool.Spec.Range))
-		}
-		if oldPool.Spec.SliceSize != pool.Spec.SliceSize {
-			errs = append(errs, fmt.Errorf("spec.sliceSize is immutable and cannot be changed (was %q, now %q)", oldPool.Spec.SliceSize, pool.Spec.SliceSize))
-		}
-	}
-	if len(errs) > 0 {
-		if agg := kerrors.NewAggregate(errs); agg != nil {
-			err := fmt.Errorf("immutable field(s) changed: %s", agg)
-			nodeslicepoolLog.Info("rejected", "name", pool.Name, "operation", "update", "reason", err.Error())
-			recordValidation("nodeslicepool", "update", err)
-			return nil, err
-		}
-	}
+// spec.range and spec.sliceSize are intentionally mutable: they mirror the
+// NetworkAttachmentDefinition and the node-slice reconciler re-slices the pool
+// (updatePoolSpec) whenever the NAD changes.
+func (v *NodeSlicePoolValidator) ValidateUpdate(_ context.Context, _, pool *whereaboutsv1alpha1.NodeSlicePool) (admission.Warnings, error) {
 	err := validateNodeSlicePool(pool)
 	if err != nil {
 		nodeslicepoolLog.Info("rejected", "name", pool.Name, "operation", "update", "reason", err.Error())
@@ -79,14 +65,21 @@ func (v *NodeSlicePoolValidator) ValidateDelete(_ context.Context, _ *whereabout
 
 func validateNodeSlicePool(pool *whereaboutsv1alpha1.NodeSlicePool) error {
 	// Validate Range is a valid CIDR.
-	if err := validation.ValidateCIDR(pool.Spec.Range); err != nil {
-		return fmt.Errorf("invalid spec.range: %w", err)
+	_, ipNet, err := net.ParseCIDR(pool.Spec.Range)
+	if err != nil {
+		return fmt.Errorf("invalid spec.range: %w", validation.ValidateCIDR(pool.Spec.Range))
 	}
 
-	// Validate SliceSize is parseable.
-	_, err := validation.ValidateSliceSize(pool.Spec.SliceSize)
+	// Validate SliceSize is parseable and fits the range: a slice cannot be
+	// larger than the range nor longer than the address family allows.
+	sliceSize, err := validation.ValidateSliceSize(pool.Spec.SliceSize)
 	if err != nil {
 		return fmt.Errorf("invalid spec.sliceSize: %w", err)
+	}
+	rangePrefix, bits := ipNet.Mask.Size()
+	if sliceSize < rangePrefix || sliceSize > bits {
+		return fmt.Errorf("invalid spec.sliceSize %q: must be between /%d (the range prefix) and /%d for range %s",
+			pool.Spec.SliceSize, rangePrefix, bits, pool.Spec.Range)
 	}
 
 	return nil

@@ -169,32 +169,31 @@ var _ = Describe("IPPoolValidator", func() {
 			Expect(warnings).To(BeEmpty())
 		})
 
-		It("should warn on a range change but allow it", func() {
-			oldPool := &whereaboutsv1alpha1.IPPool{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-pool",
-					Namespace: "default",
-				},
-				Spec: whereaboutsv1alpha1.IPPoolSpec{
-					Range:       "10.0.0.0/24",
-					Allocations: map[string]whereaboutsv1alpha1.IPAllocation{},
-				},
-			}
-			newPool := &whereaboutsv1alpha1.IPPool{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-pool",
-					Namespace: "default",
-				},
-				Spec: whereaboutsv1alpha1.IPPoolSpec{
-					Range:       "10.0.1.0/24",
-					Allocations: map[string]whereaboutsv1alpha1.IPAllocation{},
-				},
-			}
-			warnings, err := validator.ValidateUpdate(ctx, oldPool, newPool)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(warnings).To(HaveLen(1))
-			Expect(warnings[0]).To(ContainSubstring("spec.range changed"))
-		})
+		DescribeTable("range changes",
+			func(oldRange, newRange string, allocated, wantErr bool) {
+				allocs := map[string]whereaboutsv1alpha1.IPAllocation{}
+				if allocated {
+					allocs["1"] = whereaboutsv1alpha1.IPAllocation{PodRef: "default/pod-a"}
+				}
+				pool := func(r string) *whereaboutsv1alpha1.IPPool {
+					return &whereaboutsv1alpha1.IPPool{
+						ObjectMeta: metav1.ObjectMeta{Name: "test-pool", Namespace: "default"},
+						Spec:       whereaboutsv1alpha1.IPPoolSpec{Range: r, Allocations: allocs},
+					}
+				}
+				_, err := validator.ValidateUpdate(ctx, pool(oldRange), pool(newRange))
+				if wantErr {
+					Expect(err).To(MatchError(ContainSubstring("spec.range cannot change")))
+				} else {
+					Expect(err).NotTo(HaveOccurred())
+				}
+			},
+			Entry("any change on an empty pool", "10.0.0.0/24", "10.0.1.0/24", false, false),
+			Entry("shift with allocations", "10.0.0.0/24", "10.0.1.0/24", true, true),
+			Entry("shrink with allocations", "10.0.0.0/23", "10.0.0.0/24", true, true),
+			Entry("expansion keeping the base IP", "10.0.0.0/24", "10.0.0.0/23", true, false),
+			Entry("expansion changing the base IP", "10.0.1.0/24", "10.0.0.0/23", true, true),
+		)
 
 		It("should reject an update with invalid podRef", func() {
 			oldPool := &whereaboutsv1alpha1.IPPool{

@@ -156,80 +156,49 @@ var _ = Describe("NodeSlicePoolValidator", func() {
 			Expect(warnings).To(BeNil())
 		})
 
-		It("should reject an update with changed range", func() {
+		It("should allow the reconciler to re-slice (range and sliceSize change)", func() {
 			oldPool := &whereaboutsv1alpha1.NodeSlicePool{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-pool",
-					Namespace: "default",
-				},
-				Spec: whereaboutsv1alpha1.NodeSlicePoolSpec{
-					Range:     "10.0.0.0/16",
-					SliceSize: "/24",
-				},
-			}
-			newPool := oldPool.DeepCopy()
-			newPool.Spec.Range = "10.1.0.0/16"
-			_, err := validator.ValidateUpdate(ctx, oldPool, newPool)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("spec.range is immutable"))
-		})
-
-		It("should reject an update with invalid range (immutability takes precedence)", func() {
-			oldPool := &whereaboutsv1alpha1.NodeSlicePool{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-pool",
-					Namespace: "default",
-				},
-				Spec: whereaboutsv1alpha1.NodeSlicePoolSpec{
-					Range:     "10.0.0.0/16",
-					SliceSize: "/24",
-				},
-			}
-			newPool := oldPool.DeepCopy()
-			newPool.Spec.Range = "not-a-cidr"
-			_, err := validator.ValidateUpdate(ctx, oldPool, newPool)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("spec.range is immutable"))
-		})
-
-		It("should reject an update with changed sliceSize", func() {
-			oldPool := &whereaboutsv1alpha1.NodeSlicePool{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-pool",
-					Namespace: "default",
-				},
-				Spec: whereaboutsv1alpha1.NodeSlicePoolSpec{
-					Range:     "10.0.0.0/16",
-					SliceSize: "/24",
-				},
-			}
-			newPool := oldPool.DeepCopy()
-			newPool.Spec.SliceSize = "abc"
-			_, err := validator.ValidateUpdate(ctx, oldPool, newPool)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("spec.sliceSize is immutable"))
-		})
-
-		It("should report both violations when range and sliceSize change", func() {
-			oldPool := &whereaboutsv1alpha1.NodeSlicePool{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-pool",
-					Namespace: "default",
-				},
-				Spec: whereaboutsv1alpha1.NodeSlicePoolSpec{
-					Range:     "10.0.0.0/16",
-					SliceSize: "/24",
-				},
+				ObjectMeta: metav1.ObjectMeta{Name: "test-pool", Namespace: "default"},
+				Spec:       whereaboutsv1alpha1.NodeSlicePoolSpec{Range: "10.0.0.0/16", SliceSize: "/24"},
 			}
 			newPool := oldPool.DeepCopy()
 			newPool.Spec.Range = "10.1.0.0/16"
 			newPool.Spec.SliceSize = "/28"
 			_, err := validator.ValidateUpdate(ctx, oldPool, newPool)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("spec.range is immutable"))
-			Expect(err.Error()).To(ContainSubstring("spec.sliceSize is immutable"))
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should reject an update with an invalid range", func() {
+			oldPool := &whereaboutsv1alpha1.NodeSlicePool{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-pool", Namespace: "default"},
+				Spec:       whereaboutsv1alpha1.NodeSlicePoolSpec{Range: "10.0.0.0/16", SliceSize: "/24"},
+			}
+			newPool := oldPool.DeepCopy()
+			newPool.Spec.Range = "not-a-cidr"
+			_, err := validator.ValidateUpdate(ctx, oldPool, newPool)
+			Expect(err).To(MatchError(ContainSubstring("invalid spec.range")))
 		})
 	})
+
+	DescribeTable("sliceSize vs range",
+		func(rng, slice string, wantErr bool) {
+			pool := &whereaboutsv1alpha1.NodeSlicePool{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-pool", Namespace: "default"},
+				Spec:       whereaboutsv1alpha1.NodeSlicePoolSpec{Range: rng, SliceSize: slice},
+			}
+			_, err := validator.ValidateCreate(ctx, pool)
+			if wantErr {
+				Expect(err).To(MatchError(ContainSubstring("invalid spec.sliceSize")))
+			} else {
+				Expect(err).NotTo(HaveOccurred())
+			}
+		},
+		Entry("slice equal to range", "10.0.0.0/24", "/24", false),
+		Entry("slice larger than range", "10.0.0.0/24", "/16", true),
+		Entry("slice beyond IPv4 bits", "10.0.0.0/16", "/33", true),
+		Entry("IPv6 slice", "fd00::/48", "/64", false),
+		Entry("IPv6 slice beyond bits", "fd00::/48", "/129", true),
+	)
 
 	Context("ValidateDelete", func() {
 		It("should always succeed", func() {
