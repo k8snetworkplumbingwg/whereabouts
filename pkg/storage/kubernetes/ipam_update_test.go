@@ -1,3 +1,6 @@
+// Tests ported from upstream master (pool.Update error fallthrough, context
+// cancellation and large IPv6 offsets) onto the controller-runtime layout.
+
 package kubernetes
 
 import (
@@ -5,11 +8,13 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"sync/atomic"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	k8sfake "k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 
 	whereaboutsv1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/api/whereabouts.cni.cncf.io/v1alpha1"
@@ -31,7 +36,7 @@ const (
 // newTestIPAM creates a KubernetesIPAM backed by a fake whereabouts client.
 func newTestIPAM(wbClient *fakewbclient.Clientset) *KubernetesIPAM {
 	return &KubernetesIPAM{
-		Client:      *NewKubernetesClient(wbClient, nil),
+		Client:      *NewKubernetesClient(wbClient, k8sfake.NewClientset()),
 		Config:      whereaboutstypes.IPAMConfig{},
 		Namespace:   testNamespace,
 		ContainerID: testContainerID,
@@ -60,7 +65,7 @@ func seedIPPool(t *testing.T, wbClient *fakewbclient.Clientset, poolID PoolIdent
 			ResourceVersion: "1",
 		},
 		Spec: whereaboutsv1alpha1.IPPoolSpec{
-			Range:       poolID.IpRange,
+			Range:       poolID.IPRange,
 			Allocations: map[string]whereaboutsv1alpha1.IPAllocation{},
 		},
 	}
@@ -73,7 +78,7 @@ func seedIPPool(t *testing.T, wbClient *fakewbclient.Clientset, poolID PoolIdent
 
 // testPoolID returns the default PoolIdentifier used across tests.
 func testPoolID() PoolIdentifier {
-	return PoolIdentifier{IpRange: testIPRange, NetworkName: testNetworkName}
+	return PoolIdentifier{IPRange: testIPRange, NetworkName: testNetworkName}
 }
 
 // TestIPManagementKubernetesUpdate_PoolUpdateFailurePreventsORIPUpdate verifies that a permanent
@@ -87,12 +92,12 @@ func TestIPManagementKubernetesUpdate_PoolUpdateFailurePreventsORIPUpdate(t *tes
 	seedIPPool(t, wbClient, testPoolID())
 
 	patchErr := fmt.Errorf("permanent patch failure")
-	wbClient.PrependReactor("patch", "ippools", func(action k8stesting.Action) (bool, runtime.Object, error) {
+	wbClient.PrependReactor("patch", "ippools", func(_ k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, patchErr
 	})
 
 	var oripCalls atomic.Int32
-	wbClient.PrependReactor("create", "overlappingrangeipreservations", func(action k8stesting.Action) (bool, runtime.Object, error) {
+	wbClient.PrependReactor("create", "overlappingrangeipreservations", func(_ k8stesting.Action) (bool, runtime.Object, error) {
 		oripCalls.Add(1)
 		return false, nil, nil
 	})
@@ -104,7 +109,7 @@ func TestIPManagementKubernetesUpdate_PoolUpdateFailurePreventsORIPUpdate(t *tes
 	if err == nil {
 		t.Fatal("expected error from pool.Update failure, got nil")
 	}
-	if err.Error() != patchErr.Error() {
+	if !strings.Contains(err.Error(), patchErr.Error()) {
 		t.Errorf("expected error %q, got %q", patchErr, err)
 	}
 	if oripCalls.Load() != 0 {
@@ -123,13 +128,13 @@ func TestIPManagementKubernetesUpdate_RetriesExhaustedPreventsORIPUpdate(t *test
 	seedIPPool(t, wbClient, testPoolID())
 
 	var patchCalls atomic.Int32
-	wbClient.PrependReactor("patch", "ippools", func(action k8stesting.Action) (bool, runtime.Object, error) {
+	wbClient.PrependReactor("patch", "ippools", func(_ k8stesting.Action) (bool, runtime.Object, error) {
 		patchCalls.Add(1)
 		return true, nil, &temporaryError{fmt.Errorf("conflict")}
 	})
 
 	var oripCalls atomic.Int32
-	wbClient.PrependReactor("create", "overlappingrangeipreservations", func(action k8stesting.Action) (bool, runtime.Object, error) {
+	wbClient.PrependReactor("create", "overlappingrangeipreservations", func(_ k8stesting.Action) (bool, runtime.Object, error) {
 		oripCalls.Add(1)
 		return false, nil, nil
 	})
@@ -177,15 +182,15 @@ func TestIPManagementKubernetesUpdate_OverlappingRetriesExhaustedPreventsORIPUpd
 	}
 
 	var overlapGetCalls, patchCalls, oripCreateCalls atomic.Int32
-	wbClient.PrependReactor("get", "overlappingrangeipreservations", func(action k8stesting.Action) (bool, runtime.Object, error) {
+	wbClient.PrependReactor("get", "overlappingrangeipreservations", func(_ k8stesting.Action) (bool, runtime.Object, error) {
 		overlapGetCalls.Add(1)
 		return false, nil, nil
 	})
-	wbClient.PrependReactor("patch", "ippools", func(action k8stesting.Action) (bool, runtime.Object, error) {
+	wbClient.PrependReactor("patch", "ippools", func(_ k8stesting.Action) (bool, runtime.Object, error) {
 		patchCalls.Add(1)
 		return false, nil, nil
 	})
-	wbClient.PrependReactor("create", "overlappingrangeipreservations", func(action k8stesting.Action) (bool, runtime.Object, error) {
+	wbClient.PrependReactor("create", "overlappingrangeipreservations", func(_ k8stesting.Action) (bool, runtime.Object, error) {
 		oripCreateCalls.Add(1)
 		return false, nil, nil
 	})
@@ -218,16 +223,16 @@ func TestIPManagementKubernetesUpdate_ContextCanceledBeforePoolUpdatePreventsMut
 	t.Cleanup(cancel)
 
 	var statusListCalls, patchCalls, oripCreateCalls atomic.Int32
-	wbClient.PrependReactor("list", "ippools", func(action k8stesting.Action) (bool, runtime.Object, error) {
+	wbClient.PrependReactor("list", "ippools", func(_ k8stesting.Action) (bool, runtime.Object, error) {
 		statusListCalls.Add(1)
 		cancel()
 		return true, &whereaboutsv1alpha1.IPPoolList{}, nil
 	})
-	wbClient.PrependReactor("patch", "ippools", func(action k8stesting.Action) (bool, runtime.Object, error) {
+	wbClient.PrependReactor("patch", "ippools", func(_ k8stesting.Action) (bool, runtime.Object, error) {
 		patchCalls.Add(1)
 		return false, nil, nil
 	})
-	wbClient.PrependReactor("create", "overlappingrangeipreservations", func(action k8stesting.Action) (bool, runtime.Object, error) {
+	wbClient.PrependReactor("create", "overlappingrangeipreservations", func(_ k8stesting.Action) (bool, runtime.Object, error) {
 		oripCreateCalls.Add(1)
 		return false, nil, nil
 	})
@@ -259,14 +264,14 @@ func TestIPManagementKubernetesUpdate_ContextCanceledPreventsORIPUpdate(t *testi
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var patchCalls atomic.Int32
-	wbClient.PrependReactor("patch", "ippools", func(action k8stesting.Action) (bool, runtime.Object, error) {
+	wbClient.PrependReactor("patch", "ippools", func(_ k8stesting.Action) (bool, runtime.Object, error) {
 		patchCalls.Add(1)
 		cancel()
 		return false, nil, nil
 	})
 
 	var oripCalls atomic.Int32
-	wbClient.PrependReactor("create", "overlappingrangeipreservations", func(action k8stesting.Action) (bool, runtime.Object, error) {
+	wbClient.PrependReactor("create", "overlappingrangeipreservations", func(_ k8stesting.Action) (bool, runtime.Object, error) {
 		oripCalls.Add(1)
 		return false, nil, nil
 	})
