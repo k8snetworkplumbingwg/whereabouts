@@ -24,7 +24,7 @@ spec:
       annotations:
         kubectl.kubernetes.io/default-container: manager
     spec:
-      serviceAccountName: whereabouts-operator
+      serviceAccountName: operator
       terminationGracePeriodSeconds: 10
       containers:
       - name: manager

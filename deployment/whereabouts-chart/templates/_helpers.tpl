@@ -81,6 +81,6 @@ plugin and operator ServiceAccounts. Used in ValidatingWebhookConfiguration.
 matchConditions:
 - name: bypass-cni-plugin
   expression: >-
-    !(request.userInfo.username == "system:serviceaccount:{{ .Values.namespaceOverride | default .Release.Namespace }}:{{ .Values.webhook.cniServiceAccountName | default "whereabouts" }}")
+    !(request.userInfo.username == "system:serviceaccount:{{ .Values.namespaceOverride | default .Release.Namespace }}:{{ include "whereabouts.serviceAccountName" . }}")
     && !(request.userInfo.username == "system:serviceaccount:{{ .Values.namespaceOverride | default .Release.Namespace }}:{{ include "whereabouts.fullname" . }}-operator")
 {{- end }}

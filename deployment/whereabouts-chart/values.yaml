@@ -88,5 +88,3 @@ operator:
 webhook:
   # failurePolicy for the ValidatingWebhookConfiguration (Fail or Ignore).
   failurePolicy: Fail
-  # ServiceAccount used by the CNI plugin — bypass webhooks for this SA
-  cniServiceAccountName: whereabouts
