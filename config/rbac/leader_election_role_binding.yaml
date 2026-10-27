@@ -9,5 +9,5 @@ roleRef:
   name: whereabouts-leader-election
 subjects:
 - kind: ServiceAccount
-  name: whereabouts-operator
+  name: operator
   namespace: system

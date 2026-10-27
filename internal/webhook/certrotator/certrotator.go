@@ -38,7 +38,10 @@ type Options struct {
 	IsReady chan struct{}
 }
 
-//+kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch
+// Secrets are only accessed in the operator namespace (cert-controller uses a
+// namespace-scoped cache), so grant them through a namespaced Role.
+//+kubebuilder:rbac:groups="",namespace=system,resources=secrets,verbs=create;list;watch
+//+kubebuilder:rbac:groups="",namespace=system,resources=secrets,resourceNames=whereabouts-webhook-cert,verbs=get;update;patch
 //+kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=validatingwebhookconfigurations,verbs=get;list;watch;update;patch
 
 // ensureSecret creates the TLS secret if it does not already exist.

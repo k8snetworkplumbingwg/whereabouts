@@ -10,6 +10,10 @@ rules:
 - apiGroups: [whereabouts.cni.cncf.io]
   resources: [ippools]
   verbs: [get, list, watch, update, patch]
+# IPPool status subresource (conditions)
+- apiGroups: [whereabouts.cni.cncf.io]
+  resources: [ippools/status]
+  verbs: [get, update, patch]
 # NodeSlicePool CRUD for node-slice management
 - apiGroups: [whereabouts.cni.cncf.io]
   resources: [nodeslicepools]
@@ -42,16 +46,6 @@ rules:
 - apiGroups: ["", events.k8s.io]
   resources: [events]
   verbs: [create, patch, update, get]
-# cert-controller uses a cache-backed informer (source.Kind) to watch the
-# webhook TLS Secret for rotation. create/list/watch are required for bootstrap
-# and informer operation; get/update/patch are scoped to the webhook Secret.
-- apiGroups: [""]
-  resources: [secrets]
-  verbs: [create, list, watch]
-- apiGroups: [""]
-  resources: [secrets]
-  resourceNames: [{{ include "whereabouts.fullname" . }}-webhook-cert]
-  verbs: [get, update, patch]
 # cert-controller updates webhook configurations with CA bundle
 - apiGroups: [admissionregistration.k8s.io]
   resources: [validatingwebhookconfigurations]
