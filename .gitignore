@@ -24,3 +24,5 @@ bin/
 #Claude 
 CLAUDE.local.md
 ./claude
+
+e2e/.env
