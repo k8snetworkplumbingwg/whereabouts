@@ -22,9 +22,8 @@ var (
 )
 
 // GetVersion parses the build-time Version string (expected format: "vMAJOR.MINOR.PATCH")
-// into a semver.Version. Returns a zero-value Version if parsing fails.
-// Panics if Version is empty — callers should use GetFullVersion() for safe
-// display purposes.
+// into a semver.Version. Returns a zero-value Version if Version is empty or
+// parsing fails.
 func GetVersion() semver.Version {
 	if Version == "" {
 		return semver.Version{}
