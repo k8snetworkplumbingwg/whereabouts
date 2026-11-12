@@ -1,6 +1,7 @@
 package reconciler
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -54,7 +55,7 @@ func newConfigWatcher(
 		gocron.NewTask(handlerFunc),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("error creating job: %v", err)
+		return nil, fmt.Errorf("could not create reconciler job for cron expression %q from %q: %w", schedule, configPath, err)
 	}
 
 	return &ConfigWatcher{
@@ -136,16 +137,43 @@ func (c *ConfigWatcher) syncConfig(relevantEventPredicate func(event fsnotify.Ev
 				logging.Debugf("no changes in schedule, nothing to do.")
 				continue
 			}
-			updatedJob, err := c.scheduler.Update(
-				c.job.ID(),
+			// Update removes the old job before validating its replacement.
+			// Register the replacement first, but hold its task until the old
+			// job removal is accepted. Abort waiting tasks if rollback is needed.
+			ready := make(chan struct{})
+			abort := make(chan struct{})
+			updatedJob, err := c.scheduler.NewJob(
 				c.jobFactoryFunc(updatedSchedule),
-				gocron.NewTask(c.handlerFunc),
+				gocron.NewTask(func(ctx context.Context) {
+					select {
+					case <-ready:
+						if ctx.Err() == nil {
+							c.handlerFunc()
+						}
+					case <-ctx.Done():
+					case <-abort:
+					}
+				}),
+				gocron.WithName(c.job.Name()),
 			)
 			if err != nil {
-				_ = logging.Errorf("error updating job %q configuration: %v", c.job.ID().String(), err)
+				_ = logging.Errorf(
+					"failed to apply cron expression %q from %q; keeping previous schedule %q: %v",
+					updatedSchedule, c.configPath, c.currentSchedule, err,
+				)
 				continue
 			}
+			if err := c.scheduler.RemoveJob(c.job.ID()); err != nil {
+				close(abort)
+				_ = logging.Errorf("error removing previous job %q: %v", c.job.ID().String(), err)
+				if rollbackErr := c.scheduler.RemoveJob(updatedJob.ID()); rollbackErr != nil {
+					_ = logging.Errorf("error removing replacement job %q: %v", updatedJob.ID().String(), rollbackErr)
+				}
+				continue
+			}
+			c.job = updatedJob
 			c.currentSchedule = updatedSchedule
+			close(ready)
 			logging.Verbosef(
 				"successfully updated CRON configuration id %q - new cron expression: %s",
 				updatedJob.ID().String(),
