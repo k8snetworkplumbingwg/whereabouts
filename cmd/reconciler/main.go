@@ -65,6 +65,7 @@ func run() int {
 		},
 	)
 	if err != nil {
+		_ = logging.Errorf("could not configure reconciler cron schedule: %v", err)
 		return couldNotCreateConfigWatcherError
 	}
 	s.Start()
