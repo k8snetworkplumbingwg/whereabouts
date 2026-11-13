@@ -108,15 +108,16 @@ Expected plugin behavior:
      update `status.ips` / `ownerPod`. The same check applies to both first
      allocation (empty `status.ips`) and reuse (populated `status.ips`).
   3. The **expected address set** is one address per IPAM range on this
-     attachment. A dual-stack config expects one address of each family.
-     Reconcile uses the same set from the ranges on the network named by
-     `IPAMClaim.spec.network`. If that network config cannot be read, do not
-     invent an address and do not publish a partial `status.ips`.
-  4. Reuse before allocating. Take addresses already in `status.ips`, then pool
-     rows already tagged with this claim (`IPAMClaimRef` + `IPAMClaimUID`) for
-     this network. Those rows include a crash after reserve and before the
-     status write. Allocate only a family that neither source already covers.
-     Do not reserve a second address for a family this claim already holds.
+     attachment, including two ranges of the same family. Reconcile uses those
+     ranges from the network named by `IPAMClaim.spec.network`. If that network
+     config cannot be read, do not invent an address and do not publish a
+     partial `status.ips`.
+  4. Reuse before allocating. An address in `status.ips`, or in a pool row
+     tagged with this claim (`IPAMClaimRef` + `IPAMClaimUID`) for this network,
+     covers only the range that contains it. Those rows include a crash after
+     reserve and before the status write. Allocate one address for each
+     expected range that neither source already covers. Do not reserve a
+     second address inside a range this claim already holds.
      If the pool update conflicts, another writer reserved the row first:
      re-read and reuse that row instead of returning a different address.
   5. Publish `status.ips` / `ownerPod` only after every expected address is
@@ -209,13 +210,14 @@ with the claim identity, then patch `status.ips` / `ownerPod`. Publish
 `status.ips` only when the reservation covers the full expected address set.
 A crash can leave claim-tagged rows with an empty or partial `status.ips`.
 That is an incomplete allocation: the next ADD or reconcile reuses the tagged
-rows, allocates only the missing families, and writes status once the set is
+rows, allocates only the missing ranges, and writes status once the set is
 complete. Never free those rows while the claim still exists, and never treat
-one family of a dual-stack attachment as the whole claim.
+a subset of the expected ranges as the whole claim.
 
 **Reuse (CNI ADD with populated `status.ips`):** after the `IPAMClaimSpec`
-network/interface check above, also validate address family and pool membership.
-Reuse that list only when it is the full expected set. A partial list is
+network/interface check above, match each address to the range that contains
+it and validate pool membership. An address satisfies only that range. Reuse
+the list only when every expected range is covered. A partial list is
 completed before it is treated as the persistent set. Atomically take over each
 address only if it is free or already owned by **this** claim (match on
 `IPAMClaimRef` + `IPAMClaimUID`). Resource-version conflicts retry. Never steal
@@ -246,9 +248,9 @@ cannot see overlap-only leftovers.
 - Live claim, pool rows tagged for this claim (UID match), `status.ips`
   missing one or more addresses from the expected set → incomplete allocation.
   Do not publish the partial list, and do not let ADD reuse it as the full
-  set. Allocate only the missing families, then write `status.ips` once every
-  expected address is reserved. A crash after IPv4 and before IPv6 is this
-  case.
+  set. Allocate one address for each missing range, then write `status.ips`
+  once every expected range is reserved. A crash after one range and before
+  the next, including IPv4 before IPv6, is this case.
 - Overlapping CR vs pool row: compare the **complete lease identity** — IP,
   `IPAMClaimRef`, `IPAMClaimUID`, `PodRef`, `IfName`, and the pool/network key.
   - The overlapping row is missing, or it diverges and is **not** a live
@@ -262,11 +264,18 @@ cannot see overlap-only leftovers.
     `status.ips` does not list that IP, delete that pool row only after
     confirming its `IPAMClaimRef` and `IPAMClaimUID` match this claim. Never
     delete a row owned by the pod or by another claim.
-- **Overlap-only / stale overlap:** a **claim-tagged** overlapping row with no
-  matching claim-owned pool row, or whose claim is gone, is **deleted**. Do
-  not keep claim overlap state that would block a later allocation. Never
-  remove or overwrite an overlapping row owned by a different live claim or
-  by a live pod-scoped allocation.
+- **Overlap-only / stale overlap:** a **claim-tagged** overlapping row whose
+  claim is gone, or that has no matching claim-owned pool row, is deleted
+  only after a fresh pool read still shows no live allocation of that IP.
+  Delete by resource version. If the delete conflicts, or that read shows a
+  pool row for the IP, keep the overlapping row and reconcile it to the pool
+  row. A concurrent ADD may have restored the pool row between the first
+  observation and the delete; that reservation must not be removed. Do not
+  drop the IP from `status.ips` because the overlapping row was briefly
+  missing. Recreate the overlapping row from the live pool allocation so
+  another pool cannot reserve the same IP. Never remove or overwrite an
+  overlapping row owned by a different live claim or by a live pod-scoped
+  allocation.
 
 A repair must never transfer an IP that another live claim already owns.
 
@@ -446,8 +455,9 @@ backwards compatibility.
   names an address whose pool row belongs to a different live claim, set
   `IPConflict` / `OwnedByOtherClaim` on this claim and fail ADD closed; do not
   retry, release, or allocate a substitute. Publish `status.ips` only for the
-  full expected set (one address per IPAM range); finish a missing family
-  before reuse. Claim-tagged overlap-only stale rows are deleted.
+  full expected set (one address per IPAM range); finish each missing range
+  before reuse. An overlap-only row is deleted only after a fresh pool read
+  still shows no live allocation of that IP.
 - **Overlapping CR** — Same claim identity (`namespace/name` + UID) and the same
   sync/repair rules as the pool row, comparing the complete lease identity (IP,
   `IPAMClaimRef`, `IPAMClaimUID`, `PodRef`, `IfName`, pool/network key).
