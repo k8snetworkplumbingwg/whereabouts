@@ -107,9 +107,22 @@ Expected plugin behavior:
      interface). A mismatch **fails the ADD** and must not allocate, take over, or
      update `status.ips` / `ownerPod`. The same check applies to both first
      allocation (empty `status.ips`) and reuse (populated `status.ips`).
-  3. If `status.ips` is non-empty, **reuse** those addresses (atomically reserve
-     them in the pool / overlapping CR). Otherwise allocate normally and **write**
-     `status.ips` (and set `status.ownerPod`).
+  3. The **expected address set** is one address per IPAM range on this
+     attachment. A dual-stack config expects one address of each family.
+     Reconcile uses the same set from the ranges on the network named by
+     `IPAMClaim.spec.network`. If that network config cannot be read, do not
+     invent an address and do not publish a partial `status.ips`.
+  4. Reuse before allocating. Take addresses already in `status.ips`, then pool
+     rows already tagged with this claim (`IPAMClaimRef` + `IPAMClaimUID`) for
+     this network. Those rows include a crash after reserve and before the
+     status write. Allocate only a family that neither source already covers.
+     Do not reserve a second address for a family this claim already holds.
+     If the pool update conflicts, another writer reserved the row first:
+     re-read and reuse that row instead of returning a different address.
+  5. Publish `status.ips` / `ownerPod` only after every expected address is
+     reserved in the pool and, when overlapping ranges are enabled, in the
+     overlapping CR. A partial list is not complete and must not be reused as
+     the persistent set.
 - **CNI DEL**: if the allocation is claim-backed, **do not release** the IP.
 - **Release** happens when the `IPAMClaim` itself is gone — observed by a
 **level-driven** reconcile against live claims, not only by a delete event
@@ -192,16 +205,21 @@ Three objects describe the same lease:
 | `IPAMClaim.status.ips` | **Claim intent.** The addresses this claim must keep across pod recreate. Written only after a successful pool (and overlapping) reservation. |
 
 **Write order (CNI ADD):** reserve in `IPPool` (and overlapping CR) first, tagged
-with the claim identity then patch `status.ips` / `ownerPod`. A crash between
-those steps leaves a claim-tagged reservation with empty `status.ips`, which
-reconcile heals by completing the status write — never by freeing the IP while
-the claim still exists.
+with the claim identity, then patch `status.ips` / `ownerPod`. Publish
+`status.ips` only when the reservation covers the full expected address set.
+A crash can leave claim-tagged rows with an empty or partial `status.ips`.
+That is an incomplete allocation: the next ADD or reconcile reuses the tagged
+rows, allocates only the missing families, and writes status once the set is
+complete. Never free those rows while the claim still exists, and never treat
+one family of a dual-stack attachment as the whole claim.
 
 **Reuse (CNI ADD with populated `status.ips`):** after the `IPAMClaimSpec`
 network/interface check above, also validate address family and pool membership.
-Atomically take over each address only if it is free or already owned by **this**
-claim (match on `IPAMClaimRef` + `IPAMClaimUID`). Resource-version conflicts
-retry. Never steal an IP owned by a different live claim.
+Reuse that list only when it is the full expected set. A partial list is
+completed before it is treated as the persistent set. Atomically take over each
+address only if it is free or already owned by **this** claim (match on
+`IPAMClaimRef` + `IPAMClaimUID`). Resource-version conflicts retry. Never steal
+an IP owned by a different live claim.
 
 **Reconcile (level-driven, not only delete events):** periodically, and on
 informer resync / claim add-update-delete, walk the **union** of (1) live
@@ -225,18 +243,30 @@ cannot see overlap-only leftovers.
   closed on that address and does not allocate a replacement, because
   `status.ips` is the persistent set. The pod stays unready until an operator
   resolves the conflict.
-- Live claim, pool row tagged for this claim (UID match), IP **not** in
-  `status.ips` → treat as incomplete persist, write the IP into `status.ips`
-  rather than free.
+- Live claim, pool rows tagged for this claim (UID match), `status.ips`
+  missing one or more addresses from the expected set → incomplete allocation.
+  Do not publish the partial list, and do not let ADD reuse it as the full
+  set. Allocate only the missing families, then write `status.ips` once every
+  expected address is reserved. A crash after IPv4 and before IPv6 is this
+  case.
 - Overlapping CR vs pool row: compare the **complete lease identity** — IP,
   `IPAMClaimRef`, `IPAMClaimUID`, `PodRef`, `IfName`, and the pool/network key.
-  If the overlapping row is missing **or** any of those fields diverge while the
-  pool row is claim-owned, create/update the overlapping CR to match the pool
-  row.
-- **Overlap-only / stale overlap:** an overlapping row with no matching
-  claim-owned pool row, or whose claim is gone, is **deleted**. Do not keep
-  overlap state that would block a later allocation. Never remove or overwrite
-  an overlapping row whose IP is owned by a **different** live claim.
+  - The overlapping row is missing, or it diverges and is **not** a live
+    pod-scoped allocation → create or update it to match the claim-owned pool
+    row. A same-claim take-over stays idempotent.
+  - The overlapping row is a **live pod-scoped** allocation (empty claim
+    fields, pod still present), on ADD or later in reconcile → do not
+    overwrite or delete it. Fail the claim allocation and do not publish
+    `status.ips`. Set `IPConflict` / `OverlappingPodAllocation` on this claim,
+    naming the IP and the pod. If this claim already created a pool row and
+    `status.ips` does not list that IP, delete that pool row only after
+    confirming its `IPAMClaimRef` and `IPAMClaimUID` match this claim. Never
+    delete a row owned by the pod or by another claim.
+- **Overlap-only / stale overlap:** a **claim-tagged** overlapping row with no
+  matching claim-owned pool row, or whose claim is gone, is **deleted**. Do
+  not keep claim overlap state that would block a later allocation. Never
+  remove or overwrite an overlapping row owned by a different live claim or
+  by a live pod-scoped allocation.
 
 A repair must never transfer an IP that another live claim already owns.
 
@@ -324,13 +354,15 @@ one-time stamp.
    claim's IP for a window. Take-over is allowed only for the same `IPAMClaimRef`
    **and** UID. Source DEL must not clear the target's reservation.
 2. **Overlapping-range reservations** — tagged with the same claim identity as
-   the pool row, updated (not failed) on take-over, included in bidirectional
-   drift reconcile, overlap-only stale rows are removed.
+   the pool row. Same-claim take-over updates the row. A live pod-scoped
+   overlapping reservation is left in place and the claim allocation fails.
+   Claim-tagged overlap-only stale rows are removed.
 3. **Idempotency under churn** (old pod terminating while new pod starts) —
    handled via `IPAMClaimRef` + UID matching and preferred-IP take-over.
 4. **Incomplete updates / drift** — pool-first writes plus level-driven
-   reconcile over the union of claims, pool, and overlapping rows, repair
-   without stealing IPs owned by another live claim.
+   reconcile over the union of claims, pool, and overlapping rows. A partial
+   dual-stack reservation is completed before `status.ips` is published.
+   Repair never steals an IP owned by another live claim or a live pod.
 5. **Claim recreate** — same name, new UID must not inherit a stale reservation.
    Name-only rows are stamped once during upgrade.
 6. **Controller downtime** — because cleanup is level-driven, a missed delete
@@ -346,10 +378,25 @@ without the CRD and `ipamclaims`/`ipamclaims/status` RBAC would fail lookups or
 status updates while allocation code is on.
 
 **Upgrade order:** install CRD and RBAC first, then start claim-aware binaries.
-**Rollback order:** disable/roll back binaries first, then remove RBAC/CRD (or
-leave the CRD in place). If the CRD or status permissions are absent, gate the
-feature off (fail closed on claim-backed ADD, do not treat missing CRD as
-legacy allocation when a claim reference is present).
+**Rollback** removes the feature. Persistent IPs are released and may change
+afterward. Do not roll the binaries back while claim-backed leases are still
+active: legacy DEL and GC would free the pool row while `status.ips` still
+names it.
+
+1. Stop the affected workloads so they do not recreate claims or new
+   claim-backed allocations.
+2. Delete the `IPAMClaim` objects. Leave the claim-aware controller running
+   until it frees their pool rows and overlapping reservations.
+3. Confirm that no claim-tagged `IPPool` rows or claim-tagged
+   `OverlappingRangeIPReservation` objects remain. If that cannot be verified,
+   stop. Pod-scoped allocations and the Whereabouts CRDs stay.
+4. Roll back the Whereabouts binaries.
+5. Remove the `IPAMClaim` CRD and its RBAC only after no claims remain. Do not
+   remove the `IPPool` or overlapping-range CRDs.
+
+If the CRD or status permissions are absent while claim-aware binaries are
+still running, gate the feature off (fail closed on claim-backed ADD, do not
+treat a missing CRD as legacy allocation when a claim reference is present).
 
 Implementation is tracked in
 [#742](https://github.com/k8snetworkplumbingwg/whereabouts/pull/742) (open, not
@@ -398,11 +445,15 @@ backwards compatibility.
   is still repaired. Never steal an IP another live claim owns. If `status.ips`
   names an address whose pool row belongs to a different live claim, set
   `IPConflict` / `OwnedByOtherClaim` on this claim and fail ADD closed; do not
-  retry, release, or allocate a substitute. Overlap-only stale rows are deleted.
+  retry, release, or allocate a substitute. Publish `status.ips` only for the
+  full expected set (one address per IPAM range); finish a missing family
+  before reuse. Claim-tagged overlap-only stale rows are deleted.
 - **Overlapping CR** — Same claim identity (`namespace/name` + UID) and the same
   sync/repair rules as the pool row, comparing the complete lease identity (IP,
-  `IPAMClaimRef`, `IPAMClaimUID`, `PodRef`, `IfName`, pool/network key). Take-over
-  updates the overlapping CR instead of treating the target pod as a conflict.
+  `IPAMClaimRef`, `IPAMClaimUID`, `PodRef`, `IfName`, pool/network key).
+  Same-claim take-over updates the overlapping CR. A live pod-scoped
+  overlapping reservation is not overwritten; the claim allocation fails with
+  `IPConflict` / `OverlappingPodAllocation`.
 - **Live-migration handoff** — Target ADD reuses the claim IP, source DEL does
   not free it. `ownerPod` hands off, overlapping AlreadyExists is take-over for
   the same `IPAMClaimRef` + UID.
@@ -414,7 +465,9 @@ backwards compatibility.
   rows are a one-time upgrade stamp against the live claim of that name.
 - **Rollout** — Allocate-path persist (`status.ips`) must not ship without DEL
   and GC protections, and claim-aware code must not ship without the IPAMClaim
-  CRD and RBAC. Upgrade: CRD/RBAC first, then binaries. Rollback: binaries
-  first. PR1–PR4 (including install path) are one rollout unit in
+  CRD and RBAC. Upgrade: CRD/RBAC first, then binaries. Rollback: delete
+  claims and wait until their reservations are gone, then binaries, then the
+  `IPAMClaim` CRD. The CRD stays until no claims remain. PR1–PR4 (including
+  install path) are one rollout unit in
   [whereabouts#742](https://github.com/k8snetworkplumbingwg/whereabouts/pull/742)
   (open). Live-migration e2e is follow-up.
