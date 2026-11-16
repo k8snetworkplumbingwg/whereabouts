@@ -128,6 +128,58 @@ func testPoolID() PoolIdentifier {
 	return PoolIdentifier{IpRange: testIPRange, NetworkName: testNetworkName}
 }
 
+// TestIPManagementKubernetesUpdate_MultiRangeCreatesEachORIP verifies that an existing
+// reservation in one range does not suppress the reservation for another range.
+func TestIPManagementKubernetesUpdate_MultiRangeCreatesEachORIP(t *testing.T) {
+	ctx := context.Background()
+	wbClient := fakewbclient.NewSimpleClientset()
+	ipamConf := newTestIPAMConfig()
+	ipamConf.IPRanges = []whereaboutstypes.RangeConfiguration{
+		{Range: "10.10.0.0/16"},
+		{Range: "10.20.0.0/16"},
+	}
+
+	for _, ipRange := range ipamConf.IPRanges {
+		seedIPPool(t, wbClient, PoolIdentifier{IpRange: ipRange.Range, NetworkName: testNetworkName})
+	}
+
+	firstIP := net.ParseIP("10.10.0.1")
+	_, err := wbClient.WhereaboutsV1alpha1().OverlappingRangeIPReservations(testNamespace).Create(
+		ctx,
+		&whereaboutsv1alpha1.OverlappingRangeIPReservation{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      NormalizeIP(firstIP, testNetworkName),
+				Namespace: testNamespace,
+			},
+			Spec: whereaboutsv1alpha1.OverlappingRangeIPReservationSpec{
+				PodRef: testPodNS + "/" + testPodName,
+				IfName: testIfName,
+			},
+		},
+		metav1.CreateOptions{},
+	)
+	if err != nil {
+		t.Fatalf("failed to seed overlapping reservation: %v", err)
+	}
+
+	ips, err := IPManagementKubernetesUpdate(ctx, whereaboutstypes.Allocate, newTestIPAM(wbClient), ipamConf)
+	if err != nil {
+		t.Fatalf("IP allocation failed: %v", err)
+	}
+	if len(ips) != len(ipamConf.IPRanges) {
+		t.Fatalf("expected %d allocated IPs, got %d", len(ipamConf.IPRanges), len(ips))
+	}
+
+	secondReservation, err := wbClient.WhereaboutsV1alpha1().OverlappingRangeIPReservations(testNamespace).Get(
+		ctx, NormalizeIP(ips[1].IP, testNetworkName), metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("failed to find second range reservation: %v", err)
+	}
+	if secondReservation.Spec.PodRef != testPodNS+"/"+testPodName {
+		t.Fatalf("expected second range reservation for %q, got %q", testPodNS+"/"+testPodName, secondReservation.Spec.PodRef)
+	}
+}
+
 // TestIPManagementKubernetesUpdate_PoolUpdateFailurePreventsORIPUpdate verifies that a permanent
 // pool.Update failure returns an error and does not create an OverlappingRangeIPReservation.
 func TestIPManagementKubernetesUpdate_PoolUpdateFailurePreventsORIPUpdate(t *testing.T) {

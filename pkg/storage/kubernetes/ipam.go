@@ -567,8 +567,8 @@ func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *Kubernete
 	// handle the ip add/del until successful
 	var overlappingrangeallocations []whereaboutstypes.IPReservation
 	var ipforoverlappingrangeupdate net.IP
-	skipOverlappingRangeUpdate := false
 	for _, ipRange := range ipamConf.IPRanges {
+		skipOverlappingRangeUpdate := false
 		poolUpdateSucceeded := false
 	RETRYLOOP:
 		for j := 0; j < storage.DatastoreRetries; j++ {
