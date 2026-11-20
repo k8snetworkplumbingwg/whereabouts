@@ -89,9 +89,15 @@ func (rl *ReconcileLooper) findOrphanedIPsPerPool(ipPools []storage.IPPool) erro
 }
 
 func (rl ReconcileLooper) isOrphanedIP(podRef string, ip string) bool {
+	return rl.isReservationOnPod(podRef, ip, func(pod *podWrapper) bool {
+		return isIpOnPod(pod, podRef, ip)
+	})
+}
+
+func (rl ReconcileLooper) isReservationOnPod(podRef, reservation string, matches func(*podWrapper) bool) bool {
 	for livePodRef, livePod := range rl.liveWhereaboutsPods {
 		if podRef == livePodRef {
-			isFound := isIpOnPod(&livePod, podRef, ip)
+			isFound := matches(&livePod)
 			if !isFound && (livePod.phase == v1.PodPending) {
 				/* Sometimes pods are still coming up, and may not yet have Multus
 				 * annotation added to it yet. We don't want to check the IPs yet
@@ -100,7 +106,7 @@ func (rl ReconcileLooper) isOrphanedIP(podRef string, ip string) bool {
 				podToMatch := &livePod
 				retries := 0
 
-				logging.Debugf("Re-fetching Pending Pod: %s IP-to-match: %s", livePodRef, ip)
+				logging.Debugf("Re-fetching Pending Pod: %s reservation-to-match: %s", livePodRef, reservation)
 
 				for retries < storage.PodRefreshRetries {
 					retries += 1
@@ -112,7 +118,7 @@ func (rl ReconcileLooper) isOrphanedIP(podRef string, ip string) bool {
 						logging.Debugf("Pending Pod is now in phase: %s", podToMatch.phase)
 						break
 					} else {
-						isFound = isIpOnPod(podToMatch, podRef, ip)
+						isFound = matches(podToMatch)
 						// Short-circuit - Pending Pod may have IP now
 						if isFound {
 							logging.Debugf("Pod now has IP annotation while in Pending")
@@ -121,10 +127,25 @@ func (rl ReconcileLooper) isOrphanedIP(podRef string, ip string) bool {
 						time.Sleep(time.Duration(250) * time.Millisecond)
 					}
 				}
-				isFound = isIpOnPod(podToMatch, podRef, ip)
+				isFound = matches(podToMatch)
 			}
 
 			return isFound
+		}
+	}
+	return false
+}
+
+func isOverlappingIPReservationOnPod(livePod *podWrapper, reservationName string) bool {
+	for ip := range livePod.ips {
+		parsedIP := net.ParseIP(ip)
+		if parsedIP == nil {
+			continue
+		}
+
+		normalizedIP := kubernetes.NormalizeIP(parsedIP, kubernetes.UnnamedNetwork)
+		if reservationName == normalizedIP || strings.HasSuffix(reservationName, "-"+normalizedIP) {
+			return true
 		}
 	}
 	return false
@@ -217,15 +238,12 @@ func (rl *ReconcileLooper) findClusterWideIPReservations() error {
 	}
 
 	for _, clusterWideIPReservation := range clusterWideIPReservations {
-		ip := clusterWideIPReservation.GetName()
-		// De-normalize the IP
-		// In the UpdateOverlappingRangeAllocation function, the IP address is created with a "normalized" name to comply with the k8s api.
-		// We must denormalize here in order to properly look up the IP address in the regular format, which pods use.
-		denormalizedip := strings.ReplaceAll(ip, "-", ":")
-
+		reservationName := clusterWideIPReservation.GetName()
 		podRef := clusterWideIPReservation.Spec.PodRef
 
-		if !rl.isOrphanedIP(podRef, denormalizedip) {
+		if !rl.isReservationOnPod(podRef, reservationName, func(pod *podWrapper) bool {
+			return isOverlappingIPReservationOnPod(pod, reservationName)
+		}) {
 			logging.Debugf("pod ref %s is not listed in the live pods list", podRef)
 			rl.orphanedClusterWideIPs = append(rl.orphanedClusterWideIPs, clusterWideIPReservation)
 		}
