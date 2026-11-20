@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	. "github.com/onsi/ginkgo"
+	"github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
 	multusv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
@@ -282,6 +283,42 @@ var _ = Describe("Whereabouts IP reconciler", func() {
 		})
 	})
 
+	Context("reconciling default-network reservations", func() {
+		table.DescribeTable("preserves only addresses still held by the owning pod",
+			func(cidr, reservedIP, podIP string, podExists bool, expectedReservations int) {
+				pod := generatePod(namespace, podName, ipInNetwork{ip: podIP, networkName: networkName, isDefault: true})
+				pool := generateIPPoolSpec(cidr, namespace, "pool1", podName)
+				reservation := generateClusterWideIPReservation(namespace,
+					kubernetes.NormalizeIP(net.ParseIP(reservedIP), kubernetes.UnnamedNetwork), composePodRef(*pod))
+				client := fakek8sclient.NewSimpleClientset()
+				if podExists {
+					_, err := client.CoreV1().Pods(namespace).Create(context.TODO(), pod, metav1.CreateOptions{})
+					Expect(err).NotTo(HaveOccurred())
+				}
+				wbClient := fakewbclient.NewSimpleClientset(pool, reservation)
+				looper, err := NewReconcileLooperWithClient(kubernetes.NewKubernetesClient(wbClient, client))
+				Expect(err).NotTo(HaveOccurred())
+
+				_, err = looper.ReconcileIPPools()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(looper.ReconcileOverlappingIPAddresses()).To(Succeed())
+
+				updatedPool, err := wbClient.WhereaboutsV1alpha1().IPPools(namespace).Get(context.TODO(), pool.Name, metav1.GetOptions{})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(updatedPool.Spec.Allocations).To(HaveLen(expectedReservations))
+				reservations, err := wbClient.WhereaboutsV1alpha1().OverlappingRangeIPReservations(namespace).List(context.TODO(), metav1.ListOptions{})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(reservations.Items).To(HaveLen(expectedReservations))
+			},
+			table.Entry("live pod with an IPv4 address", ipRange, firstIPInRange, firstIPInRange, true, 1),
+			table.Entry("live pod with an IPv6 address", "2001:db8::/64", "2001:db8::1", "2001:db8::1", true, 1),
+			table.Entry("deleted pod with an IPv4 reservation", ipRange, firstIPInRange, firstIPInRange, false, 0),
+			table.Entry("deleted pod with an IPv6 reservation", "2001:db8::/64", "2001:db8::1", "2001:db8::1", false, 0),
+			table.Entry("live pod with a different IPv4 address", ipRange, firstIPInRange, "10.10.10.2", true, 0),
+			table.Entry("live pod with a different IPv6 address", "2001:db8::/64", "2001:db8::1", "2001:db8::2", true, 0),
+		)
+	})
+
 	Context("reconciling cluster wide IPs - overlapping IPs (ipv6)", func() {
 		const (
 			numberOfPods       = 1
@@ -493,6 +530,7 @@ func generateClusterWideIPReservation(namespace string, ip string, ownerPodRef s
 type ipInNetwork struct {
 	ip          string
 	networkName string
+	isDefault   bool
 }
 
 func generatePod(namespace string, podName string, ipNetworks ...ipInNetwork) *v1.Pod {
@@ -540,6 +578,7 @@ func generatePodNetworkStatusAnnotation(ipNetworks ...ipInNetwork) string {
 			Name:      ipNetworkInfo.networkName,
 			Interface: fmt.Sprintf("net%d", i+1),
 			IPs:       []string{ipNetworkInfo.ip},
+			Default:   ipNetworkInfo.isDefault,
 		})
 	}
 	networkStatusStr, err := json.Marshal(networkStatus)

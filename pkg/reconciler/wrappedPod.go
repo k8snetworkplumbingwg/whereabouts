@@ -84,11 +84,6 @@ func getFlatIPSet(pod v1.Pod) (map[string]void, error) {
 	}
 
 	for _, network := range networkStatusList {
-		// we're only after multus secondary interfaces
-		if network.Default {
-			continue
-		}
-
 		for _, ip := range network.IPs {
 			ipSet[ip] = empty
 			logging.Debugf("Added IP %s for pod %s", ip, composePodRef(pod))
