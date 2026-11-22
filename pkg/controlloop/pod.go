@@ -255,6 +255,41 @@ func (pc *PodController) garbageCollectPodIPs(pod *v1.Pod) error {
 					if err := pc.addressGarbageCollected(pod, nad.GetName(), pool.Spec.Range, allocationIndex); err != nil {
 						logging.Errorf("failed to issue event for successful IP address cleanup: %v", err)
 					}
+				} else {
+					// Cross-node orphan check: a pod on a different (possibly dead) node may have
+					// left an allocation behind with no CNI DEL. The event-based GC only receives
+					// delete events for pods on this node, so those orphans are invisible to it.
+					// When we already have the pool open, scan every other allocation and clean up
+					// any that reference a pod that no longer exists in the API server.
+					allocNS, allocName := splitPodRef(allocation.PodRef)
+					if allocNS == "" || allocName == "" {
+						continue
+					}
+					_, err := pc.k8sClient.CoreV1().Pods(allocNS).Get(context.TODO(), allocName, metav1.GetOptions{})
+					if err == nil {
+						continue // pod still exists
+					}
+					if !apierrors.IsNotFound(err) {
+						logging.Errorf("failed to verify pod existence for allocation %s: %v", allocation.PodRef, err)
+						continue
+					}
+
+					logging.Verbosef("found orphaned allocation for non-existent pod %s in pool %s — cleaning up", allocation.PodRef, pool.Name)
+
+					client := *wbclient.NewKubernetesClient(pc.wbClient, pc.k8sClient)
+					k8sIPAM := &wbclient.KubernetesIPAM{
+						Config:      *ipamConfig,
+						ContainerID: allocation.ContainerID,
+						IfName:      allocation.IfName,
+						Namespace:   pool.Namespace,
+						Client:      client,
+					}
+
+					if _, err := pc.cleanupFunc(context.TODO(), types.Deallocate, *ipamConfig, k8sIPAM); err != nil {
+						logging.Errorf("failed to cleanup orphaned allocation for pod %s: %v", allocation.PodRef, err)
+					} else {
+						logging.Verbosef("successfully cleaned orphaned allocation for pod %s, index %s", allocation.PodRef, allocationIndex)
+					}
 				}
 			}
 		}
@@ -427,4 +462,14 @@ func stripPod(pod *v1.Pod) *v1.Pod {
 	newPod.Spec = v1.PodSpec{}
 	newPod.Status = v1.PodStatus{}
 	return newPod
+}
+
+// splitPodRef splits a "namespace/name" podRef string into its two components.
+// Returns empty strings if the format is invalid.
+func splitPodRef(podRef string) (string, string) {
+	parts := strings.SplitN(podRef, "/", 2)
+	if len(parts) != 2 {
+		return "", ""
+	}
+	return parts[0], parts[1]
 }
