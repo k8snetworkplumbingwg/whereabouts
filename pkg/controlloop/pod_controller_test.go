@@ -227,6 +227,84 @@ var _ = Describe("IPControlLoop", func() {
 			})
 		})
 
+		// OCPBUGS-140584: when a node powers off, its reconciler dies with it and never
+		// calls CNI DEL for pods on that node. The event-based GC must clean orphaned
+		// allocations from dead nodes when it processes any pod-delete event on the same pool.
+		Context("IPPool with an orphaned allocation from a dead node alongside the live pod", func() {
+			const (
+				ghostPodName      = "ghost-pod-deadnode"
+				ghostPodNamespace = "dead-ns"
+			)
+
+			var (
+				poolWithOrphan *v1alpha1.IPPool
+				wbClient       wbclient.Interface
+			)
+
+			BeforeEach(func() {
+				ghostPodRef := fmt.Sprintf("%s/%s", ghostPodNamespace, ghostPodName)
+				// Pool has two allocations: live pod (will be deleted) + ghost pod (never exists in k8sClient)
+				poolWithOrphan = ipPool(
+					kubernetes.PoolIdentifier{IpRange: dummyNetIPRange, NetworkName: kubernetes.UnnamedNetwork},
+					ipPoolsNamespace(),
+					podReference(pod),
+					ghostPodRef,
+				)
+				wbClient = fakewbclient.NewSimpleClientset(poolWithOrphan)
+			})
+
+			Context("the network attachment is available", func() {
+				var (
+					eventRecorder      *record.FakeRecorder
+					netAttachDefClient nadclient.Interface
+					stopChannel        chan struct{}
+				)
+
+				BeforeEach(func() {
+					var err error
+					netAttachDefClient, err = newFakeNetAttachDefClient(namespace, netAttachDef(networkName, namespace, dummyNetSpec(networkName, dummyNetIPRange)))
+					Expect(err).NotTo(HaveOccurred())
+
+					const maxEvents = 10
+					stopChannel = make(chan struct{})
+					eventRecorder = record.NewFakeRecorder(maxEvents)
+
+					dummyPodController, podControllerError = newDummyPodController(k8sClient, wbClient, netAttachDefClient, stopChannel, cniConfigDir, eventRecorder)
+					Expect(podControllerError).NotTo(HaveOccurred())
+					Expect(dummyPodController).NotTo(BeNil())
+
+					pool, err := wbClient.WhereaboutsV1alpha1().IPPools(poolWithOrphan.GetNamespace()).Get(
+						context.TODO(), poolWithOrphan.GetName(), metav1.GetOptions{})
+					Expect(err).NotTo(HaveOccurred())
+					Expect(pool.Spec.Allocations).To(HaveLen(2))
+				})
+
+				AfterEach(func() {
+					if podControllerError != nil {
+						return
+					}
+					stopChannel <- struct{}{}
+				})
+
+				When("the live pod is deleted (simulating a node event)", func() {
+					BeforeEach(func() {
+						// ghost pod does NOT exist in k8sClient — simulates node power-off (no CNI DEL)
+						Expect(k8sClient.CoreV1().Pods(namespace).Delete(context.TODO(), pod.GetName(), metav1.DeleteOptions{})).To(Succeed())
+					})
+
+					It("cleans up both the deleted pod's allocation AND the orphaned allocation from the dead node", func() {
+						Eventually(func() (map[string]v1alpha1.IPAllocation, error) {
+							pool, err := wbClient.WhereaboutsV1alpha1().IPPools(poolWithOrphan.GetNamespace()).Get(
+								context.TODO(), poolWithOrphan.GetName(), metav1.GetOptions{})
+							return pool.Spec.Allocations, err
+						}, 10*time.Second, 500*time.Millisecond).Should(
+							BeEmpty(),
+							"GC should remove both the deleted pod's IP and the orphaned IP from the dead node")
+					})
+				})
+			})
+		})
+
 		Context("with secondary networks whose type is *not* whereabouts", func() {
 			var (
 				wbClient           wbclient.Interface
