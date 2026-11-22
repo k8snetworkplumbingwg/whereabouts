@@ -276,16 +276,22 @@ func (pc *PodController) garbageCollectPodIPs(pod *v1.Pod) error {
 
 					logging.Verbosef("found orphaned allocation for non-existent pod %s in pool %s — cleaning up", allocation.PodRef, pool.Name)
 
+					// Use the orphaned pod's namespace/name so the deallocation targets the
+					// correct podref in the pool, not the triggering deleted pod's podref.
+					orphanConfig := *ipamConfig
+					orphanConfig.PodName = allocName
+					orphanConfig.PodNamespace = allocNS
+
 					client := *wbclient.NewKubernetesClient(pc.wbClient, pc.k8sClient)
 					k8sIPAM := &wbclient.KubernetesIPAM{
-						Config:      *ipamConfig,
+						Config:      orphanConfig,
 						ContainerID: allocation.ContainerID,
 						IfName:      allocation.IfName,
 						Namespace:   pool.Namespace,
 						Client:      client,
 					}
 
-					if _, err := pc.cleanupFunc(context.TODO(), types.Deallocate, *ipamConfig, k8sIPAM); err != nil {
+					if _, err := pc.cleanupFunc(context.TODO(), types.Deallocate, orphanConfig, k8sIPAM); err != nil {
 						logging.Errorf("failed to cleanup orphaned allocation for pod %s: %v", allocation.PodRef, err)
 					} else {
 						logging.Verbosef("successfully cleaned orphaned allocation for pod %s, index %s", allocation.PodRef, allocationIndex)
