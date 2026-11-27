@@ -1,0 +1,26 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: whereabouts-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: whereabouts-operator
+subjects:
+- kind: ServiceAccount
+  name: operator
+  namespace: system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: whereabouts-operator
+  namespace: system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: whereabouts-operator
+subjects:
+- kind: ServiceAccount
+  name: operator
+  namespace: system

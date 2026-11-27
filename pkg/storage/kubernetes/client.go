@@ -4,13 +4,13 @@ import (
 	"context"
 	"time"
 
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
-	whereaboutsv1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
+	whereaboutsv1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/api/whereabouts.cni.cncf.io/v1alpha1"
 	wbclient "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/clientset/versioned"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/logging"
 	"github.com/k8snetworkplumbingwg/whereabouts/pkg/storage"
@@ -18,7 +18,7 @@ import (
 
 const listRequestTimeout = 30 * time.Second
 
-// Client has info on how to connect to the kubernetes cluster
+// Client has info on how to connect to the kubernetes cluster.
 type Client struct {
 	client    wbclient.Interface
 	clientSet kubernetes.Interface
@@ -79,20 +79,20 @@ func (i *Client) ListIPPools() ([]storage.IPPool, error) {
 		return nil, err
 	}
 
-	var whereaboutsApiIPPoolList []storage.IPPool
-	for idx, pool := range ipPoolList.Items {
-		firstIP, _, err := pool.ParseCIDR()
+	whereaboutsAPIIPPoolList := make([]storage.IPPool, 0, len(ipPoolList.Items))
+	for idx := range ipPoolList.Items {
+		firstIP, _, err := ipPoolList.Items[idx].ParseCIDR()
 		if err != nil {
 			return nil, err
 		}
-		whereaboutsApiIPPoolList = append(
-			whereaboutsApiIPPoolList,
+		whereaboutsAPIIPPoolList = append(
+			whereaboutsAPIIPPoolList,
 			&KubernetesIPPool{client: i.client, firstIP: firstIP, pool: &ipPoolList.Items[idx]})
 	}
-	return whereaboutsApiIPPoolList, nil
+	return whereaboutsAPIIPPoolList, nil
 }
 
-func (i *Client) ListPods() ([]v1.Pod, error) {
+func (i *Client) ListPods() ([]corev1.Pod, error) {
 	logging.Debugf("listing Pods")
 
 	ctxWithTimeout, cancel := context.WithTimeout(context.Background(), listRequestTimeout)
@@ -106,7 +106,7 @@ func (i *Client) ListPods() ([]v1.Pod, error) {
 	return podList.Items, nil
 }
 
-func (i *Client) GetPod(namespace, name string) (*v1.Pod, error) {
+func (i *Client) GetPod(namespace, name string) (*corev1.Pod, error) {
 	ctxWithTimeout, cancel := context.WithTimeout(context.Background(), storage.RequestTimeout)
 	defer cancel()
 

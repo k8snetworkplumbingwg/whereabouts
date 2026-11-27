@@ -1,0 +1,53 @@
+{{- if .Values.operator.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "whereabouts.fullname" . }}-operator
+  labels:
+    {{- include "whereabouts.labels" . | nindent 4 }}
+rules:
+# IPPool CRUD for reconciliation
+- apiGroups: [whereabouts.cni.cncf.io]
+  resources: [ippools]
+  verbs: [get, list, watch, update, patch]
+# IPPool status subresource (conditions)
+- apiGroups: [whereabouts.cni.cncf.io]
+  resources: [ippools/status]
+  verbs: [get, update, patch]
+# NodeSlicePool CRUD for node-slice management
+- apiGroups: [whereabouts.cni.cncf.io]
+  resources: [nodeslicepools]
+  verbs: [get, list, watch, create, update, patch, delete]
+# NodeSlicePool status subresource
+- apiGroups: [whereabouts.cni.cncf.io]
+  resources: [nodeslicepools/status]
+  verbs: [get, update, patch]
+# OverlappingRangeIPReservation for cleanup
+- apiGroups: [whereabouts.cni.cncf.io]
+  resources: [overlappingrangeipreservations]
+  verbs: [get, list, watch, delete]
+# Pods for orphan detection
+- apiGroups: [""]
+  resources: [pods]
+  verbs: [get, list, watch]
+# Nodes for node-slice assignment
+- apiGroups: [""]
+  resources: [nodes]
+  verbs: [get, list, watch]
+# NADs for node-slice pool configuration
+- apiGroups: [k8s.cni.cncf.io]
+  resources: [network-attachment-definitions]
+  verbs: [get, list, watch]
+# Leader election
+- apiGroups: [coordination.k8s.io]
+  resources: [leases]
+  verbs: [get, create, update, delete]
+# Events
+- apiGroups: ["", events.k8s.io]
+  resources: [events]
+  verbs: [create, patch, update, get]
+# cert-controller updates webhook configurations with CA bundle
+- apiGroups: [admissionregistration.k8s.io]
+  resources: [validatingwebhookconfigurations]
+  verbs: [get, list, watch, update, patch]
+{{- end }}

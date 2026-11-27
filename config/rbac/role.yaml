@@ -1,0 +1,99 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: whereabouts-operator
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - validatingwebhookconfigurations
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - k8s.cni.cncf.io
+  resources:
+  - network-attachment-definitions
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - whereabouts.cni.cncf.io
+  resources:
+  - ippools
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - whereabouts.cni.cncf.io
+  resources:
+  - ippools/status
+  - nodeslicepools/status
+  - overlappingrangeipreservations/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - whereabouts.cni.cncf.io
+  resources:
+  - nodeslicepools
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - whereabouts.cni.cncf.io
+  resources:
+  - overlappingrangeipreservations
+  verbs:
+  - delete
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: whereabouts-operator
+  namespace: system
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resourceNames:
+  - whereabouts-webhook-cert
+  resources:
+  - secrets
+  verbs:
+  - get
+  - patch
+  - update

@@ -1,0 +1,23 @@
+# Version control
+.git/
+.github/
+
+# Build artifacts
+bin/
+
+# Documentation
+*.md
+doc/
+LICENSES/
+
+# Test / CI files
+e2e/
+yamls/
+hack/e2e-*
+.dockerignore
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo

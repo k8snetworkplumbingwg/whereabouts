@@ -21,7 +21,7 @@ import (
 	context "context"
 	time "time"
 
-	apiwhereaboutscnicncfiov1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/api/whereabouts.cni.cncf.io/v1alpha1"
+	apiwhereaboutscnicncfiov1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/api/whereabouts.cni.cncf.io/v1alpha1"
 	versioned "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/clientset/versioned"
 	internalinterfaces "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/informers/externalversions/internalinterfaces"
 	whereaboutscnicncfiov1alpha1 "github.com/k8snetworkplumbingwg/whereabouts/pkg/generated/listers/whereabouts.cni.cncf.io/v1alpha1"
